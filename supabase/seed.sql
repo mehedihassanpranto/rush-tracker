@@ -1,0 +1,34 @@
+-- ============================================================================
+-- Rush Tracker — local/dev seed helpers
+--
+-- System roles and permissions are seeded by the Phase 1 migration itself.
+-- This file is for development convenience only. NEVER run against production
+-- without review.
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- Promote an existing auth user to SUPER_ADMIN.
+--
+-- 1. Create the user first (Supabase Dashboard → Authentication → Add user,
+--    or `supabase auth` locally). The on_auth_user_created trigger gives
+--    them a CLIENT profile automatically.
+-- 2. Replace the email below and run this block.
+-- ----------------------------------------------------------------------------
+-- update public.user_profiles
+-- set role_id = (select id from public.roles where key = 'SUPER_ADMIN')
+-- where user_id = (
+--   select id from auth.users where email = 'admin@example.com'
+-- );
+
+-- ----------------------------------------------------------------------------
+-- Example dev client + membership for a client test user.
+-- ----------------------------------------------------------------------------
+-- insert into public.clients (client_code, name, company_name, email, status)
+-- values ('CL-0001', 'Client 01', 'Client One Ltd', 'client1@example.com', 'ACTIVE');
+--
+-- insert into public.client_memberships (user_id, client_id, status)
+-- values (
+--   (select id from auth.users where email = 'client1@example.com'),
+--   (select id from public.clients where client_code = 'CL-0001'),
+--   'ACTIVE'
+-- );
