@@ -14,9 +14,12 @@
 --   RESETS:  the human-readable code counters (CL-, ADA-, LR-, TXN-, PAY-,
 --            PR-, ADJ-) back to 1.
 --
--- Run the whole script at once in the Supabase SQL editor. After it finishes,
--- set a default USD rate again in the app (Settings → Exchange Rate) before
--- approving any limit requests.
+-- Run the whole script at once in the Supabase SQL editor. Then:
+--   (a) empty the private `proofs` storage bucket by hand — Supabase blocks
+--       deleting storage rows via SQL, so use the Dashboard: Storage → proofs →
+--       select all → Delete (this script only clears the proof *metadata* rows);
+--   (b) set a default USD rate again in the app (Settings → Exchange Rate)
+--       before approving any limit requests.
 -- ============================================================================
 
 begin;
@@ -57,10 +60,12 @@ alter sequence public.payment_seq           restart with 1;
 alter sequence public.payment_request_seq   restart with 1;
 alter sequence public.adjustment_seq        restart with 1;
 
--- 4) Remove uploaded proof files from the private `proofs` storage bucket.
-delete from storage.objects where bucket_id = 'proofs';
-
 commit;
+
+-- NOTE: the actual proof FILES in the `proofs` storage bucket are not removed
+-- here (Supabase blocks deleting storage rows from SQL). Empty them from the
+-- Dashboard: Storage → proofs → select all → Delete. The proof metadata rows
+-- (public.attachments) were already cleared by the truncate above.
 
 -- Sanity check (should all be 0):
 -- select
