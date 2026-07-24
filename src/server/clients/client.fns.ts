@@ -153,6 +153,96 @@ export const setClientStatusFn = createServerFn({ method: 'POST' })
     return client as Client
   })
 
+/**
+ * Delete a client — ONLY when it has no financial or account history
+ * (spec §7 lists deactivate, not delete; approved financial records are
+ * immutable and must never be orphaned). Clients with any ledger entry,
+ * payment, payment request, limit request, or account assignment cannot be
+ * deleted and must be deactivated instead. Safe to remove a client that was
+ * created by mistake and never used.
+ */
+export const deleteClientFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ id: z.uuid() }))
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const actor = await requireAdmin(PERMISSIONS.CLIENTS_MANAGE)
+    const admin = getSupabaseAdminClient()
+
+    const { data: client } = await admin
+      .from('clients')
+      .select('id, client_code, name')
+      .eq('id', data.id)
+      .single()
+    if (!client) throw new Error('Client not found')
+
+    // Block deletion when any history references this client.
+    const historyTables = [
+      { table: 'ledger_entries', label: 'ledger entries' },
+      { table: 'payments', label: 'payments' },
+      { table: 'payment_requests', label: 'payment requests' },
+      { table: 'limit_requests', label: 'limit requests' },
+      { table: 'ad_account_assignments', label: 'account assignments' },
+      { table: 'adjustments', label: 'adjustments' },
+    ] as const
+
+    const counts = await Promise.all(
+      historyTables.map(({ table }) =>
+        admin
+          .from(table)
+          .select('id', { count: 'exact', head: true })
+          .eq('client_id', data.id),
+      ),
+    )
+    const blockers = historyTables
+      .map((t, i) => ({ label: t.label, count: counts[i].count ?? 0 }))
+      .filter((t) => t.count > 0)
+    if (blockers.length > 0) {
+      const detail = blockers.map((b) => `${b.count} ${b.label}`).join(', ')
+      throw new Error(
+        `This client has history (${detail}) and cannot be deleted. Deactivate it instead to preserve the financial record.`,
+      )
+    }
+
+    // Collect the client's login user ids before the membership rows cascade.
+    const { data: memberships } = await admin
+      .from('client_memberships')
+      .select('user_id')
+      .eq('client_id', data.id)
+    const loginUserIds = [
+      ...new Set(
+        ((memberships ?? []) as Array<{ user_id: string }>).map(
+          (m) => m.user_id,
+        ),
+      ),
+    ]
+
+    // Delete the client (client_memberships for this client cascade away).
+    const { error: delErr } = await admin
+      .from('clients')
+      .delete()
+      .eq('id', data.id)
+    if (delErr) throw new Error(delErr.message)
+
+    // Clean up now-orphaned CLIENT logins that belong to no other client.
+    for (const userId of loginUserIds) {
+      const { count } = await admin
+        .from('client_memberships')
+        .select('client_id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+      if ((count ?? 0) === 0) {
+        await admin.auth.admin.deleteUser(userId)
+      }
+    }
+
+    await writeAudit({
+      actorUserId: actor.id,
+      action: 'CLIENT_DELETED',
+      entityType: 'CLIENT',
+      entityId: data.id,
+      oldValues: client,
+    })
+    return { ok: true }
+  })
+
 export interface ClientUserRow {
   user_id: string
   full_name: string

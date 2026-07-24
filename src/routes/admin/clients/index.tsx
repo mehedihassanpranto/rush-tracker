@@ -2,15 +2,24 @@ import { useState } from 'react'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import { Plus, Users } from 'lucide-react'
+import { MoreHorizontal, Plus, Trash2, Users } from 'lucide-react'
 
 import { listClientsFn } from '@/server/clients/client.fns'
+import { hasPermission } from '@/lib/auth/types'
+import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { ClientFormDialog } from '@/components/admin/client/client-form-dialog'
+import { DeleteClientDialog } from '@/components/admin/client/delete-client-dialog'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Table,
   TableBody,
@@ -25,8 +34,14 @@ export const Route = createFileRoute('/admin/clients/')({
 })
 
 function ClientsPage() {
+  const { user } = Route.useRouteContext()
+  const canManage = hasPermission(user, PERMISSIONS.CLIENTS_MANAGE)
   const listClients = useServerFn(listClientsFn)
   const [createOpen, setCreateOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string
+    name: string
+  } | null>(null)
 
   const { data: clients, isLoading } = useQuery({
     queryKey: ['clients'],
@@ -51,13 +66,14 @@ function ClientsPage() {
               <TableHead>Company</TableHead>
               <TableHead className="text-center">Active accounts</TableHead>
               <TableHead>Status</TableHead>
+              {canManage && <TableHead className="w-10" />}
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading &&
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={5}>
+                  <TableCell colSpan={canManage ? 6 : 5}>
                     <Skeleton className="h-6 w-full" />
                   </TableCell>
                 </TableRow>
@@ -65,7 +81,7 @@ function ClientsPage() {
 
             {!isLoading && (clients?.length ?? 0) === 0 && (
               <TableRow>
-                <TableCell colSpan={5}>
+                <TableCell colSpan={canManage ? 6 : 5}>
                   <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
                     <Users className="size-8 opacity-40" />
                     No clients yet. Create your first one.
@@ -97,6 +113,32 @@ function ClientsPage() {
                 <TableCell>
                   <StatusBadge status={client.status} />
                 </TableCell>
+                {canManage && (
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="size-4" />
+                          <span className="sr-only">Actions</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onSelect={() =>
+                            setDeleteTarget({
+                              id: client.id,
+                              name: client.name,
+                            })
+                          }
+                        >
+                          <Trash2 className="size-4" />
+                          Delete client
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>
@@ -104,6 +146,13 @@ function ClientsPage() {
       </Card>
 
       <ClientFormDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <DeleteClientDialog
+        client={deleteTarget}
+        open={deleteTarget !== null}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null)
+        }}
+      />
     </div>
   )
 }

@@ -54,6 +54,7 @@ const ACTION_LABELS: Record<string, string> = {
   CLIENT_CREATED: 'Client created',
   CLIENT_UPDATED: 'Client updated',
   CLIENT_STATUS_CHANGED: 'Client status changed',
+  CLIENT_DELETED: 'Client deleted',
   CLIENT_USER_CREATED: 'Client login created',
   AD_ACCOUNT_CREATED: 'Ad account created',
   AD_ACCOUNT_UPDATED: 'Ad account updated',
