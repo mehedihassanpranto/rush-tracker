@@ -39,8 +39,12 @@ export function ResetDataDialog({
 
   const mutation = useMutation({
     mutationFn: () => resetAll({ data: { confirm: phrase } }),
-    onSuccess: async () => {
-      toast.success('All data cleared. Set a USD rate to begin again.')
+    onSuccess: async (result) => {
+      toast.success(
+        result.countersReset
+          ? 'All data cleared. Set a USD rate to begin again.'
+          : 'All data cleared (codes keep their current numbering). Set a USD rate to begin again.',
+      )
       queryClient.clear()
       onOpenChange(false)
       await router.invalidate()
