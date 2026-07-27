@@ -46,6 +46,11 @@ Notes:
 - **Output Directory:** leave default — Nitro's vercel preset writes the Build
   Output API directory, which Vercel detects automatically.
 - **Node version:** 20+ (project is developed on 22/24).
+- **Function region:** `vercel.json` pins serverless functions to `sin1`
+  (Singapore) to sit next to the Supabase project (ap-southeast-1). Keep this in
+  sync with the Supabase region — a mismatch makes every DB round trip
+  cross-region and is the single biggest source of slow page loads. (This is the
+  only reason a `vercel.json` exists; the preset itself needs no config.)
 
 ## 4. Supabase Auth redirect / URL config
 
