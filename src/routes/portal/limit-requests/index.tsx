@@ -11,6 +11,7 @@ import {
   listMyLimitRequestsFn,
 } from '@/server/limit-requests/limit-request.fns'
 import { formatBdt, formatUsd } from '@/lib/money/money'
+import { openFetchedUrl } from '@/lib/browser/open-url'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { RequestLimitDialog } from '@/components/client/request-limit-dialog'
@@ -63,9 +64,8 @@ function MyLimitRequestsPage() {
 
   async function viewProof(id: string) {
     try {
-      const { url } = await getProofUrl({ data: { id } })
-      if (url) window.open(url, '_blank', 'noopener')
-      else toast.info('No proof available for this request')
+      const result = await openFetchedUrl(() => getProofUrl({ data: { id } }))
+      if (result === 'none') toast.info('No proof available for this request')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to open proof')
     }

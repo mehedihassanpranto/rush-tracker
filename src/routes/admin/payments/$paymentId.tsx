@@ -12,6 +12,7 @@ import {
   rejectPaymentFn,
 } from '@/server/payments/payment.fns'
 import { formatBdt } from '@/lib/money/money'
+import { openFetchedUrl } from '@/lib/browser/open-url'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Button } from '@/components/ui/button'
@@ -87,9 +88,10 @@ function PaymentDetailPage() {
 
   async function viewProof() {
     try {
-      const { url } = await getProofUrl({ data: { id: paymentId } })
-      if (url) window.open(url, '_blank', 'noopener')
-      else toast.info('No proof uploaded')
+      const result = await openFetchedUrl(() =>
+        getProofUrl({ data: { id: paymentId } }),
+      )
+      if (result === 'none') toast.info('No proof uploaded')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed')
     }

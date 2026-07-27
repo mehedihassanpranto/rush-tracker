@@ -22,6 +22,7 @@ import {
 } from '@/server/limit-requests/limit-request.fns'
 import { getDefaultRateFn } from '@/server/exchange-rates/exchange-rate.fns'
 import { addUsd, formatBdt, formatUsd, multiplyUsdByRate } from '@/lib/money/money'
+import { openFetchedUrl } from '@/lib/browser/open-url'
 import {
   ALLOWED_PROOF_MIME,
   MAX_PROOF_BYTES,
@@ -179,9 +180,10 @@ function ApprovalPage() {
 
   async function viewProof() {
     try {
-      const { url } = await getProofUrl({ data: { id: requestId } })
-      if (url) window.open(url, '_blank', 'noopener')
-      else toast.info('No proof uploaded yet')
+      const result = await openFetchedUrl(() =>
+        getProofUrl({ data: { id: requestId } }),
+      )
+      if (result === 'none') toast.info('No proof uploaded yet')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to open proof')
     }
