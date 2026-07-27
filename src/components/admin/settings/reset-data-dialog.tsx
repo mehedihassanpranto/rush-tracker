@@ -42,8 +42,8 @@ export function ResetDataDialog({
     onSuccess: async (result) => {
       toast.success(
         result.countersReset
-          ? 'All data cleared. Set a USD rate to begin again.'
-          : 'All data cleared (codes keep their current numbering). Set a USD rate to begin again.',
+          ? 'All data cleared.'
+          : 'All data cleared (document codes keep their current numbering).',
       )
       queryClient.clear()
       onOpenChange(false)

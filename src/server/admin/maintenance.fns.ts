@@ -13,7 +13,8 @@ const NIL_UUID = '00000000-0000-0000-0000-000000000000'
 /**
  * Business/transactional tables in FK-safe delete order (children first).
  * user_profiles / roles / permissions are intentionally excluded so admin
- * logins and configuration survive.
+ * logins survive; exchange_rates is excluded so the configured USD rate (needed
+ * for billing + USD display) survives a reset.
  */
 const WIPE_ORDER = [
   'notifications',
@@ -28,7 +29,6 @@ const WIPE_ORDER = [
   'ad_accounts',
   'client_memberships',
   'clients',
-  'exchange_rates',
 ] as const
 
 /** Delete every row of each business table (no custom DB function required). */

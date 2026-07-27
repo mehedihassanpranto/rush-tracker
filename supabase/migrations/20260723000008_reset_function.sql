@@ -18,7 +18,8 @@ security definer
 set search_path = public
 as $$
 begin
-  -- 1) Empty all business/transactional tables.
+  -- 1) Empty all business/transactional tables. exchange_rates is preserved so
+  --    the configured USD rate (needed for billing + USD display) survives.
   truncate table
     public.notifications,
     public.audit_logs,
@@ -31,8 +32,7 @@ begin
     public.ad_account_assignments,
     public.ad_accounts,
     public.client_memberships,
-    public.clients,
-    public.exchange_rates
+    public.clients
   restart identity cascade;
 
   -- 2) Delete every CLIENT login (cascades their profile + memberships).
