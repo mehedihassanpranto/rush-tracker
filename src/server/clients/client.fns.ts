@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { requireAdmin } from '@/server/auth/guards.server'
 import { writeAudit } from '@/server/audit/audit.service'
+import { bdtToUsd, currentUsdRate } from '@/server/exchange-rates/rate.service'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import {
   clientCreateSchema,
@@ -12,10 +13,11 @@ import {
 } from '@/schemas/client'
 import type { Client } from '@/types/domain'
 
-/** Client list row with active-account count and current due (BDT). */
+/** Client list row with active-account count and current due (BDT + USD approx). */
 export interface ClientListItem extends Client {
   active_accounts: number
   current_due: string
+  current_due_usd: string
 }
 
 export const listClientsFn = createServerFn({ method: 'GET' }).handler(
@@ -51,11 +53,17 @@ export const listClientsFn = createServerFn({ method: 'GET' }).handler(
       dueByClient.set(r.client_id, String(r.current_due))
     }
 
-    return (clients as Array<Client>).map((c) => ({
-      ...c,
-      active_accounts: counts.get(c.id) ?? 0,
-      current_due: dueByClient.get(c.id) ?? '0',
-    }))
+    const rate = await currentUsdRate()
+
+    return (clients as Array<Client>).map((c) => {
+      const dueBdt = dueByClient.get(c.id) ?? '0'
+      return {
+        ...c,
+        active_accounts: counts.get(c.id) ?? 0,
+        current_due: dueBdt,
+        current_due_usd: bdtToUsd(dueBdt, rate),
+      }
+    })
   },
 )
 

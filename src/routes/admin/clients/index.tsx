@@ -5,7 +5,7 @@ import { useServerFn } from '@tanstack/react-start'
 import { MoreHorizontal, Plus, Trash2, Users } from 'lucide-react'
 
 import { listClientsFn } from '@/server/clients/client.fns'
-import { formatBdt } from '@/lib/money/money'
+import { formatBdt, formatUsd } from '@/lib/money/money'
 import { hasPermission } from '@/lib/auth/types'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { PageHeader } from '@/components/shared/page-header'
@@ -66,7 +66,8 @@ function ClientsPage() {
               <TableHead>Name</TableHead>
               <TableHead>Company</TableHead>
               <TableHead className="text-center">Active accounts</TableHead>
-              <TableHead className="text-right">Current due</TableHead>
+              <TableHead className="text-right">Current due (BDT)</TableHead>
+              <TableHead className="text-right">Current due (USD)</TableHead>
               <TableHead>Status</TableHead>
               {canManage && <TableHead className="w-10" />}
             </TableRow>
@@ -75,7 +76,7 @@ function ClientsPage() {
             {isLoading &&
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={canManage ? 7 : 6}>
+                  <TableCell colSpan={canManage ? 8 : 7}>
                     <Skeleton className="h-6 w-full" />
                   </TableCell>
                 </TableRow>
@@ -83,7 +84,7 @@ function ClientsPage() {
 
             {!isLoading && (clients?.length ?? 0) === 0 && (
               <TableRow>
-                <TableCell colSpan={canManage ? 7 : 6}>
+                <TableCell colSpan={canManage ? 8 : 7}>
                   <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
                     <Users className="size-8 opacity-40" />
                     No clients yet. Create your first one.
@@ -114,6 +115,9 @@ function ClientsPage() {
                 </TableCell>
                 <TableCell className="text-right font-medium">
                   {formatBdt(client.current_due)}
+                </TableCell>
+                <TableCell className="text-right text-muted-foreground">
+                  {formatUsd(client.current_due_usd)}
                 </TableCell>
                 <TableCell>
                   <StatusBadge status={client.status} />
