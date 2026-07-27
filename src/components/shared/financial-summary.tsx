@@ -15,13 +15,17 @@ export function FinancialSummary({
     {
       label: 'Current Due (BDT)',
       value: formatBdt(financials.current_due),
-      // USD equivalent at the current default rate (approximate).
-      subValue: `≈ ${formatUsd(financials.current_due_usd)} at current rate`,
+      emphasize: true,
+    },
+    {
+      label: 'Current Due (USD, approx.)',
+      value: formatUsd(financials.current_due_usd),
+      subValue: 'converted at the current USD rate',
       emphasize: true,
     },
   ]
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
       {cards.map((c) => (
         <Card key={c.label}>
           <CardContent className="py-4">
