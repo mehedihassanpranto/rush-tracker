@@ -12,7 +12,7 @@ import {
   listMyPaymentsFn,
 } from '@/server/payments/payment.fns'
 import { formatBdt } from '@/lib/money/money'
-import { openFetchedUrl } from '@/lib/browser/open-url'
+import { ProofViewerDialog } from '@/components/shared/proof-viewer'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { PayDialog } from '@/components/client/pay-dialog'
@@ -51,6 +51,7 @@ function DuePage() {
   const getProofUrl = useServerFn(getMyPaymentProofUrlFn)
   const cancelPayment = useServerFn(cancelMyPaymentFn)
   const [payOpen, setPayOpen] = useState(false)
+  const [proofId, setProofId] = useState<string | null>(null)
 
   const { data: due, isLoading } = useQuery({
     queryKey: ['my-due'],
@@ -71,13 +72,8 @@ function DuePage() {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
   })
 
-  async function viewProof(id: string) {
-    try {
-      const result = await openFetchedUrl(() => getProofUrl({ data: { id } }))
-      if (result === 'none') toast.info('No proof available')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed')
-    }
+  function viewProof(id: string) {
+    setProofId(id)
   }
 
   const canPay = due && Number(due.outstanding) > 0
@@ -199,6 +195,14 @@ function DuePage() {
         open={payOpen}
         onOpenChange={setPayOpen}
         outstanding={due?.outstanding ?? '0'}
+      />
+      <ProofViewerDialog
+        open={proofId !== null}
+        onOpenChange={(o) => {
+          if (!o) setProofId(null)
+        }}
+        fetchUrl={() => getProofUrl({ data: { id: proofId! } })}
+        title="Payment proof"
       />
     </div>
   )

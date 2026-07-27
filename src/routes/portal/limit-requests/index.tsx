@@ -11,7 +11,7 @@ import {
   listMyLimitRequestsFn,
 } from '@/server/limit-requests/limit-request.fns'
 import { formatBdt, formatUsd } from '@/lib/money/money'
-import { openFetchedUrl } from '@/lib/browser/open-url'
+import { ProofViewerDialog } from '@/components/shared/proof-viewer'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { RequestLimitDialog } from '@/components/client/request-limit-dialog'
@@ -46,6 +46,7 @@ function MyLimitRequestsPage() {
   const getProofUrl = useServerFn(getMyProofUrlFn)
   const cancelRequest = useServerFn(cancelMyLimitRequestFn)
   const [requestOpen, setRequestOpen] = useState(false)
+  const [proofId, setProofId] = useState<string | null>(null)
 
   const { data: requests, isLoading } = useQuery({
     queryKey: ['my-limit-requests'],
@@ -62,13 +63,8 @@ function MyLimitRequestsPage() {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
   })
 
-  async function viewProof(id: string) {
-    try {
-      const result = await openFetchedUrl(() => getProofUrl({ data: { id } }))
-      if (result === 'none') toast.info('No proof available for this request')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to open proof')
-    }
+  function viewProof(id: string) {
+    setProofId(id)
   }
 
   return (
@@ -184,6 +180,14 @@ function MyLimitRequestsPage() {
       </Card>
 
       <RequestLimitDialog open={requestOpen} onOpenChange={setRequestOpen} />
+      <ProofViewerDialog
+        open={proofId !== null}
+        onOpenChange={(o) => {
+          if (!o) setProofId(null)
+        }}
+        fetchUrl={() => getProofUrl({ data: { id: proofId! } })}
+        title="Approval proof"
+      />
     </div>
   )
 }

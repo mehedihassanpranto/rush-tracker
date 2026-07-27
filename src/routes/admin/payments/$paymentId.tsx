@@ -12,7 +12,7 @@ import {
   rejectPaymentFn,
 } from '@/server/payments/payment.fns'
 import { formatBdt } from '@/lib/money/money'
-import { openFetchedUrl } from '@/lib/browser/open-url'
+import { ProofViewerDialog } from '@/components/shared/proof-viewer'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Button } from '@/components/ui/button'
@@ -53,6 +53,7 @@ function PaymentDetailPage() {
   const [note, setNote] = useState('')
   const [rejectOpen, setRejectOpen] = useState(false)
   const [reason, setReason] = useState('')
+  const [proofOpen, setProofOpen] = useState(false)
 
   const { data: payment, isLoading } = useQuery({
     queryKey: ['payment', paymentId],
@@ -86,15 +87,8 @@ function PaymentDetailPage() {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
   })
 
-  async function viewProof() {
-    try {
-      const result = await openFetchedUrl(() =>
-        getProofUrl({ data: { id: paymentId } }),
-      )
-      if (result === 'none') toast.info('No proof uploaded')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed')
-    }
+  function viewProof() {
+    setProofOpen(true)
   }
 
   if (isLoading || !payment) {
@@ -230,6 +224,13 @@ function PaymentDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ProofViewerDialog
+        open={proofOpen}
+        onOpenChange={setProofOpen}
+        fetchUrl={() => getProofUrl({ data: { id: paymentId } })}
+        title="Payment proof"
+      />
     </div>
   )
 }

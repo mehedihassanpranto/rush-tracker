@@ -22,7 +22,7 @@ import {
 } from '@/server/limit-requests/limit-request.fns'
 import { getDefaultRateFn } from '@/server/exchange-rates/exchange-rate.fns'
 import { addUsd, formatBdt, formatUsd, multiplyUsdByRate } from '@/lib/money/money'
-import { openFetchedUrl } from '@/lib/browser/open-url'
+import { ProofViewerDialog } from '@/components/shared/proof-viewer'
 import {
   ALLOWED_PROOF_MIME,
   MAX_PROOF_BYTES,
@@ -77,6 +77,7 @@ function ApprovalPage() {
   const [note, setNote] = useState('')
   const [rejectOpen, setRejectOpen] = useState(false)
   const [reason, setReason] = useState('')
+  const [proofOpen, setProofOpen] = useState(false)
 
   const { data: detail, isLoading } = useQuery({
     queryKey: ['limit-request', requestId],
@@ -178,15 +179,8 @@ function ApprovalPage() {
     e.target.value = ''
   }
 
-  async function viewProof() {
-    try {
-      const result = await openFetchedUrl(() =>
-        getProofUrl({ data: { id: requestId } }),
-      )
-      if (result === 'none') toast.info('No proof uploaded yet')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to open proof')
-    }
+  function viewProof() {
+    setProofOpen(true)
   }
 
   if (isLoading || !detail) {
@@ -513,6 +507,13 @@ function ApprovalPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ProofViewerDialog
+        open={proofOpen}
+        onOpenChange={setProofOpen}
+        fetchUrl={() => getProofUrl({ data: { id: requestId } })}
+        title="Limit update proof"
+      />
     </div>
   )
 }
