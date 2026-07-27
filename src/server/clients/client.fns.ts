@@ -12,9 +12,10 @@ import {
 } from '@/schemas/client'
 import type { Client } from '@/types/domain'
 
-/** Client list row with a count of currently-assigned (active) accounts. */
+/** Client list row with active-account count and current due (BDT). */
 export interface ClientListItem extends Client {
   active_accounts: number
+  current_due: string
 }
 
 export const listClientsFn = createServerFn({ method: 'GET' }).handler(
@@ -39,9 +40,21 @@ export const listClientsFn = createServerFn({ method: 'GET' }).handler(
       counts.set(id, (counts.get(id) ?? 0) + 1)
     }
 
+    // Current due per client, ledger-derived (spec §35). Best-effort: if the
+    // aggregate isn't available, the list still renders with 0 dues.
+    const dueByClient = new Map<string, string>()
+    const { data: dueRows } = await admin.rpc('all_client_dues')
+    for (const r of (dueRows ?? []) as Array<{
+      client_id: string
+      current_due: string | number
+    }>) {
+      dueByClient.set(r.client_id, String(r.current_due))
+    }
+
     return (clients as Array<Client>).map((c) => ({
       ...c,
       active_accounts: counts.get(c.id) ?? 0,
+      current_due: dueByClient.get(c.id) ?? '0',
     }))
   },
 )
