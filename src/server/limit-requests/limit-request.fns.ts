@@ -10,6 +10,7 @@ import {
   notifyClientMembers,
 } from '@/server/notifications/notification.service'
 import { uploadProof, signProofUrl } from '@/server/storage/storage.service'
+import { clientUsdRate } from '@/server/exchange-rates/rate.service'
 import { addUsd, formatUsd } from '@/lib/money/money'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import {
@@ -31,17 +32,6 @@ const PROOF_ENTITY = 'LIMIT_APPROVAL_PROOF'
 
 function friendlyRpcError(message: string): string {
   return message.replace(/^.*?:\s*/, '').trim() || message
-}
-
-async function currentDefaultRate(): Promise<string> {
-  const admin = getSupabaseAdminClient()
-  const { data } = await admin
-    .from('exchange_rates')
-    .select('rate')
-    .order('effective_from', { ascending: false })
-    .limit(1)
-    .single()
-  return (data as { rate: string } | null)?.rate ?? '0'
 }
 
 // ===========================================================================
@@ -121,7 +111,7 @@ export const createLimitRequestFn = createServerFn({ method: 'POST' })
     }
 
     const opening = (account as { current_limit_usd: string }).current_limit_usd
-    const rate = await currentDefaultRate()
+    const rate = await clientUsdRate(membership.clientId)
     const expected = addUsd(opening, data.requested_amount_usd).toString()
 
     const { data: created, error } = await admin
@@ -297,6 +287,8 @@ export const getLimitRequestDetailFn = createServerFn({ method: 'GET' })
     const currentLimit =
       (account as { current_limit_usd: string } | null)?.current_limit_usd ?? null
 
+    const clientRate = await clientUsdRate(request.client_id)
+
     const path = await proofPathForRequest(data.id)
     const isStale =
       request.status === 'PENDING' &&
@@ -306,6 +298,7 @@ export const getLimitRequestDetailFn = createServerFn({ method: 'GET' })
     return {
       ...request,
       account_current_limit_usd: currentLimit,
+      client_usd_rate: clientRate,
       has_proof: path !== null,
       is_stale: isStale,
     }

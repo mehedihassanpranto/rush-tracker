@@ -56,10 +56,6 @@ export const proofUploadSchema = z.object({
   data_base64: z.string().min(1),
 })
 
-export const setDefaultRateSchema = z.object({
-  rate: usdRate,
-})
-
 export type LimitRequestCreateInput = z.infer<typeof limitRequestCreateSchema>
 export type LimitApproveInput = z.infer<typeof limitApproveSchema>
 export type LimitRejectInput = z.infer<typeof limitRejectSchema>

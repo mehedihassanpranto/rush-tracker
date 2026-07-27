@@ -1,16 +1,15 @@
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { dec } from '@/lib/money/money'
 
-/** Current default USD→BDT rate as a string (server-only helper). */
-export async function currentUsdRate(): Promise<string> {
+/** A client's configured USD→BDT rate as a string (server-only helper). */
+export async function clientUsdRate(clientId: string): Promise<string> {
   const admin = getSupabaseAdminClient()
   const { data } = await admin
-    .from('exchange_rates')
-    .select('rate')
-    .order('effective_from', { ascending: false })
-    .limit(1)
+    .from('clients')
+    .select('usd_rate')
+    .eq('id', clientId)
     .maybeSingle()
-  return (data as { rate: string } | null)?.rate ?? '0'
+  return (data as { usd_rate: string } | null)?.usd_rate ?? '0'
 }
 
 /**

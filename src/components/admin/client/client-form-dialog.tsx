@@ -42,6 +42,11 @@ const formSchema = z.object({
   email: z.union([z.literal(''), z.email('Enter a valid email')]),
   phone: z.string().trim().optional(),
   address: z.string().trim().optional(),
+  usd_rate: z
+    .string()
+    .trim()
+    .min(1, 'Enter the USD rate')
+    .refine((v) => Number(v) > 0, 'Must be greater than zero'),
   status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED']),
 })
 
@@ -69,6 +74,7 @@ export function ClientFormDialog({
       email: '',
       phone: '',
       address: '',
+      usd_rate: '',
       status: 'ACTIVE',
     },
   })
@@ -81,6 +87,7 @@ export function ClientFormDialog({
         email: client?.email ?? '',
         phone: client?.phone ?? '',
         address: client?.address ?? '',
+        usd_rate: client?.usd_rate ?? '',
         status: client?.status ?? 'ACTIVE',
       })
     }
@@ -183,6 +190,29 @@ export function ClientFormDialog({
                   <FormControl>
                     <Textarea rows={2} {...field} />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="usd_rate"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>USD rate (BDT per $1)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      placeholder="130"
+                      {...field}
+                    />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground">
+                    The rate charged per US dollar for this client. Used to bill
+                    approved limits and to show due in USD.
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}

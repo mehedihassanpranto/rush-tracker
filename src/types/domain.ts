@@ -14,6 +14,8 @@ export interface Client {
   phone: string | null
   address: string | null
   status: ClientStatus
+  /** USD→BDT rate charged per dollar for this client. NUMERIC → string. */
+  usd_rate: string
   created_at: string
   updated_at: string
 }
@@ -96,6 +98,8 @@ export interface LimitRequestWithRefs extends LimitRequest {
 /** Approval-screen payload: request, live account limit, proof + staleness. */
 export interface LimitRequestDetail extends LimitRequestWithRefs {
   account_current_limit_usd: string | null
+  /** This client's configured USD rate — the default rate for approval. */
+  client_usd_rate: string | null
   has_proof: boolean
   is_stale: boolean
 }

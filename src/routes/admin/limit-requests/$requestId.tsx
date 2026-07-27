@@ -20,7 +20,6 @@ import {
   rejectLimitRequestFn,
   uploadLimitProofFn,
 } from '@/server/limit-requests/limit-request.fns'
-import { getDefaultRateFn } from '@/server/exchange-rates/exchange-rate.fns'
 import { addUsd, formatBdt, formatUsd, multiplyUsdByRate } from '@/lib/money/money'
 import { ProofViewerDialog } from '@/components/shared/proof-viewer'
 import {
@@ -64,7 +63,6 @@ function ApprovalPage() {
   const queryClient = useQueryClient()
 
   const getDetail = useServerFn(getLimitRequestDetailFn)
-  const getDefaultRate = useServerFn(getDefaultRateFn)
   const getProofUrl = useServerFn(getLimitProofUrlFn)
   const uploadProof = useServerFn(uploadLimitProofFn)
   const approve = useServerFn(approveLimitRequestFn)
@@ -84,24 +82,19 @@ function ApprovalPage() {
     queryFn: () => getDetail({ data: { id: requestId } }),
   })
 
-  const { data: defaultRate } = useQuery({
-    queryKey: ['default-rate'],
-    queryFn: () => getDefaultRate(),
-    enabled: detail?.status === 'PENDING',
-  })
-
   // Seed the form once the request loads (approved amount defaults to
-  // requested; rate prefills from the CURRENT default — spec §25, §26).
+  // requested; rate prefills from THIS CLIENT's configured rate — spec §25,
+  // §26; the applied rate is still editable and snapshotted per approval).
   const seeded = useRef(false)
   useEffect(() => {
     if (detail && !seeded.current) {
       setAmount(detail.requested_amount_usd)
+      if (detail.client_usd_rate && Number(detail.client_usd_rate) > 0) {
+        setRate(detail.client_usd_rate)
+      }
       seeded.current = true
     }
   }, [detail])
-  useEffect(() => {
-    if (defaultRate && rate === '') setRate(defaultRate.rate)
-  }, [defaultRate, rate])
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['limit-request', requestId] })
@@ -261,7 +254,7 @@ function ApprovalPage() {
               value={formatUsd(detail.requested_amount_usd)}
             />
             <Row
-              label="Default rate at request"
+              label="Client rate at request"
               value={`৳${detail.default_usd_rate}`}
             />
           </CardContent>

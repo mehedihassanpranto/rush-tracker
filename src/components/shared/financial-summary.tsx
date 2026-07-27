@@ -20,7 +20,7 @@ export function FinancialSummary({
     {
       label: 'Current Due (USD, approx.)',
       value: formatUsd(financials.current_due_usd),
-      subValue: 'converted at the current USD rate',
+      subValue: "converted at this client's USD rate",
       emphasize: true,
     },
   ]

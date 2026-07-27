@@ -5,7 +5,7 @@ import {
   requireAdmin,
   requireClientMembership,
 } from '@/server/auth/guards.server'
-import { bdtToUsd, currentUsdRate } from '@/server/exchange-rates/rate.service'
+import { bdtToUsd, clientUsdRate } from '@/server/exchange-rates/rate.service'
 import { withRunningBalance } from '@/lib/ledger/running-balance'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import type {
@@ -33,7 +33,7 @@ async function fetchClientFinancials(
   if (error) throw new Error(error.message)
   const row = (data as Array<Omit<ClientFinancials, 'current_due_usd'>> | null)?.[0]
   if (!row) return EMPTY_FINANCIALS
-  const rate = await currentUsdRate()
+  const rate = await clientUsdRate(clientId)
   return { ...row, current_due_usd: bdtToUsd(row.current_due, rate) }
 }
 

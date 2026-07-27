@@ -1,7 +1,8 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { requireAdmin, requireClientMembership } from '@/server/auth/guards.server'
-import { bdtToUsd, currentUsdRate } from '@/server/exchange-rates/rate.service'
+import { bdtToUsd, clientUsdRate } from '@/server/exchange-rates/rate.service'
+import { dec } from '@/lib/money/money'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import type {
   AdAccount,
@@ -60,7 +61,28 @@ export const adminDashboardStatsFn = createServerFn({ method: 'GET' }).handler(
       ])
 
     const dueBdt = String(due.data ?? '0')
-    const rate = await currentUsdRate()
+
+    // Total outstanding due in USD = Σ per-client (due_bdt ÷ that client's
+    // rate), since each client now bills at its own USD rate.
+    const [{ data: rateRows }, { data: clientDues }] = await Promise.all([
+      admin.from('clients').select('id, usd_rate'),
+      admin.rpc('all_client_dues'),
+    ])
+    const rateById = new Map(
+      ((rateRows ?? []) as Array<{ id: string; usd_rate: string }>).map((r) => [
+        r.id,
+        r.usd_rate,
+      ]),
+    )
+    let dueUsd = dec(0)
+    for (const row of (clientDues ?? []) as Array<{
+      client_id: string
+      current_due: string | number
+    }>) {
+      dueUsd = dueUsd.plus(
+        bdtToUsd(String(row.current_due), rateById.get(row.client_id) ?? '0'),
+      )
+    }
 
     const { data: todayData } = await admin.rpc('admin_today_totals')
     const today = (
@@ -78,7 +100,7 @@ export const adminDashboardStatsFn = createServerFn({ method: 'GET' }).handler(
       pendingLimitRequests: pending.count ?? 0,
       pendingPaymentVerifications: pendingPay.count ?? 0,
       totalOutstandingDueBdt: dueBdt,
-      totalOutstandingDueUsd: bdtToUsd(dueBdt, rate),
+      totalOutstandingDueUsd: dueUsd.toFixed(2),
       todayApprovedLimitUsd: today?.approved_limit_usd ?? '0',
       todayApprovedBillingBdt: today?.approved_billing_bdt ?? '0',
       todayCollectionBdt: today?.collection_bdt ?? '0',
@@ -127,7 +149,7 @@ export const clientDashboardStatsFn = createServerFn({ method: 'GET' }).handler(
     )?.[0]
 
     const currentDueBdt = fin?.current_due ?? '0'
-    const rate = await currentUsdRate()
+    const rate = await clientUsdRate(membership.clientId)
 
     return {
       activeAccounts: accounts.count ?? 0,

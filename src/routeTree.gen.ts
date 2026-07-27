@@ -33,7 +33,6 @@ import { Route as AdminPaymentsPaymentIdRouteImport } from './routes/admin/payme
 import { Route as AdminReportsIndexRouteImport } from './routes/admin/reports/index'
 import { Route as AdminSearchIndexRouteImport } from './routes/admin/search/index'
 import { Route as AdminSettingsIndexRouteImport } from './routes/admin/settings/index'
-import { Route as AdminSettingsExchangeRateRouteImport } from './routes/admin/settings/exchange-rate'
 import { Route as AdminUsersIndexRouteImport } from './routes/admin/users/index'
 import { Route as PortalAdAccountsIndexRouteImport } from './routes/portal/ad-accounts/index'
 import { Route as PortalDueIndexRouteImport } from './routes/portal/due/index'
@@ -165,12 +164,6 @@ const AdminSettingsIndexRoute = AdminSettingsIndexRouteImport.update({
   path: '/settings/',
   getParentRoute: () => AdminRouteRoute,
 } as any)
-const AdminSettingsExchangeRateRoute =
-  AdminSettingsExchangeRateRouteImport.update({
-    id: '/settings/exchange-rate',
-    path: '/settings/exchange-rate',
-    getParentRoute: () => AdminRouteRoute,
-  } as any)
 const AdminUsersIndexRoute = AdminUsersIndexRouteImport.update({
   id: '/users/',
   path: '/users/',
@@ -228,7 +221,6 @@ export interface FileRoutesByFullPath {
   '/admin/clients/$clientId': typeof AdminClientsClientIdRoute
   '/admin/limit-requests/$requestId': typeof AdminLimitRequestsRequestIdRoute
   '/admin/payments/$paymentId': typeof AdminPaymentsPaymentIdRoute
-  '/admin/settings/exchange-rate': typeof AdminSettingsExchangeRateRoute
   '/admin/ad-accounts/': typeof AdminAdAccountsIndexRoute
   '/admin/adjustments/': typeof AdminAdjustmentsIndexRoute
   '/admin/audit/': typeof AdminAuditIndexRoute
@@ -260,7 +252,6 @@ export interface FileRoutesByTo {
   '/admin/clients/$clientId': typeof AdminClientsClientIdRoute
   '/admin/limit-requests/$requestId': typeof AdminLimitRequestsRequestIdRoute
   '/admin/payments/$paymentId': typeof AdminPaymentsPaymentIdRoute
-  '/admin/settings/exchange-rate': typeof AdminSettingsExchangeRateRoute
   '/admin/ad-accounts': typeof AdminAdAccountsIndexRoute
   '/admin/adjustments': typeof AdminAdjustmentsIndexRoute
   '/admin/audit': typeof AdminAuditIndexRoute
@@ -296,7 +287,6 @@ export interface FileRoutesById {
   '/admin/clients/$clientId': typeof AdminClientsClientIdRoute
   '/admin/limit-requests/$requestId': typeof AdminLimitRequestsRequestIdRoute
   '/admin/payments/$paymentId': typeof AdminPaymentsPaymentIdRoute
-  '/admin/settings/exchange-rate': typeof AdminSettingsExchangeRateRoute
   '/admin/ad-accounts/': typeof AdminAdAccountsIndexRoute
   '/admin/adjustments/': typeof AdminAdjustmentsIndexRoute
   '/admin/audit/': typeof AdminAuditIndexRoute
@@ -332,7 +322,6 @@ export interface FileRouteTypes {
     | '/admin/clients/$clientId'
     | '/admin/limit-requests/$requestId'
     | '/admin/payments/$paymentId'
-    | '/admin/settings/exchange-rate'
     | '/admin/ad-accounts/'
     | '/admin/adjustments/'
     | '/admin/audit/'
@@ -364,7 +353,6 @@ export interface FileRouteTypes {
     | '/admin/clients/$clientId'
     | '/admin/limit-requests/$requestId'
     | '/admin/payments/$paymentId'
-    | '/admin/settings/exchange-rate'
     | '/admin/ad-accounts'
     | '/admin/adjustments'
     | '/admin/audit'
@@ -399,7 +387,6 @@ export interface FileRouteTypes {
     | '/admin/clients/$clientId'
     | '/admin/limit-requests/$requestId'
     | '/admin/payments/$paymentId'
-    | '/admin/settings/exchange-rate'
     | '/admin/ad-accounts/'
     | '/admin/adjustments/'
     | '/admin/audit/'
@@ -599,13 +586,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSettingsIndexRouteImport
       parentRoute: typeof AdminRouteRoute
     }
-    '/admin/settings/exchange-rate': {
-      id: '/admin/settings/exchange-rate'
-      path: '/settings/exchange-rate'
-      fullPath: '/admin/settings/exchange-rate'
-      preLoaderRoute: typeof AdminSettingsExchangeRateRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
     '/admin/users/': {
       id: '/admin/users/'
       path: '/users'
@@ -685,7 +665,6 @@ interface AdminRouteRouteChildren {
   AdminClientsClientIdRoute: typeof AdminClientsClientIdRoute
   AdminLimitRequestsRequestIdRoute: typeof AdminLimitRequestsRequestIdRoute
   AdminPaymentsPaymentIdRoute: typeof AdminPaymentsPaymentIdRoute
-  AdminSettingsExchangeRateRoute: typeof AdminSettingsExchangeRateRoute
   AdminAdAccountsIndexRoute: typeof AdminAdAccountsIndexRoute
   AdminAdjustmentsIndexRoute: typeof AdminAdjustmentsIndexRoute
   AdminAuditIndexRoute: typeof AdminAuditIndexRoute
@@ -706,7 +685,6 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminClientsClientIdRoute: AdminClientsClientIdRoute,
   AdminLimitRequestsRequestIdRoute: AdminLimitRequestsRequestIdRoute,
   AdminPaymentsPaymentIdRoute: AdminPaymentsPaymentIdRoute,
-  AdminSettingsExchangeRateRoute: AdminSettingsExchangeRateRoute,
   AdminAdAccountsIndexRoute: AdminAdAccountsIndexRoute,
   AdminAdjustmentsIndexRoute: AdminAdjustmentsIndexRoute,
   AdminAuditIndexRoute: AdminAuditIndexRoute,

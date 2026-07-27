@@ -180,6 +180,10 @@ function ClientDetailPage() {
                 <InfoRow label="Phone" value={client.phone} />
                 <InfoRow label="Address" value={client.address} />
                 <InfoRow
+                  label="USD rate"
+                  value={`৳${client.usd_rate} per $1`}
+                />
+                <InfoRow
                   label="Status"
                   value={<StatusBadge status={client.status} />}
                 />

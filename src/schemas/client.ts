@@ -9,6 +9,12 @@ const optionalText = z
 
 export const clientStatusEnum = z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED'])
 
+// USD→BDT rate charged per dollar for this client.
+const usdRate = z.coerce
+  .number({ message: 'Enter a valid rate' })
+  .positive('Must be greater than zero')
+  .max(100_000, 'Rate is too large')
+
 export const clientCreateSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(200),
   company_name: optionalText,
@@ -18,6 +24,7 @@ export const clientCreateSchema = z.object({
     .transform((v) => (v ? v : undefined)),
   phone: optionalText,
   address: optionalText,
+  usd_rate: usdRate,
   status: clientStatusEnum.default('ACTIVE'),
 })
 

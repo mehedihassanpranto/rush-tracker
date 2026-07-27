@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { requireAdmin } from '@/server/auth/guards.server'
 import { writeAudit } from '@/server/audit/audit.service'
-import { bdtToUsd, currentUsdRate } from '@/server/exchange-rates/rate.service'
+import { bdtToUsd } from '@/server/exchange-rates/rate.service'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import {
   clientCreateSchema,
@@ -53,15 +53,14 @@ export const listClientsFn = createServerFn({ method: 'GET' }).handler(
       dueByClient.set(r.client_id, String(r.current_due))
     }
 
-    const rate = await currentUsdRate()
-
     return (clients as Array<Client>).map((c) => {
       const dueBdt = dueByClient.get(c.id) ?? '0'
+      // Each client carries its own USD rate (spec: per-client billing rate).
       return {
         ...c,
         active_accounts: counts.get(c.id) ?? 0,
         current_due: dueBdt,
-        current_due_usd: bdtToUsd(dueBdt, rate),
+        current_due_usd: bdtToUsd(dueBdt, c.usd_rate),
       }
     })
   },
@@ -96,6 +95,7 @@ export const createClientFn = createServerFn({ method: 'POST' })
         email: data.email ?? null,
         phone: data.phone ?? null,
         address: data.address ?? null,
+        usd_rate: data.usd_rate,
         status: data.status,
       })
       .select('*')
@@ -132,6 +132,7 @@ export const updateClientFn = createServerFn({ method: 'POST' })
         email: data.email ?? null,
         phone: data.phone ?? null,
         address: data.address ?? null,
+        usd_rate: data.usd_rate,
         status: data.status,
       })
       .eq('id', data.id)
