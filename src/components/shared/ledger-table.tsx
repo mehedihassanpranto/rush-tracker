@@ -1,5 +1,5 @@
 import { RotateCcw } from 'lucide-react'
-import { formatBdt } from '@/lib/money/money'
+import { formatBdt, formatUsd } from '@/lib/money/money'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -28,13 +28,17 @@ function fmtDate(value: string): string {
 export function LedgerTable({
   entries,
   showBalance = true,
+  showUsdAmount = false,
   onReverse,
 }: {
   entries: Array<LedgerEntryWithBalance>
   showBalance?: boolean
+  /** Show the originating USD amount (approved limit request / payment). */
+  showUsdAmount?: boolean
   onReverse?: (entry: LedgerEntryWithBalance) => void
 }) {
-  const cols = 6 + (showBalance ? 1 : 0) + (onReverse ? 1 : 0)
+  const cols =
+    6 + (showUsdAmount ? 1 : 0) + (showBalance ? 1 : 0) + (onReverse ? 1 : 0)
   return (
     <Card className="p-0">
       <Table>
@@ -45,6 +49,9 @@ export function LedgerTable({
             <TableHead>Description</TableHead>
             <TableHead className="text-right">Debit</TableHead>
             <TableHead className="text-right">Credit</TableHead>
+            {showUsdAmount && (
+              <TableHead className="text-right">Amount (USD)</TableHead>
+            )}
             {showBalance && <TableHead className="text-right">Balance</TableHead>}
             <TableHead>Date</TableHead>
             {onReverse && <TableHead className="text-right">Actions</TableHead>}
@@ -77,6 +84,13 @@ export function LedgerTable({
               <TableCell className="text-right">
                 {Number(e.credit_bdt) > 0 ? formatBdt(e.credit_bdt) : '—'}
               </TableCell>
+              {showUsdAmount && (
+                <TableCell className="text-right">
+                  {e.usd_amount !== null && Number(e.usd_amount) > 0
+                    ? formatUsd(e.usd_amount)
+                    : '—'}
+                </TableCell>
+              )}
               {showBalance && (
                 <TableCell className="text-right font-medium">
                   {formatBdt(e.balance_after)}

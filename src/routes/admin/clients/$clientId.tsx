@@ -249,6 +249,7 @@ function ClientDetailPage() {
         <TabsContent value="ledger">
           <LedgerTable
             entries={ledger ?? []}
+            showUsdAmount
             onReverse={canAdjust ? (e) => setReverseEntry(e) : undefined}
           />
         </TabsContent>
