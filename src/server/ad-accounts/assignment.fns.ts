@@ -7,6 +7,7 @@ import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { assignSchema, releaseSchema, transferSchema } from '@/schemas/ad-account'
 import type {
   AdAccount,
+  AdAccountClient,
   AdAccountWithClient,
   AssignmentWithRefs,
   Client,
@@ -50,14 +51,16 @@ export const listClientAccountsFn = createServerFn({ method: 'GET' })
     const admin = getSupabaseAdminClient()
     const { data: rows, error } = await admin
       .from('ad_account_assignments')
-      .select('account:ad_accounts(*), client:clients(id, client_code, name)')
+      .select(
+        'account:ad_accounts(*), client:clients(id, client_code, name, usd_rate)',
+      )
       .eq('client_id', data.client_id)
       .eq('status', 'ACTIVE')
     if (error) throw new Error(error.message)
 
     const parsed = (rows ?? []) as unknown as Array<{
       account: AdAccount | null
-      client: Pick<Client, 'id' | 'client_code' | 'name'> | null
+      client: AdAccountClient | null
     }>
     return parsed.flatMap((r) =>
       r.account ? [{ ...r.account, current_client: r.client }] : [],

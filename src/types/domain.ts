@@ -46,9 +46,15 @@ export interface Assignment {
   created_at: string
 }
 
+/** The current-assignment client fields carried alongside an ad account. */
+export type AdAccountClient = Pick<
+  Client,
+  'id' | 'client_code' | 'name' | 'usd_rate'
+>
+
 /** Ad account plus its current active assignment's client, if any. */
 export interface AdAccountWithClient extends AdAccount {
-  current_client: Pick<Client, 'id' | 'client_code' | 'name'> | null
+  current_client: AdAccountClient | null
 }
 
 /** Assignment row joined with account + client display fields (for history). */

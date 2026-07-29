@@ -12,25 +12,25 @@ import {
 } from '@/schemas/ad-account'
 import type {
   AdAccount,
+  AdAccountClient,
   AdAccountWithClient,
   AssignmentWithRefs,
-  Client,
 } from '@/types/domain'
 
 type ActiveAssignmentRow = {
   ad_account_id: string
-  client: Pick<Client, 'id' | 'client_code' | 'name'> | null
+  client: AdAccountClient | null
 }
 
 async function currentClientMap(
   accountIds: Array<string>,
-): Promise<Map<string, Pick<Client, 'id' | 'client_code' | 'name'>>> {
-  const map = new Map<string, Pick<Client, 'id' | 'client_code' | 'name'>>()
+): Promise<Map<string, AdAccountClient>> {
+  const map = new Map<string, AdAccountClient>()
   if (accountIds.length === 0) return map
   const admin = getSupabaseAdminClient()
   const { data } = await admin
     .from('ad_account_assignments')
-    .select('ad_account_id, client:clients(id, client_code, name)')
+    .select('ad_account_id, client:clients(id, client_code, name, usd_rate)')
     .eq('status', 'ACTIVE')
     .in('ad_account_id', accountIds)
   for (const row of (data ?? []) as unknown as Array<ActiveAssignmentRow>) {

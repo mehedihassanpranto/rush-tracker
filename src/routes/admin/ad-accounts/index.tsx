@@ -54,6 +54,7 @@ function AdAccountsPage() {
               <TableHead>Name</TableHead>
               <TableHead>Platform</TableHead>
               <TableHead>Current client</TableHead>
+              <TableHead className="text-right">Per USD</TableHead>
               <TableHead className="text-right">Current limit</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
@@ -62,7 +63,7 @@ function AdAccountsPage() {
             {isLoading &&
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={7}>
                     <Skeleton className="h-6 w-full" />
                   </TableCell>
                 </TableRow>
@@ -70,7 +71,7 @@ function AdAccountsPage() {
 
             {!isLoading && (accounts?.length ?? 0) === 0 && (
               <TableRow>
-                <TableCell colSpan={6}>
+                <TableCell colSpan={7}>
                   <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
                     <Megaphone className="size-8 opacity-40" />
                     No ad accounts yet.
@@ -99,6 +100,11 @@ function AdAccountsPage() {
                 <TableCell className="text-muted-foreground">
                   {account.current_client
                     ? account.current_client.name
+                    : '—'}
+                </TableCell>
+                <TableCell className="text-right text-muted-foreground">
+                  {account.current_client
+                    ? `৳${account.current_client.usd_rate}`
                     : '—'}
                 </TableCell>
                 <TableCell className="text-right font-medium">
