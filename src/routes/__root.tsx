@@ -1,4 +1,5 @@
-﻿import {
+﻿import { useEffect } from 'react'
+import {
   HeadContent,
   Scripts,
   createRootRouteWithContext,
@@ -8,6 +9,7 @@ import { TanStackDevtools } from '@tanstack/react-devtools'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 import { Toaster } from '@/components/ui/sonner'
+import { installStaleChunkReload } from '@/lib/app/stale-chunk-reload'
 import { getCurrentUserFn } from '@/server/auth/auth.fns'
 
 import appCss from '../styles.css?url'
@@ -50,6 +52,9 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  // Reload a tab left open across a deploy when it hits a stale route chunk.
+  useEffect(installStaleChunkReload, [])
+
   return (
     <html lang="en">
       <head>
