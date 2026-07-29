@@ -10,7 +10,7 @@ import {
   notifyClientMembers,
 } from '@/server/notifications/notification.service'
 import { uploadProof, signProofUrl } from '@/server/storage/storage.service'
-import { clientUsdRate } from '@/server/exchange-rates/rate.service'
+import { adAccountUsdRate } from '@/server/exchange-rates/rate.service'
 import { addUsd, formatUsd } from '@/lib/money/money'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import {
@@ -111,7 +111,7 @@ export const createLimitRequestFn = createServerFn({ method: 'POST' })
     }
 
     const opening = (account as { current_limit_usd: string }).current_limit_usd
-    const rate = await clientUsdRate(membership.clientId)
+    const rate = await adAccountUsdRate(data.ad_account_id, membership.clientId)
     const expected = addUsd(opening, data.requested_amount_usd).toString()
 
     const { data: created, error } = await admin
@@ -287,7 +287,10 @@ export const getLimitRequestDetailFn = createServerFn({ method: 'GET' })
     const currentLimit =
       (account as { current_limit_usd: string } | null)?.current_limit_usd ?? null
 
-    const clientRate = await clientUsdRate(request.client_id)
+    const applicableRate = await adAccountUsdRate(
+      request.ad_account_id,
+      request.client_id,
+    )
 
     const path = await proofPathForRequest(data.id)
     const isStale =
@@ -298,7 +301,7 @@ export const getLimitRequestDetailFn = createServerFn({ method: 'GET' })
     return {
       ...request,
       account_current_limit_usd: currentLimit,
-      client_usd_rate: clientRate,
+      applicable_usd_rate: applicableRate,
       has_proof: path !== null,
       is_stale: isStale,
     }

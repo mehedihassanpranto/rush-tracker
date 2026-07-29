@@ -83,14 +83,15 @@ function ApprovalPage() {
   })
 
   // Seed the form once the request loads (approved amount defaults to
-  // requested; rate prefills from THIS CLIENT's configured rate — spec §25,
-  // §26; the applied rate is still editable and snapshotted per approval).
+  // requested; rate prefills from THIS AD ACCOUNT's configured rate, falling
+  // back to the client's when unset — spec §25, §26; the applied rate is still
+  // editable and snapshotted per approval).
   const seeded = useRef(false)
   useEffect(() => {
     if (detail && !seeded.current) {
       setAmount(detail.requested_amount_usd)
-      if (detail.client_usd_rate && Number(detail.client_usd_rate) > 0) {
-        setRate(detail.client_usd_rate)
+      if (detail.applicable_usd_rate && Number(detail.applicable_usd_rate) > 0) {
+        setRate(detail.applicable_usd_rate)
       }
       seeded.current = true
     }
@@ -254,7 +255,7 @@ function ApprovalPage() {
               value={formatUsd(detail.requested_amount_usd)}
             />
             <Row
-              label="Client rate at request"
+              label="Rate at request"
               value={`৳${detail.default_usd_rate}`}
             />
           </CardContent>

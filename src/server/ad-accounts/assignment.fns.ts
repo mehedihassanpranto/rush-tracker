@@ -51,9 +51,7 @@ export const listClientAccountsFn = createServerFn({ method: 'GET' })
     const admin = getSupabaseAdminClient()
     const { data: rows, error } = await admin
       .from('ad_account_assignments')
-      .select(
-        'account:ad_accounts(*), client:clients(id, client_code, name, usd_rate)',
-      )
+      .select('account:ad_accounts(*), client:clients(id, client_code, name)')
       .eq('client_id', data.client_id)
       .eq('status', 'ACTIVE')
     if (error) throw new Error(error.message)

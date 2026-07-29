@@ -29,6 +29,11 @@ export interface AdAccount {
   status: AdAccountStatus
   // NUMERIC comes back from supabase-js as a string — format with money helpers.
   current_limit_usd: string
+  /**
+   * USD→BDT rate charged per dollar on this account. Takes precedence over the
+   * client's rate for limit requests; '0' means unset and falls back to it.
+   */
+  usd_rate: string
   created_at: string
   updated_at: string
 }
@@ -47,10 +52,7 @@ export interface Assignment {
 }
 
 /** The current-assignment client fields carried alongside an ad account. */
-export type AdAccountClient = Pick<
-  Client,
-  'id' | 'client_code' | 'name' | 'usd_rate'
->
+export type AdAccountClient = Pick<Client, 'id' | 'client_code' | 'name'>
 
 /** Ad account plus its current active assignment's client, if any. */
 export interface AdAccountWithClient extends AdAccount {
@@ -104,8 +106,11 @@ export interface LimitRequestWithRefs extends LimitRequest {
 /** Approval-screen payload: request, live account limit, proof + staleness. */
 export interface LimitRequestDetail extends LimitRequestWithRefs {
   account_current_limit_usd: string | null
-  /** This client's configured USD rate — the default rate for approval. */
-  client_usd_rate: string | null
+  /**
+   * The rate governing this request — the ad account's own rate, falling back
+   * to the client's when unset. Prefills the editable rate on approval.
+   */
+  applicable_usd_rate: string | null
   has_proof: boolean
   is_stale: boolean
 }

@@ -137,9 +137,15 @@ full document if you need the testing/later sections.
   `current_limit_usd`) and raises `STALE_BASELINE: …`; the UI also shows the
   banner proactively from `getLimitRequestDetailFn`. Rebase via
   `rebase_limit_request`.
-- Default USD rate = latest `exchange_rates` row; approvals snapshot the
-  applied rate immutably. `exchange_rate.manage` is a sensitive permission
-  (SUPER_ADMIN only by default).
+- **USD rate resolution (superseded twice — read this, not the spec's §27
+  global-rate model):** the rate for a limit request comes from
+  `adAccountUsdRate(accountId, clientId)` in `rate.service.ts` —
+  `ad_accounts.usd_rate` wins, falling back to `clients.usd_rate` when it is 0
+  (migration `…0010`). Client-level USD conversions (current due, dashboard
+  totals) stay on `clientUsdRate` because they aggregate across accounts. The
+  global `exchange_rates` table is retained for history only. Approvals still
+  snapshot the applied rate immutably. `exchange_rate.manage` is a sensitive
+  permission (SUPER_ADMIN only by default).
 
 ### Phase 2 conventions
 - Server fns live in `src/server/{clients,ad-accounts}/*.fns.ts`; shared Zod

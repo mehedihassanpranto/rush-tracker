@@ -20,11 +20,19 @@ const usdAmount = z.coerce
   .min(0, 'Cannot be negative')
   .max(1_000_000_000, 'Amount is too large')
 
+// USD→BDT rate charged per dollar on the account. Must be positive: a zero
+// rate would silently fall back to the client's rate at approval time.
+const usdRate = z.coerce
+  .number({ message: 'Enter a valid rate' })
+  .gt(0, 'Must be greater than zero')
+  .max(100_000, 'Rate is too large')
+
 export const adAccountCreateSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(200),
   external_account_id: optionalText,
   platform: z.string().trim().min(1).max(50).default('META'),
   current_limit_usd: usdAmount.default(0),
+  usd_rate: usdRate,
   status: z.enum(['AVAILABLE', 'INACTIVE', 'SUSPENDED']).default('AVAILABLE'),
 })
 
@@ -33,6 +41,7 @@ export const adAccountUpdateSchema = z.object({
   external_account_id: optionalText,
   platform: z.string().trim().min(1).max(50),
   current_limit_usd: usdAmount,
+  usd_rate: usdRate,
 })
 
 export const adAccountRenameSchema = z.object({

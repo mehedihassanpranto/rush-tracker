@@ -234,6 +234,14 @@ function AccountDetailPage() {
                   }
                 />
                 <InfoRow
+                  label="Per USD"
+                  value={
+                    Number(account.usd_rate) > 0
+                      ? `৳${account.usd_rate} per $1`
+                      : null
+                  }
+                />
+                <InfoRow
                   label="Status"
                   value={<StatusBadge status={account.status} />}
                 />

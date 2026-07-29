@@ -103,9 +103,7 @@ function AdAccountsPage() {
                     : '—'}
                 </TableCell>
                 <TableCell className="text-right text-muted-foreground">
-                  {account.current_client
-                    ? `৳${account.current_client.usd_rate}`
-                    : '—'}
+                  {Number(account.usd_rate) > 0 ? `৳${account.usd_rate}` : '—'}
                 </TableCell>
                 <TableCell className="text-right font-medium">
                   {formatUsd(account.current_limit_usd)}

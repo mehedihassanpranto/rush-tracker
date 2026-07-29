@@ -52,6 +52,14 @@ const amountField = z
     message: 'Enter a non-negative amount',
   })
 
+// Must be positive: a zero rate falls back to the client's rate at approval.
+const rateField = z
+  .string()
+  .trim()
+  .refine((v) => v !== '' && Number.isFinite(Number(v)) && Number(v) > 0, {
+    message: 'Enter a rate greater than zero',
+  })
+
 // ---------------------------------------------------------------------------
 // Create
 // ---------------------------------------------------------------------------
@@ -60,6 +68,7 @@ const createSchema = z.object({
   external_account_id: z.string().trim().optional(),
   platform: z.string().trim().min(1, 'Required'),
   current_limit_usd: amountField,
+  usd_rate: rateField,
   status: z.enum(['AVAILABLE', 'INACTIVE', 'SUSPENDED']),
 })
 type CreateValues = z.infer<typeof createSchema>
@@ -81,6 +90,7 @@ export function AccountCreateDialog({
       external_account_id: '',
       platform: 'META',
       current_limit_usd: '0',
+      usd_rate: '',
       status: 'AVAILABLE',
     },
   })
@@ -99,7 +109,11 @@ export function AccountCreateDialog({
   const mutation = useMutation({
     mutationFn: (values: CreateValues) =>
       createAccount({
-        data: { ...values, current_limit_usd: Number(values.current_limit_usd) },
+        data: {
+          ...values,
+          current_limit_usd: Number(values.current_limit_usd),
+          usd_rate: Number(values.usd_rate),
+        },
       }),
     onSuccess: (acc) => {
       toast.success(`Account created (${acc.account_code})`)
@@ -183,6 +197,27 @@ export function AccountCreateDialog({
               />
               <FormField
                 control={form.control}
+                name="usd_rate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Per USD (BDT per $1)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="130.00"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
                 name="status"
                 render={({ field }) => (
                   <FormItem>
@@ -231,6 +266,7 @@ const editSchema = z.object({
   external_account_id: z.string().trim().optional(),
   platform: z.string().trim().min(1, 'Required'),
   current_limit_usd: amountField,
+  usd_rate: rateField,
 })
 type EditValues = z.infer<typeof editSchema>
 
@@ -252,6 +288,7 @@ export function AccountEditDialog({
       external_account_id: account.external_account_id ?? '',
       platform: account.platform,
       current_limit_usd: account.current_limit_usd,
+      usd_rate: account.usd_rate,
     },
   })
 
@@ -261,6 +298,7 @@ export function AccountEditDialog({
         external_account_id: account.external_account_id ?? '',
         platform: account.platform,
         current_limit_usd: account.current_limit_usd,
+        usd_rate: account.usd_rate,
       })
   }, [open, account, form])
 
@@ -271,6 +309,7 @@ export function AccountEditDialog({
           id: account.id,
           ...values,
           current_limit_usd: Number(values.current_limit_usd),
+          usd_rate: Number(values.usd_rate),
         },
       }),
     onSuccess: () => {
@@ -331,6 +370,19 @@ export function AccountEditDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Current limit (USD)</FormLabel>
+                  <FormControl>
+                    <Input type="number" min="0" step="0.01" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="usd_rate"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Per USD (BDT per $1)</FormLabel>
                   <FormControl>
                     <Input type="number" min="0" step="0.01" {...field} />
                   </FormControl>

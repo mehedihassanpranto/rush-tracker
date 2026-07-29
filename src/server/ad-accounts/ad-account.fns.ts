@@ -30,7 +30,7 @@ async function currentClientMap(
   const admin = getSupabaseAdminClient()
   const { data } = await admin
     .from('ad_account_assignments')
-    .select('ad_account_id, client:clients(id, client_code, name, usd_rate)')
+    .select('ad_account_id, client:clients(id, client_code, name)')
     .eq('status', 'ACTIVE')
     .in('ad_account_id', accountIds)
   for (const row of (data ?? []) as unknown as Array<ActiveAssignmentRow>) {
@@ -104,6 +104,7 @@ export const createAdAccountFn = createServerFn({ method: 'POST' })
         external_account_id: data.external_account_id ?? null,
         platform: data.platform,
         current_limit_usd: data.current_limit_usd,
+        usd_rate: data.usd_rate,
         status: data.status,
       })
       .select('*')
@@ -138,6 +139,7 @@ export const updateAdAccountFn = createServerFn({ method: 'POST' })
         external_account_id: data.external_account_id ?? null,
         platform: data.platform,
         current_limit_usd: data.current_limit_usd,
+        usd_rate: data.usd_rate,
       })
       .eq('id', data.id)
       .select('*')
