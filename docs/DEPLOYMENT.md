@@ -10,8 +10,9 @@ Local `npm run build` uses the `node-server` preset instead.
 
 ## 1. Prerequisites
 
-- A Supabase project with **all seven migrations applied in order**
-  (`supabase/migrations/20260723000001…07`), via the Supabase CLI
+- A Supabase project with **all migrations applied in order**
+  (`supabase/migrations/*.sql`, currently 10 files — check the directory for
+  the current count, it grows over time), via the Supabase CLI
   (`supabase db push`) or the SQL editor.
 - The private `proofs` Storage bucket exists (created in the Phase 3 migration /
   setup) and is **not public**.
@@ -26,6 +27,10 @@ Set these for **Production** (and Preview if you use it):
 | `VITE_SUPABASE_URL` | `https://<project>.supabase.co` | Public (browser + server) |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon/publishable key | Public |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role/secret key | **Server only** |
+| `META_SYSTEM_USER_TOKEN` | Business Portfolio System User token (`ads_read`, ideally also `ads_management` if you want the spend-cap write feature) | **Server only**, optional — Meta features just stay unavailable without it |
+| `META_BUSINESS_ID` | Business Portfolio ID | **Server only**, optional (same as above) |
+| `META_API_VERSION` | e.g. `v21.0` | **Server only**, optional — defaults to `v21.0` if unset |
+| `CRON_SECRET` | Random string (`openssl rand -hex 32`) | **Server only**, optional — without it, `/api/cron/meta-sync` returns 503 instead of running |
 
 Notes:
 - The server env loader (`env.server.ts`) reads `SUPABASE_URL` / `SUPABASE_ANON_KEY`
@@ -49,8 +54,13 @@ Notes:
 - **Function region:** `vercel.json` pins serverless functions to `sin1`
   (Singapore) to sit next to the Supabase project (ap-southeast-1). Keep this in
   sync with the Supabase region — a mismatch makes every DB round trip
-  cross-region and is the single biggest source of slow page loads. (This is the
-  only reason a `vercel.json` exists; the preset itself needs no config.)
+  cross-region and is the single biggest source of slow page loads.
+- **Cron:** `vercel.json` also declares `/api/cron/meta-sync` on a daily
+  schedule (`0 3 * * *`). This is the reason `vercel.json` exists at all —
+  the preset itself needs no other config. **Hobby-plan projects only allow
+  daily cron and reject anything more frequent at deploy time** — if you're
+  on Pro/Enterprise and want tighter sync (the code originally ran this
+  every 6h), you can safely change the schedule string.
 
 ## 4. Supabase Auth redirect / URL config
 
