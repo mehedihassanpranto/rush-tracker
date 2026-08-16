@@ -11,6 +11,16 @@ const serverEnvSchema = z.object({
   SUPABASE_URL: z.url(),
   SUPABASE_ANON_KEY: z.string().min(20),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
+  // Meta Marketing API — optional: unset in environments that haven't
+  // connected a Business Portfolio yet (src/server/meta/meta.server.ts
+  // throws a clear error at call time if these are missing).
+  META_SYSTEM_USER_TOKEN: z.string().min(1).optional(),
+  META_BUSINESS_ID: z.string().min(1).optional(),
+  META_API_VERSION: z.string().min(1).default('v21.0'),
+  // Shared secret for the /api/cron/meta-sync endpoint — Vercel Cron sends
+  // it as `Authorization: Bearer <value>` automatically when this env var is
+  // set on the project. Optional: unset disables the sync endpoint.
+  CRON_SECRET: z.string().min(1).optional(),
 })
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>
@@ -28,6 +38,10 @@ export function getServerEnv(): ServerEnv {
       SUPABASE_ANON_KEY:
         process.env.SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY,
       SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+      META_SYSTEM_USER_TOKEN: process.env.META_SYSTEM_USER_TOKEN,
+      META_BUSINESS_ID: process.env.META_BUSINESS_ID,
+      META_API_VERSION: process.env.META_API_VERSION,
+      CRON_SECRET: process.env.CRON_SECRET,
     })
     if (!parsed.success) {
       throw new Error(

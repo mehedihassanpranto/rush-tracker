@@ -19,7 +19,7 @@ import type {
 
 type ActiveAssignmentRow = {
   ad_account_id: string
-  client: AdAccountClient | null
+  client: Pick<AdAccountClient, 'id' | 'client_code' | 'name'> | null
 }
 
 async function currentClientMap(
@@ -33,8 +33,27 @@ async function currentClientMap(
     .select('ad_account_id, client:clients(id, client_code, name)')
     .eq('status', 'ACTIVE')
     .in('ad_account_id', accountIds)
+
+  // current_due is ledger-derived (spec §35), never a stored column — merged
+  // in from all_client_dues() the same way listClientsFn does it, so an ad
+  // account's "current balance" is the assigned client's actual due, not
+  // anything Meta-side.
+  const dueByClient = new Map<string, string>()
+  const { data: dueRows } = await admin.rpc('all_client_dues')
+  for (const r of (dueRows ?? []) as Array<{
+    client_id: string
+    current_due: string | number
+  }>) {
+    dueByClient.set(r.client_id, String(r.current_due))
+  }
+
   for (const row of (data ?? []) as unknown as Array<ActiveAssignmentRow>) {
-    if (row.client) map.set(row.ad_account_id, row.client)
+    if (row.client) {
+      map.set(row.ad_account_id, {
+        ...row.client,
+        current_due: dueByClient.get(row.client.id) ?? '0',
+      })
+    }
   }
   return map
 }

@@ -4,7 +4,7 @@ import { useServerFn } from '@tanstack/react-start'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Loader2 } from 'lucide-react'
+import { Loader2, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
@@ -16,6 +16,7 @@ import {
   listActiveClientsFn,
   transferAccountFn,
 } from '@/server/ad-accounts/assignment.fns'
+import { fetchMetaAdAccountFn } from '@/server/meta/meta.fns'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -82,6 +83,8 @@ export function AccountCreateDialog({
 }) {
   const queryClient = useQueryClient()
   const createAccount = useServerFn(createAdAccountFn)
+  const fetchMetaAccount = useServerFn(fetchMetaAdAccountFn)
+  const [metaStatus, setMetaStatus] = useState<string | null>(null)
 
   const form = useForm<CreateValues>({
     resolver: zodResolver(createSchema),
@@ -96,7 +99,7 @@ export function AccountCreateDialog({
   })
 
   useEffect(() => {
-    if (open)
+    if (open) {
       form.reset({
         name: '',
         external_account_id: '',
@@ -104,7 +107,29 @@ export function AccountCreateDialog({
         current_limit_usd: '0',
         status: 'AVAILABLE',
       })
+      setMetaStatus(null)
+    }
   }, [open, form])
+
+  const metaFetch = useMutation({
+    mutationFn: (externalAccountId: string) =>
+      fetchMetaAccount({ data: { external_account_id: externalAccountId } }),
+    onSuccess: (data) => {
+      form.setValue('name', data.name, { shouldValidate: true })
+      // Only USD spend_cap is safe to prefill as-is — this app has no FX
+      // conversion path for other currencies (same gate as the detail page's
+      // "Apply as current limit" action).
+      if (data.currency === 'USD' && data.spend_cap != null) {
+        form.setValue('current_limit_usd', data.spend_cap, { shouldValidate: true })
+      }
+      setMetaStatus(
+        `${data.meta_status_label}${data.currency ? ` · ${data.currency}` : ''}`,
+      )
+      toast.success('Fetched from Meta')
+    },
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : 'Failed to fetch from Meta'),
+  })
 
   const mutation = useMutation({
     mutationFn: (values: CreateValues) =>
@@ -173,9 +198,30 @@ export function AccountCreateDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>External ID (optional)</FormLabel>
-                    <FormControl>
-                      <Input placeholder="123456789" {...field} />
-                    </FormControl>
+                    <div className="flex gap-2">
+                      <FormControl>
+                        <Input placeholder="123456789" {...field} />
+                      </FormControl>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        title="Fetch from Meta"
+                        disabled={!field.value?.trim() || metaFetch.isPending}
+                        onClick={() => metaFetch.mutate(field.value ?? '')}
+                      >
+                        {metaFetch.isPending ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="size-4" />
+                        )}
+                      </Button>
+                    </div>
+                    {metaStatus && (
+                      <p className="text-xs text-muted-foreground">
+                        Meta: {metaStatus}
+                      </p>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}

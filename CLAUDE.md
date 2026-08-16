@@ -63,6 +63,178 @@ full document if you need the testing/later sections.
   Anti-escalation: a user cannot change their own role/status/permissions. No
   new migration (reuses `user_profiles`, `user_permissions`, `roles`). Audited
   as ROLE_CHANGED / USER_STATUS_CHANGED / PERMISSION_CHANGED / USER_CREATED.
+- **Meta Business Portfolio integration (post-Phase-8 addition): done, pending
+  owner review** — read-only Graph API integration via a Business Portfolio
+  System User token (`META_SYSTEM_USER_TOKEN` + `META_BUSINESS_ID`, optional
+  server-only env, app runs without them). `src/server/meta/meta.server.ts`
+  (Graph client, `fetchMetaAdAccount`, `listMetaBusinessAdAccounts`).
+  **`listMetaBusinessAdAccounts` queries both `{business}/owned_ad_accounts`
+  AND `{business}/client_ad_accounts`, merged + deduped by account id** — an
+  agency's managed accounts mostly live in `client_ad_accounts` (shared in
+  from clients' own Business Managers), not `owned_ad_accounts`; querying
+  only the latter (the original mistake here) silently misses most accounts,
+  including newly-assigned ones, with no error to signal it.
+  `src/server/meta/meta.fns.ts` exposes `fetchMetaAdAccountFn` (verify/prefill
+  one account by id — wired into the create dialog's External ID field and a
+  "Fetch from Meta" action on the account detail page, both display-only, no
+  auto-overwrite), `listMetaBusinessAdAccountsFn` (lists the Portfolio's
+  accounts, flags ones already linked by `external_account_id`), and
+  `importMetaAdAccountsFn` (bulk-creates `ad_accounts` rows — wired into an
+  "Import from Meta" dialog on the ad accounts list). Both writes/reads are
+  guarded by `requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)`; imports are
+  audited as `AD_ACCOUNT_CREATED` with `metadata.source = 'META_IMPORT'`. No
+  new migration (`external_account_id` already existed, unindexed-unique).
+  **Deliberate scope decision**: Meta's numeric `account_status` is shown as
+  an informational label only, never written to our `ad_accounts.status`
+  (that stays admin-controlled, spec §19). Bulk import never maps
+  `spend_cap`/`currency` onto `current_limit_usd` either — imported accounts
+  always start at `current_limit_usd: 0`, `status: AVAILABLE`, unassigned;
+  batch-applying a financial baseline across accounts with possibly-different
+  currencies with no per-account review was judged too risky. Single-account
+  spend-cap application (see below) is the reviewed exception.
+- **Meta background sync (post-Phase-8 addition): done, pending owner
+  review** — `GET /api/cron/meta-sync`, invoked every 6h by Vercel Cron
+  (`vercel.json` → `crons`), auth'd by a shared secret (`CRON_SECRET`; Vercel
+  auto-sends `Authorization: Bearer <CRON_SECRET>`, 401 without it). Business
+  logic in `src/server/meta/meta-sync.server.ts::syncMetaAdAccounts()` — no
+  `requireAdmin()` (no signed-in actor on a cron call; the secret header is
+  the auth boundary instead). Scope stays narrow on purpose: auto-renames an
+  already-linked account when Meta's live name differs (safe, non-financial,
+  audited as `AD_ACCOUNT_RENAMED` / `metadata.source: 'META_SYNC'`,
+  `actorUserId: null`); **never** auto-creates `ad_accounts` rows for newly
+  seen Meta accounts (financial baseline + rate need an admin decision) — new
+  accounts are only counted and surfaced via `notifyAdmins()` (`type:
+  'META_SYNC'`), admin still imports them by hand via the existing "Import
+  from Meta" dialog. `AuditEntry.actorUserId` widened to `string | null` for
+  this (audit_logs.actor_user_id is a nullable FK to auth.users — no
+  placeholder ids).
+  **Framework note learned the hard way**: standalone Nitro `server/api/**`
+  file scanning does **not** get wired into this TanStack Start version's
+  (1.168.x) request pipeline — `createStartHandler` owns routing end-to-end.
+  Custom HTTP/API endpoints must be a normal file under `src/routes/**`
+  using `createFileRoute(path)({ server: { handlers: { GET: async ({
+  request }) => ... } } })` (no `component` key ⇒ never shipped to the
+  client bundle), picked up by the same `routeTree.gen.ts` generation as
+  page routes. Don't reach for a top-level `server/` dir again.
+  **Meta API correctness note**: `owned_ad_accounts` alone misses most of an
+  agency's accounts — `listMetaBusinessAdAccounts()` now queries both
+  `{business}/owned_ad_accounts` and `{business}/client_ad_accounts` (see
+  above). Separately, Meta's `amount_spent`/`spend_cap` on the AdAccount
+  object are wire-formatted in the account currency's **minor unit** (cents
+  for USD; zero-decimal currencies like JPY/KRW are the exception, listed in
+  `ZERO_DECIMAL_CURRENCIES`) — `meta.server.ts`'s `toSummary()` normalizes
+  both to major units before they reach any caller, so `MetaAdAccountSummary`
+  is always real currency amounts, never raw Graph API cents. Verified
+  against a live account: raw `spend_cap: "870000"` → correctly $8,700.00,
+  not $870,000 — getting this wrong is a 100x error.
+- **Apply Meta spend cap as current limit (post-Phase-8 addition): done,
+  pending owner review** — `applyMetaSpendCapFn` in `meta.fns.ts`: re-fetches
+  live from Meta server-side (never trusts a client-supplied number),
+  requires `currency === 'USD'` (no FX conversion path exists here — other
+  currencies must be applied manually), then sets
+  `ad_accounts.current_limit_usd` to the live spend cap — same non-billing,
+  no-ledger-entry semantics as directly editing the field via the existing
+  Edit dialog (spec §20's baseline, not a billing event). Wired as an
+  explicit "Apply as current limit" confirm step (shows old → new value) in
+  `MetaFetchDialog` (detail page) and as an automatic USD-only prefill of
+  `current_limit_usd` when fetching on the create dialog. Audited as
+  `AD_ACCOUNT_UPDATED` with `metadata.source = 'META_SPEND_CAP'`. Still never
+  wired into bulk import — see the scope decision above.
+- **Meta live spend on the account detail page (post-Phase-8 addition):
+  done, pending owner review** — new "Meta live data" card on the ad
+  account detail page's Overview tab (`$accountId.tsx`), shown whenever the
+  account has an `external_account_id`. Auto-fetches (no click needed) via
+  the existing `fetchMetaAdAccountFn`; shows Amount spent, Remaining
+  (`spend_cap − amount_spent`, decimal.js via `dec()`, "No spend cap set"
+  when Meta has none), Spend cap, and Currency — formatted with
+  `Intl.NumberFormat({style:'currency'})` against the account's own Meta
+  currency, not assumed USD (unlike `formatUsd`/`formatBdt`, which are
+  specific to this app's own two currencies). Purely a read from Meta on
+  each page view — no new columns, nothing persisted, degrades to a quiet
+  "unable to load" line on fetch failure rather than breaking the page.
+- **Low-remaining-balance bell on the ad accounts list (post-Phase-8
+  addition): done, pending owner review** — red Bell icon (lucide) next to
+  an account's name in `/admin/ad-accounts` when its live Meta
+  `spend_cap − amount_spent` is **≤ 60** (`LOW_BALANCE_THRESHOLD` at the top
+  of `index.tsx`), in the account's own currency — no FX conversion, same
+  currency-native gate as the rest of the Meta integration. Originally
+  shipped as a closed [50,60] band per the literal request, then corrected
+  to an open-ended `≤ 60` after the owner found a real $36.60 account
+  (deeper in the red than the band) showing no bell — lower remaining is
+  still low, a band that excludes the most urgent accounts was backwards.
+  Reuses `listMetaBusinessAdAccountsFn` (the same bulk fetch behind "Import
+  from Meta" — two Graph API calls for the whole portfolio, not one per row)
+  rather than adding new server code; `staleTime: 2min` so navigating the
+  list repeatedly doesn't hammer the
+  Graph API. Verified against all 15 real linked accounts before shipping.
+  Same query also powers a **"Remaining" column** on the list (Meta spend
+  headroom, every linked account not just low-balance ones — red/bold when
+  low, `—` when unlinked or Meta has no spend cap). Formatting factored out
+  of `$accountId.tsx`'s Meta live-data card into a shared
+  `formatCurrencyAmount()` in `src/lib/money/money.ts` (currency-native
+  `Intl.NumberFormat`, not `formatUsd`/`formatBdt`) once it was needed in a
+  second place. `LOW_BALANCE_THRESHOLD` lives in `src/lib/meta/thresholds.ts`
+  (isomorphic, not `.server.ts`, since both the list page and the detail
+  page's Meta live-data card need it client-side).
+  **"Remaining" (Meta) vs "Current balance" (ours) — do not conflate these,
+  a mistake made once already**: "Remaining" is Meta's `spend_cap −
+  amount_spent`, an ad-account-level, Meta-side, non-financial figure (how
+  much budget is left before Meta pauses delivery). "Current balance" is the
+  assigned **client's due** — ledger-derived (spec §35), client-level, our
+  own billing figure — sourced from `all_client_dues()` the same way
+  `listClientsFn` does it, merged into `AdAccountClient.current_due` inside
+  `currentClientMap()` (`ad-account.fns.ts`). Shown as its own column on the
+  list (next to "Current client") and its own row on the detail page's
+  **Account details** card (next to "Current client" there too) — deliberately
+  kept out of the "Meta live data" card since it has nothing to do with
+  Meta. Multiple ad accounts under the same client correctly show the same
+  due figure (it's a client total, not per-account) — verified against real
+  data (CL-0002 DF IT: ৳323,400 due, identical across all of DF IT's linked
+  accounts).
+  **A third, genuinely different "balance" exists too — Meta's own AdAccount
+  `balance` field** (Ads Manager's Billing tab calls this "Current balance":
+  amount accrued against the account since Meta's last payment, charged to
+  the linked payment method once Meta's own threshold is hit). Added to
+  `MetaAdAccountSummary.meta_balance` (`meta.server.ts`, same minor-unit
+  normalization as amount_spent/spend_cap — verified live: raw `"2452"` →
+  correctly $24.52, matching the owner's screenshot of that exact account).
+  Shown only in the "Meta live data" card, labeled **"Balance owed to
+  Meta"** — deliberately not reusing "Current balance" a second time on the
+  same page (that label is already taken by the client-due figure above);
+  three distinct "balance" concepts now exist on this one page and none of
+  their labels should ever collide again: Remaining (Meta spend headroom),
+  Current balance (client due, ours), Balance owed to Meta (Meta's bill).
+- **Write to Meta: push spend_cap (post-Phase-8 addition): done, pending
+  owner review** — the only WRITE this integration makes; everything else
+  is `ads_read`. `updateMetaAdAccountSpendCap()` in `meta.server.ts`
+  (`graphPost` helper, form-encoded POST to `act_{id}`) — verified against
+  Meta's official API reference before shipping: **writing `spend_cap` is
+  in major units (standard denomination, e.g. `"100.00"`), the opposite of
+  reading it (minor units/cents)** — an asymmetric GET/POST convention for
+  this one field, documented loudly in code so it's never "fixed" into a
+  100x bug. `updateMetaSpendCapFn` (`meta.fns.ts`, `AD_ACCOUNTS_MANAGE`)
+  re-fetches live Meta state server-side first and blocks (before writing
+  anything) if the new cap would fall below `amount_spent` — that would
+  make Meta pause all delivery on the account immediately, so it's refused
+  rather than left as a surprise. On success also sets our own
+  `current_limit_usd` to match (owner's call — the two are allowed to
+  differ from Meta's spend_cap in general, but this write path keeps them
+  in sync). Audited as `AD_ACCOUNT_UPDATED` / `metadata.source:
+  'META_SPEND_CAP_PUSH'` (distinct from the pull-direction `'META_SPEND_CAP'`
+  source used by `applyMetaSpendCapFn`).
+  **UI is increment-based, not absolute** (`MetaSpendCapDialog`,
+  spec-§74-style confirmation dialog) — admin types "increase spend cap by
+  $X", the dialog computes and displays "New spend cap" (current + X)
+  before submit, and that computed absolute value is what's actually sent
+  — same additive mental model as the rest of the app's limit-request flow
+  (spec §20: new limit = opening balance + approved amount), not a
+  type-the-final-number field. Triggered from an "Edit spend cap" button
+  (`CardAction`) on the detail page's "Meta live data" card.
+  Also checked (per owner's screenshot of Meta's "Account spending limit →
+  When the limit resets: Manually / Automatically on the 1st" toggle): the
+  documented write API has no recurring-reset parameter at all — only the
+  one-time `spend_cap_action: 'reset'|'delete'`. Our write can't set or
+  flip that toggle either way; it only ever touches the cap value.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

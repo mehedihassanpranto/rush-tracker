@@ -51,8 +51,12 @@ export interface Assignment {
   created_at: string
 }
 
-/** The current-assignment client fields carried alongside an ad account. */
-export type AdAccountClient = Pick<Client, 'id' | 'client_code' | 'name'>
+/** The current-assignment client fields carried alongside an ad account.
+ * current_due is ledger-derived (spec §35), never a stored Client column —
+ * merged in from all_client_dues(), not Pick<Client, ...>. */
+export type AdAccountClient = Pick<Client, 'id' | 'client_code' | 'name'> & {
+  current_due: string
+}
 
 /** Ad account plus its current active assignment's client, if any. */
 export interface AdAccountWithClient extends AdAccount {

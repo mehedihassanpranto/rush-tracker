@@ -34,6 +34,7 @@ import { Route as AdminReportsIndexRouteImport } from './routes/admin/reports/in
 import { Route as AdminSearchIndexRouteImport } from './routes/admin/search/index'
 import { Route as AdminSettingsIndexRouteImport } from './routes/admin/settings/index'
 import { Route as AdminUsersIndexRouteImport } from './routes/admin/users/index'
+import { Route as ApiCronMetaSyncRouteImport } from './routes/api/cron/meta-sync'
 import { Route as PortalAdAccountsIndexRouteImport } from './routes/portal/ad-accounts/index'
 import { Route as PortalDueIndexRouteImport } from './routes/portal/due/index'
 import { Route as PortalLimitRequestsIndexRouteImport } from './routes/portal/limit-requests/index'
@@ -169,6 +170,11 @@ const AdminUsersIndexRoute = AdminUsersIndexRouteImport.update({
   path: '/users/',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const ApiCronMetaSyncRoute = ApiCronMetaSyncRouteImport.update({
+  id: '/api/cron/meta-sync',
+  path: '/api/cron/meta-sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PortalAdAccountsIndexRoute = PortalAdAccountsIndexRouteImport.update({
   id: '/ad-accounts/',
   path: '/ad-accounts/',
@@ -221,6 +227,7 @@ export interface FileRoutesByFullPath {
   '/admin/clients/$clientId': typeof AdminClientsClientIdRoute
   '/admin/limit-requests/$requestId': typeof AdminLimitRequestsRequestIdRoute
   '/admin/payments/$paymentId': typeof AdminPaymentsPaymentIdRoute
+  '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
   '/admin/ad-accounts/': typeof AdminAdAccountsIndexRoute
   '/admin/adjustments/': typeof AdminAdjustmentsIndexRoute
   '/admin/audit/': typeof AdminAuditIndexRoute
@@ -252,6 +259,7 @@ export interface FileRoutesByTo {
   '/admin/clients/$clientId': typeof AdminClientsClientIdRoute
   '/admin/limit-requests/$requestId': typeof AdminLimitRequestsRequestIdRoute
   '/admin/payments/$paymentId': typeof AdminPaymentsPaymentIdRoute
+  '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
   '/admin/ad-accounts': typeof AdminAdAccountsIndexRoute
   '/admin/adjustments': typeof AdminAdjustmentsIndexRoute
   '/admin/audit': typeof AdminAuditIndexRoute
@@ -287,6 +295,7 @@ export interface FileRoutesById {
   '/admin/clients/$clientId': typeof AdminClientsClientIdRoute
   '/admin/limit-requests/$requestId': typeof AdminLimitRequestsRequestIdRoute
   '/admin/payments/$paymentId': typeof AdminPaymentsPaymentIdRoute
+  '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
   '/admin/ad-accounts/': typeof AdminAdAccountsIndexRoute
   '/admin/adjustments/': typeof AdminAdjustmentsIndexRoute
   '/admin/audit/': typeof AdminAuditIndexRoute
@@ -322,6 +331,7 @@ export interface FileRouteTypes {
     | '/admin/clients/$clientId'
     | '/admin/limit-requests/$requestId'
     | '/admin/payments/$paymentId'
+    | '/api/cron/meta-sync'
     | '/admin/ad-accounts/'
     | '/admin/adjustments/'
     | '/admin/audit/'
@@ -353,6 +363,7 @@ export interface FileRouteTypes {
     | '/admin/clients/$clientId'
     | '/admin/limit-requests/$requestId'
     | '/admin/payments/$paymentId'
+    | '/api/cron/meta-sync'
     | '/admin/ad-accounts'
     | '/admin/adjustments'
     | '/admin/audit'
@@ -387,6 +398,7 @@ export interface FileRouteTypes {
     | '/admin/clients/$clientId'
     | '/admin/limit-requests/$requestId'
     | '/admin/payments/$paymentId'
+    | '/api/cron/meta-sync'
     | '/admin/ad-accounts/'
     | '/admin/adjustments/'
     | '/admin/audit/'
@@ -414,6 +426,7 @@ export interface RootRouteChildren {
   AdminRouteRoute: typeof AdminRouteRouteWithChildren
   PortalRouteRoute: typeof PortalRouteRouteWithChildren
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ApiCronMetaSyncRoute: typeof ApiCronMetaSyncRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -593,6 +606,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminUsersIndexRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/api/cron/meta-sync': {
+      id: '/api/cron/meta-sync'
+      path: '/api/cron/meta-sync'
+      fullPath: '/api/cron/meta-sync'
+      preLoaderRoute: typeof ApiCronMetaSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/portal/ad-accounts/': {
       id: '/portal/ad-accounts/'
       path: '/ad-accounts'
@@ -735,6 +755,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRouteRoute: AdminRouteRouteWithChildren,
   PortalRouteRoute: PortalRouteRouteWithChildren,
   ResetPasswordRoute: ResetPasswordRoute,
+  ApiCronMetaSyncRoute: ApiCronMetaSyncRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

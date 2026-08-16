@@ -9,6 +9,7 @@ import {
   Pencil,
   Power,
   PowerOff,
+  RefreshCw,
   Tag,
   UserMinus,
   UserPlus,
@@ -20,7 +21,9 @@ import {
   listAssignmentHistoryFn,
   setAdAccountStatusFn,
 } from '@/server/ad-accounts/ad-account.fns'
-import { formatUsd } from '@/lib/money/money'
+import { fetchMetaAdAccountFn } from '@/server/meta/meta.fns'
+import { dec, formatBdt, formatCurrencyAmount, formatUsd } from '@/lib/money/money'
+import { LOW_BALANCE_THRESHOLD } from '@/lib/meta/thresholds'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import {
@@ -28,12 +31,20 @@ import {
   RenameDialog,
   TransferDialog,
 } from '@/components/admin/ad-account/account-dialogs'
+import { MetaFetchDialog } from '@/components/admin/ad-account/meta-fetch-dialog'
+import { MetaSpendCapDialog } from '@/components/admin/ad-account/meta-spend-cap-dialog'
 import {
   AssignToClientDialog,
   ReleaseDialog,
 } from '@/components/admin/ad-account/assign-release-dialogs'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -80,12 +91,15 @@ function AccountDetailPage() {
   const getAccount = useServerFn(getAdAccountFn)
   const listHistory = useServerFn(listAssignmentHistoryFn)
   const setStatus = useServerFn(setAdAccountStatusFn)
+  const fetchMetaAccount = useServerFn(fetchMetaAdAccountFn)
 
   const [renameOpen, setRenameOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [assignOpen, setAssignOpen] = useState(false)
   const [releaseOpen, setReleaseOpen] = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
+  const [metaFetchOpen, setMetaFetchOpen] = useState(false)
+  const [spendCapOpen, setSpendCapOpen] = useState(false)
 
   const { data: account, isLoading } = useQuery({
     queryKey: ['ad-account', accountId],
@@ -95,6 +109,19 @@ function AccountDetailPage() {
   const { data: history } = useQuery({
     queryKey: ['assignment-history', accountId],
     queryFn: () => listHistory({ data: { ad_account_id: accountId } }),
+  })
+
+  const externalAccountId = account?.external_account_id ?? null
+  const {
+    data: metaLive,
+    isLoading: metaLoading,
+    isError: metaError,
+  } = useQuery({
+    queryKey: ['meta-live', externalAccountId],
+    queryFn: () =>
+      fetchMetaAccount({ data: { external_account_id: externalAccountId! } }),
+    enabled: Boolean(externalAccountId),
+    retry: false,
   })
 
   const statusMutation = useMutation({
@@ -153,6 +180,12 @@ function AccountDetailPage() {
               <Pencil className="size-4" />
               Edit details
             </DropdownMenuItem>
+            {account.external_account_id && (
+              <DropdownMenuItem onSelect={() => setMetaFetchOpen(true)}>
+                <RefreshCw className="size-4" />
+                Fetch from Meta
+              </DropdownMenuItem>
+            )}
             {isAssigned && account.status === 'ACTIVE' && (
               <DropdownMenuItem onSelect={() => statusMutation.mutate('INACTIVE')}>
                 <PowerOff className="size-4" />
@@ -225,6 +258,16 @@ function AccountDetailPage() {
                     )
                   }
                 />
+                {currentClient && (
+                  <InfoRow
+                    label="Current balance"
+                    value={
+                      <span className="font-medium">
+                        {formatBdt(currentClient.current_due)} due
+                      </span>
+                    }
+                  />
+                )}
                 <InfoRow
                   label="Current limit"
                   value={
@@ -248,6 +291,80 @@ function AccountDetailPage() {
               </dl>
             </CardContent>
           </Card>
+
+          {externalAccountId && (
+            <Card className="mt-4">
+              <CardHeader>
+                <CardTitle className="text-base">Meta live data</CardTitle>
+                <CardAction>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSpendCapOpen(true)}
+                  >
+                    <Pencil className="size-4" />
+                    Edit spend cap
+                  </Button>
+                </CardAction>
+              </CardHeader>
+              <CardContent>
+                {metaLoading && <Skeleton className="h-16 w-full" />}
+                {metaError && (
+                  <p className="text-sm text-muted-foreground">
+                    Unable to load live data from Meta right now.
+                  </p>
+                )}
+                {metaLive && (
+                  <dl className="divide-y">
+                    <InfoRow
+                      label="Amount spent"
+                      value={
+                        <span className="font-medium">
+                          {formatCurrencyAmount(metaLive.amount_spent, metaLive.currency)}
+                        </span>
+                      }
+                    />
+                    <InfoRow
+                      label="Remaining"
+                      value={
+                        metaLive.spend_cap == null ? (
+                          'No spend cap set'
+                        ) : (
+                          (() => {
+                            const remaining = dec(metaLive.spend_cap).minus(
+                              dec(metaLive.amount_spent ?? 0),
+                            )
+                            const low = remaining.lte(LOW_BALANCE_THRESHOLD)
+                            return (
+                              <span
+                                className={
+                                  low
+                                    ? 'font-medium text-red-600 dark:text-red-400'
+                                    : 'font-medium'
+                                }
+                              >
+                                {formatCurrencyAmount(remaining.toFixed(2), metaLive.currency)}
+                              </span>
+                            )
+                          })()
+                        )
+                      }
+                    />
+                    <InfoRow label="Spend cap" value={formatCurrencyAmount(metaLive.spend_cap, metaLive.currency)} />
+                    <InfoRow
+                      label="Balance owed to Meta"
+                      value={
+                        <span className="font-medium">
+                          {formatCurrencyAmount(metaLive.meta_balance, metaLive.currency)}
+                        </span>
+                      }
+                    />
+                    <InfoRow label="Currency" value={metaLive.currency} />
+                  </dl>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="history">
@@ -322,6 +439,19 @@ function AccountDetailPage() {
         onOpenChange={setTransferOpen}
         account={account}
         currentClientId={currentClient?.id ?? null}
+      />
+      <MetaFetchDialog
+        open={metaFetchOpen}
+        onOpenChange={setMetaFetchOpen}
+        accountId={account.id}
+        externalAccountId={account.external_account_id}
+        currentLimitUsd={account.current_limit_usd}
+      />
+      <MetaSpendCapDialog
+        open={spendCapOpen}
+        onOpenChange={setSpendCapOpen}
+        accountId={account.id}
+        externalAccountId={account.external_account_id}
       />
     </div>
   )

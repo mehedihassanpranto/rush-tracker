@@ -1,7 +1,10 @@
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 
 export interface AuditEntry {
-  actorUserId: string
+  // null for system-initiated events with no signed-in actor (e.g. the
+  // /api/cron/meta-sync job) — audit_logs.actor_user_id is a nullable FK to
+  // auth.users, never a placeholder id.
+  actorUserId: string | null
   action: string
   entityType: string
   entityId?: string | null

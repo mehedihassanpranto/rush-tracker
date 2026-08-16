@@ -43,3 +43,21 @@ export function formatUsd(value: MoneyInput): string {
 export function formatBdt(value: MoneyInput): string {
   return `৳${bdtFormatter.format(dec(value).toNumber())}`
 }
+
+/** Format an amount in an arbitrary ISO currency (e.g. a Meta ad account's
+ * own currency, which isn't always USD/BDT) — unlike formatUsd/formatBdt,
+ * which are fixed to this app's own two currencies. */
+export function formatCurrencyAmount(
+  value: string | null,
+  currency: string | null,
+): string {
+  if (value == null) return '—'
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: currency ?? 'USD',
+    }).format(Number(value))
+  } catch {
+    return `${value} ${currency ?? ''}`.trim()
+  }
+}
