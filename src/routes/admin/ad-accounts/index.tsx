@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import { Bell, Download, Megaphone, Plus } from 'lucide-react'
+import { Bell, Download, Megaphone, Plus, RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { listAdAccountsFn } from '@/server/ad-accounts/ad-account.fns'
 import { listMetaBusinessAdAccountsFn } from '@/server/meta/meta.fns'
 import { dec, formatBdt, formatCurrencyAmount, formatUsd } from '@/lib/money/money'
-import { LOW_BALANCE_THRESHOLD } from '@/lib/meta/thresholds'
+import { LOW_BALANCE_THRESHOLD, META_DUE_THRESHOLD } from '@/lib/meta/thresholds'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { AccountCreateDialog } from '@/components/admin/ad-account/account-dialogs'
@@ -34,7 +35,12 @@ function AdAccountsPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
 
-  const { data: accounts, isLoading } = useQuery({
+  const {
+    data: accounts,
+    isLoading,
+    refetch: refetchAccounts,
+    isFetching: accountsFetching,
+  } = useQuery({
     queryKey: ['ad-accounts'],
     queryFn: () => listAccounts(),
   })
@@ -42,7 +48,11 @@ function AdAccountsPage() {
   // Reuses the same bulk Meta fetch that powers "Import from Meta" (two
   // Graph API calls total, not one per row) — errors (e.g. Meta not
   // configured) just mean no bells show, never break the list.
-  const { data: metaAccounts } = useQuery({
+  const {
+    data: metaAccounts,
+    refetch: refetchMeta,
+    isFetching: metaFetching,
+  } = useQuery({
     queryKey: ['meta-business-ad-accounts'],
     queryFn: () => listMetaAccounts(),
     staleTime: 2 * 60 * 1000,
@@ -50,14 +60,40 @@ function AdAccountsPage() {
     throwOnError: false,
   })
 
-  const balanceByAccountId = new Map<string, { remaining: string; currency: string; low: boolean }>()
+  const refreshing = accountsFetching || metaFetching
+
+  async function handleRefresh() {
+    const [, metaResult] = await Promise.all([refetchAccounts(), refetchMeta()])
+    if (metaResult.isError) {
+      toast.warning('Refreshed, but live Meta data failed to load', {
+        description:
+          metaResult.error instanceof Error ? metaResult.error.message : undefined,
+      })
+    } else {
+      toast.success('Refreshed from Meta')
+    }
+  }
+
+  const balanceByAccountId = new Map<
+    string,
+    {
+      remaining: string | null
+      low: boolean
+      metaDue: string | null
+      metaDueHigh: boolean
+      currency: string
+    }
+  >()
   for (const m of metaAccounts ?? []) {
-    if (!m.linked_account_id || m.spend_cap == null) continue
-    const remaining = dec(m.spend_cap).minus(dec(m.amount_spent ?? 0))
+    if (!m.linked_account_id) continue
+    const remaining =
+      m.spend_cap != null ? dec(m.spend_cap).minus(dec(m.amount_spent ?? 0)) : null
     balanceByAccountId.set(m.linked_account_id, {
-      remaining: remaining.toFixed(2),
+      remaining: remaining ? remaining.toFixed(2) : null,
+      low: remaining ? remaining.lte(LOW_BALANCE_THRESHOLD) : false,
+      metaDue: m.meta_balance,
+      metaDueHigh: m.meta_balance != null && dec(m.meta_balance).gte(META_DUE_THRESHOLD),
       currency: m.currency ?? '',
-      low: remaining.lte(LOW_BALANCE_THRESHOLD),
     })
   }
 
@@ -67,6 +103,10 @@ function AdAccountsPage() {
         title="Ad Accounts"
         description="Advertising accounts and their current spending limits."
       >
+        <Button variant="outline" onClick={handleRefresh} disabled={refreshing}>
+          <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
         <Button variant="outline" onClick={() => setImportOpen(true)}>
           <Download className="size-4" />
           Import from Meta
@@ -89,6 +129,7 @@ function AdAccountsPage() {
               <TableHead className="text-right">Per USD</TableHead>
               <TableHead className="text-right">Current limit</TableHead>
               <TableHead className="text-right">Remaining</TableHead>
+              <TableHead className="text-right">Meta Due</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
@@ -96,7 +137,7 @@ function AdAccountsPage() {
             {isLoading &&
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={9}>
+                  <TableCell colSpan={10}>
                     <Skeleton className="h-6 w-full" />
                   </TableCell>
                 </TableRow>
@@ -104,7 +145,7 @@ function AdAccountsPage() {
 
             {!isLoading && (accounts?.length ?? 0) === 0 && (
               <TableRow>
-                <TableCell colSpan={9}>
+                <TableCell colSpan={10}>
                   <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
                     <Megaphone className="size-8 opacity-40" />
                     No ad accounts yet.
@@ -136,6 +177,15 @@ function AdAccountsPage() {
                         <Bell className="size-3.5 shrink-0 text-red-600 dark:text-red-400" />
                       </span>
                     )}
+                    {balance?.metaDueHigh && (
+                      <span
+                        className="flex shrink-0 -space-x-1.5"
+                        title={`High balance owed to Meta: ${balance.metaDue} ${balance.currency}`}
+                      >
+                        <Bell className="size-3.5 text-red-600 dark:text-red-400" />
+                        <Bell className="size-3.5 text-red-600 dark:text-red-400" />
+                      </span>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
@@ -161,6 +211,11 @@ function AdAccountsPage() {
                   className={`text-right ${balance?.low ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}
                 >
                   {balance ? formatCurrencyAmount(balance.remaining, balance.currency) : '—'}
+                </TableCell>
+                <TableCell
+                  className={`text-right ${balance?.metaDueHigh ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}
+                >
+                  {balance ? formatCurrencyAmount(balance.metaDue, balance.currency) : '—'}
                 </TableCell>
                 <TableCell>
                   <StatusBadge status={account.status} />

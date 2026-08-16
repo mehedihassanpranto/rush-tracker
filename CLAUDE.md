@@ -235,6 +235,36 @@ full document if you need the testing/later sections.
   documented write API has no recurring-reset parameter at all — only the
   one-time `spend_cap_action: 'reset'|'delete'`. Our write can't set or
   flip that toggle either way; it only ever touches the cap value.
+- **Manual "Refresh" button on the ad accounts list (post-Phase-8
+  addition): done, pending owner review** — both list queries (our own
+  `ad-accounts` and the bulk `meta-business-ad-accounts`, the latter has a
+  2-minute `staleTime`) are force-refetched together via `refetch()`, which
+  always hits the network regardless of `staleTime` — a manual click isn't
+  blocked by the cache window that normal navigation respects. Spinning
+  icon while either is in flight; a toast distinguishes "fully refreshed"
+  from "refreshed, but live Meta data failed" (e.g. Meta not configured)
+  rather than failing the whole action.
+- **"Meta Due" column on the ad accounts list (post-Phase-8 addition):
+  done, pending owner review** — the fourth "balance" figure, this one on
+  the list page: `MetaAdAccountSummary.meta_balance` (the "Balance owed to
+  Meta" value already shown on the detail page) surfaced per row. Reuses
+  the same bulk `metaAccounts` fetch already powering "Remaining"/the bell —
+  `balanceByAccountId`'s map entries no longer require `spend_cap` to be
+  non-null to exist (an account can have a Meta bill balance with no spend
+  cap set at all; the old gate would've silently hidden Meta Due for those
+  rows). Verified against 5 real linked accounts (e.g. ADA-0007: $9.32).
+- **Double red bell for high Meta Due (post-Phase-8 addition): done,
+  pending owner review** — `META_DUE_THRESHOLD = 100` in
+  `src/lib/meta/thresholds.ts` (alongside `LOW_BALANCE_THRESHOLD`, same
+  file). When `meta_balance >= 100`, two overlapping `Bell` icons render
+  next to the account name (`-space-x-1.5`) — visually distinct from the
+  single bell used for low *remaining* spend headroom, since the two alerts
+  mean opposite things (spend room running low vs. Meta bill running high)
+  and can both be true independently for the same account. Meta Due cell
+  itself also goes red/bold when crossed, same treatment as the Remaining
+  column. Verified live: `ADA-0012 "DF IT - Random 4"` at $112.11 correctly
+  triggers it; every other linked account (all under $100) correctly
+  doesn't.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT
