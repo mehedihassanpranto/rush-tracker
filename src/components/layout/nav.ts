@@ -12,6 +12,7 @@ import {
   Settings,
   SlidersHorizontal,
   UserCog,
+  Users,
   UserRound,
   Wallet,
 } from 'lucide-react'
@@ -30,6 +31,7 @@ export interface NavItem {
 export const ADMIN_NAV: Array<NavItem> = [
   { label: 'Dashboard', icon: LayoutDashboard, to: '/admin' },
   { label: 'Clients', icon: Building2, to: '/admin/clients' },
+  { label: 'Employees', icon: Users, to: '/admin/employees' },
   { label: 'Ad Accounts', icon: Megaphone, to: '/admin/ad-accounts' },
   { label: 'Limit Requests', icon: Gauge, to: '/admin/limit-requests' },
   { label: 'Payments', icon: Wallet, to: '/admin/payments' },
@@ -50,6 +52,7 @@ export const CLIENT_NAV: Array<NavItem> = [
   { label: 'Due & Payments', icon: Wallet, to: '/portal/due' },
   { label: 'Payment Requests', icon: HandCoins, to: '/portal/payment-requests' },
   { label: 'Statement', icon: FileText, to: '/portal/statement' },
+  { label: 'Team', icon: Users, to: '/portal/team' },
   { label: 'Notifications', icon: Bell, to: '/portal/notifications' },
   { label: 'Profile', icon: UserRound, to: '/portal/profile' },
 ]

@@ -1,8 +1,16 @@
 import { useState } from 'react'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import { ArrowLeft, HandCoins, Pencil, Plus, SlidersHorizontal } from 'lucide-react'
+import {
+  ArrowLeft,
+  HandCoins,
+  Pencil,
+  Plus,
+  SlidersHorizontal,
+  UserMinus,
+} from 'lucide-react'
+import { toast } from 'sonner'
 
 import { getClientFn, listClientUsersFn } from '@/server/clients/client.fns'
 import { listClientAccountsFn } from '@/server/ad-accounts/assignment.fns'
@@ -11,6 +19,10 @@ import {
   listClientLedgerFn,
 } from '@/server/ledger/ledger.fns'
 import { listAdjustmentsFn } from '@/server/adjustments/adjustment.fns'
+import {
+  listClientEmployeesFn,
+  unassignEmployeeFromClientFn,
+} from '@/server/employees/employee.fns'
 import { formatBdt, formatUsd } from '@/lib/money/money'
 import { hasPermission } from '@/lib/auth/types'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
@@ -21,6 +33,7 @@ import { LedgerTable } from '@/components/shared/ledger-table'
 import { ClientFormDialog } from '@/components/admin/client/client-form-dialog'
 import { AssignAccountDialog } from '@/components/admin/client/assign-account-dialog'
 import { AddLoginDialog } from '@/components/admin/client/add-login-dialog'
+import { AssignEmployeeDialog } from '@/components/admin/employee/assign-employee-dialog'
 import { CreateAdjustmentDialog } from '@/components/admin/adjustment/create-adjustment-dialog'
 import { ReverseDialog } from '@/components/admin/adjustment/reverse-dialog'
 import { RequestPaymentDialog } from '@/components/admin/payment/request-payment-dialog'
@@ -67,19 +80,24 @@ function ClientDetailPage() {
     user,
     PERMISSIONS.PAYMENT_REQUESTS_CREATE,
   )
+  const canManageEmployees = hasPermission(user, PERMISSIONS.EMPLOYEES_MANAGE)
 
+  const queryClient = useQueryClient()
   const getClient = useServerFn(getClientFn)
   const listAccounts = useServerFn(listClientAccountsFn)
   const listUsers = useServerFn(listClientUsersFn)
   const getFinancials = useServerFn(clientFinancialsFn)
   const listLedger = useServerFn(listClientLedgerFn)
   const listAdjustments = useServerFn(listAdjustmentsFn)
+  const listEmployees = useServerFn(listClientEmployeesFn)
+  const unassignEmployee = useServerFn(unassignEmployeeFromClientFn)
 
   const [editOpen, setEditOpen] = useState(false)
   const [assignOpen, setAssignOpen] = useState(false)
   const [loginOpen, setLoginOpen] = useState(false)
   const [adjustOpen, setAdjustOpen] = useState(false)
   const [requestPayOpen, setRequestPayOpen] = useState(false)
+  const [assignEmployeeOpen, setAssignEmployeeOpen] = useState(false)
   const [reverseEntry, setReverseEntry] = useState<LedgerEntryWithBalance | null>(
     null,
   )
@@ -99,6 +117,19 @@ function ClientDetailPage() {
   const { data: users } = useQuery({
     queryKey: ['client-users', clientId],
     queryFn: () => listUsers({ data: { client_id: clientId } }),
+  })
+  const { data: employees } = useQuery({
+    queryKey: ['client-employees', clientId],
+    queryFn: () => listEmployees({ data: { client_id: clientId } }),
+  })
+  const unassignMutation = useMutation({
+    mutationFn: (clientEmployeeId: string) =>
+      unassignEmployee({ data: { client_employee_id: clientEmployeeId } }),
+    onSuccess: () => {
+      toast.success('Employee unassigned')
+      void queryClient.invalidateQueries({ queryKey: ['client-employees', clientId] })
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
   })
   const { data: ledger } = useQuery({
     queryKey: ['client-ledger', clientId],
@@ -166,6 +197,9 @@ function ClientDetailPage() {
             Adjustments ({adjustments?.length ?? 0})
           </TabsTrigger>
           <TabsTrigger value="logins">Logins ({users?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="employees">
+            Employees ({employees?.length ?? 0})
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -342,6 +376,72 @@ function ClientDetailPage() {
             </Table>
           </Card>
         </TabsContent>
+
+        <TabsContent value="employees">
+          {canManageEmployees && (
+            <div className="mb-3 flex justify-end">
+              <Button size="sm" onClick={() => setAssignEmployeeOpen(true)}>
+                <Plus className="size-4" />
+                Assign employee
+              </Button>
+            </div>
+          )}
+          <Card className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Assigned</TableHead>
+                  {canManageEmployees && (
+                    <TableHead className="text-right">Actions</TableHead>
+                  )}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(employees?.length ?? 0) === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5}>
+                      <div className="py-8 text-center text-sm text-muted-foreground">
+                        No employees assigned to this client yet.
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+                {employees?.map((ce) => (
+                  <TableRow key={ce.id}>
+                    <TableCell className="font-mono text-xs">
+                      {ce.employee.employee_code}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {ce.employee.name}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={ce.employee.status} />
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {fmtDate(ce.assigned_at)}
+                    </TableCell>
+                    {canManageEmployees && (
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={unassignMutation.isPending}
+                          onClick={() => unassignMutation.mutate(ce.id)}
+                        >
+                          <UserMinus className="size-4" />
+                          Unassign
+                        </Button>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       <ClientFormDialog
@@ -373,6 +473,11 @@ function ClientDetailPage() {
         open={reverseEntry !== null}
         onOpenChange={(o) => !o && setReverseEntry(null)}
         entry={reverseEntry}
+        clientId={clientId}
+      />
+      <AssignEmployeeDialog
+        open={assignEmployeeOpen}
+        onOpenChange={setAssignEmployeeOpen}
         clientId={clientId}
       />
     </div>

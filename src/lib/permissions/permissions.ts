@@ -33,6 +33,9 @@ export const PERMISSIONS = {
   USERS_MANAGE: 'users.manage',
 
   AUDIT_LOGS_VIEW: 'audit_logs.view',
+
+  EMPLOYEES_VIEW: 'employees.view',
+  EMPLOYEES_MANAGE: 'employees.manage',
 } as const
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
@@ -69,4 +72,6 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
   'users.view': 'View users',
   'users.manage': 'Manage users / roles / permissions',
   'audit_logs.view': 'View audit logs',
+  'employees.view': 'View employees',
+  'employees.manage': 'Manage employees',
 }

@@ -24,6 +24,7 @@ import { Route as AdminAdjustmentsIndexRouteImport } from './routes/admin/adjust
 import { Route as AdminAuditIndexRouteImport } from './routes/admin/audit/index'
 import { Route as AdminClientsIndexRouteImport } from './routes/admin/clients/index'
 import { Route as AdminClientsClientIdRouteImport } from './routes/admin/clients/$clientId'
+import { Route as AdminEmployeesIndexRouteImport } from './routes/admin/employees/index'
 import { Route as AdminLedgerIndexRouteImport } from './routes/admin/ledger/index'
 import { Route as AdminLimitRequestsIndexRouteImport } from './routes/admin/limit-requests/index'
 import { Route as AdminLimitRequestsRequestIdRouteImport } from './routes/admin/limit-requests/$requestId'
@@ -42,6 +43,7 @@ import { Route as PortalNotificationsIndexRouteImport } from './routes/portal/no
 import { Route as PortalPaymentRequestsIndexRouteImport } from './routes/portal/payment-requests/index'
 import { Route as PortalProfileIndexRouteImport } from './routes/portal/profile/index'
 import { Route as PortalStatementIndexRouteImport } from './routes/portal/statement/index'
+import { Route as PortalTeamIndexRouteImport } from './routes/portal/team/index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -116,6 +118,11 @@ const AdminClientsIndexRoute = AdminClientsIndexRouteImport.update({
 const AdminClientsClientIdRoute = AdminClientsClientIdRouteImport.update({
   id: '/clients/$clientId',
   path: '/clients/$clientId',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminEmployeesIndexRoute = AdminEmployeesIndexRouteImport.update({
+  id: '/employees/',
+  path: '/employees/',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminLedgerIndexRoute = AdminLedgerIndexRouteImport.update({
@@ -213,6 +220,11 @@ const PortalStatementIndexRoute = PortalStatementIndexRouteImport.update({
   path: '/statement/',
   getParentRoute: () => PortalRouteRoute,
 } as any)
+const PortalTeamIndexRoute = PortalTeamIndexRouteImport.update({
+  id: '/team/',
+  path: '/team/',
+  getParentRoute: () => PortalRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -232,6 +244,7 @@ export interface FileRoutesByFullPath {
   '/admin/adjustments/': typeof AdminAdjustmentsIndexRoute
   '/admin/audit/': typeof AdminAuditIndexRoute
   '/admin/clients/': typeof AdminClientsIndexRoute
+  '/admin/employees/': typeof AdminEmployeesIndexRoute
   '/admin/ledger/': typeof AdminLedgerIndexRoute
   '/admin/limit-requests/': typeof AdminLimitRequestsIndexRoute
   '/admin/payment-requests/': typeof AdminPaymentRequestsIndexRoute
@@ -247,6 +260,7 @@ export interface FileRoutesByFullPath {
   '/portal/payment-requests/': typeof PortalPaymentRequestsIndexRoute
   '/portal/profile/': typeof PortalProfileIndexRoute
   '/portal/statement/': typeof PortalStatementIndexRoute
+  '/portal/team/': typeof PortalTeamIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -264,6 +278,7 @@ export interface FileRoutesByTo {
   '/admin/adjustments': typeof AdminAdjustmentsIndexRoute
   '/admin/audit': typeof AdminAuditIndexRoute
   '/admin/clients': typeof AdminClientsIndexRoute
+  '/admin/employees': typeof AdminEmployeesIndexRoute
   '/admin/ledger': typeof AdminLedgerIndexRoute
   '/admin/limit-requests': typeof AdminLimitRequestsIndexRoute
   '/admin/payment-requests': typeof AdminPaymentRequestsIndexRoute
@@ -279,6 +294,7 @@ export interface FileRoutesByTo {
   '/portal/payment-requests': typeof PortalPaymentRequestsIndexRoute
   '/portal/profile': typeof PortalProfileIndexRoute
   '/portal/statement': typeof PortalStatementIndexRoute
+  '/portal/team': typeof PortalTeamIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -300,6 +316,7 @@ export interface FileRoutesById {
   '/admin/adjustments/': typeof AdminAdjustmentsIndexRoute
   '/admin/audit/': typeof AdminAuditIndexRoute
   '/admin/clients/': typeof AdminClientsIndexRoute
+  '/admin/employees/': typeof AdminEmployeesIndexRoute
   '/admin/ledger/': typeof AdminLedgerIndexRoute
   '/admin/limit-requests/': typeof AdminLimitRequestsIndexRoute
   '/admin/payment-requests/': typeof AdminPaymentRequestsIndexRoute
@@ -315,6 +332,7 @@ export interface FileRoutesById {
   '/portal/payment-requests/': typeof PortalPaymentRequestsIndexRoute
   '/portal/profile/': typeof PortalProfileIndexRoute
   '/portal/statement/': typeof PortalStatementIndexRoute
+  '/portal/team/': typeof PortalTeamIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -336,6 +354,7 @@ export interface FileRouteTypes {
     | '/admin/adjustments/'
     | '/admin/audit/'
     | '/admin/clients/'
+    | '/admin/employees/'
     | '/admin/ledger/'
     | '/admin/limit-requests/'
     | '/admin/payment-requests/'
@@ -351,6 +370,7 @@ export interface FileRouteTypes {
     | '/portal/payment-requests/'
     | '/portal/profile/'
     | '/portal/statement/'
+    | '/portal/team/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -368,6 +388,7 @@ export interface FileRouteTypes {
     | '/admin/adjustments'
     | '/admin/audit'
     | '/admin/clients'
+    | '/admin/employees'
     | '/admin/ledger'
     | '/admin/limit-requests'
     | '/admin/payment-requests'
@@ -383,6 +404,7 @@ export interface FileRouteTypes {
     | '/portal/payment-requests'
     | '/portal/profile'
     | '/portal/statement'
+    | '/portal/team'
   id:
     | '__root__'
     | '/'
@@ -403,6 +425,7 @@ export interface FileRouteTypes {
     | '/admin/adjustments/'
     | '/admin/audit/'
     | '/admin/clients/'
+    | '/admin/employees/'
     | '/admin/ledger/'
     | '/admin/limit-requests/'
     | '/admin/payment-requests/'
@@ -418,6 +441,7 @@ export interface FileRouteTypes {
     | '/portal/payment-requests/'
     | '/portal/profile/'
     | '/portal/statement/'
+    | '/portal/team/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -534,6 +558,13 @@ declare module '@tanstack/react-router' {
       path: '/clients/$clientId'
       fullPath: '/admin/clients/$clientId'
       preLoaderRoute: typeof AdminClientsClientIdRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/employees/': {
+      id: '/admin/employees/'
+      path: '/employees'
+      fullPath: '/admin/employees/'
+      preLoaderRoute: typeof AdminEmployeesIndexRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/ledger/': {
@@ -662,6 +693,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortalStatementIndexRouteImport
       parentRoute: typeof PortalRouteRoute
     }
+    '/portal/team/': {
+      id: '/portal/team/'
+      path: '/team'
+      fullPath: '/portal/team/'
+      preLoaderRoute: typeof PortalTeamIndexRouteImport
+      parentRoute: typeof PortalRouteRoute
+    }
   }
 }
 
@@ -689,6 +727,7 @@ interface AdminRouteRouteChildren {
   AdminAdjustmentsIndexRoute: typeof AdminAdjustmentsIndexRoute
   AdminAuditIndexRoute: typeof AdminAuditIndexRoute
   AdminClientsIndexRoute: typeof AdminClientsIndexRoute
+  AdminEmployeesIndexRoute: typeof AdminEmployeesIndexRoute
   AdminLedgerIndexRoute: typeof AdminLedgerIndexRoute
   AdminLimitRequestsIndexRoute: typeof AdminLimitRequestsIndexRoute
   AdminPaymentRequestsIndexRoute: typeof AdminPaymentRequestsIndexRoute
@@ -709,6 +748,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminAdjustmentsIndexRoute: AdminAdjustmentsIndexRoute,
   AdminAuditIndexRoute: AdminAuditIndexRoute,
   AdminClientsIndexRoute: AdminClientsIndexRoute,
+  AdminEmployeesIndexRoute: AdminEmployeesIndexRoute,
   AdminLedgerIndexRoute: AdminLedgerIndexRoute,
   AdminLimitRequestsIndexRoute: AdminLimitRequestsIndexRoute,
   AdminPaymentRequestsIndexRoute: AdminPaymentRequestsIndexRoute,
@@ -732,6 +772,7 @@ interface PortalRouteRouteChildren {
   PortalPaymentRequestsIndexRoute: typeof PortalPaymentRequestsIndexRoute
   PortalProfileIndexRoute: typeof PortalProfileIndexRoute
   PortalStatementIndexRoute: typeof PortalStatementIndexRoute
+  PortalTeamIndexRoute: typeof PortalTeamIndexRoute
 }
 
 const PortalRouteRouteChildren: PortalRouteRouteChildren = {
@@ -743,6 +784,7 @@ const PortalRouteRouteChildren: PortalRouteRouteChildren = {
   PortalPaymentRequestsIndexRoute: PortalPaymentRequestsIndexRoute,
   PortalProfileIndexRoute: PortalProfileIndexRoute,
   PortalStatementIndexRoute: PortalStatementIndexRoute,
+  PortalTeamIndexRoute: PortalTeamIndexRoute,
 }
 
 const PortalRouteRouteWithChildren = PortalRouteRoute._addFileChildren(

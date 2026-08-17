@@ -269,3 +269,35 @@ export interface Notification {
   created_at: string
 }
 
+// ---------------------------------------------------------------------------
+// Employees — agency staff assigned to service clients (post-Phase-8).
+// Distinct from client_memberships (the client's OWN team, self-managed —
+// see TeamMember types below, no domain type needed there since it's just
+// user_profiles/auth.users, not a new table).
+// ---------------------------------------------------------------------------
+
+export type EmployeeStatus = 'ACTIVE' | 'INACTIVE'
+
+export interface Employee {
+  id: string
+  employee_code: string
+  name: string
+  email: string | null
+  status: EmployeeStatus
+  created_at: string
+  updated_at: string
+}
+
+/** Employee row plus the clients currently assigned to them (reverse lookup
+ * for the "All Employees" view). */
+export interface EmployeeWithClients extends Employee {
+  clients: Array<Pick<Client, 'id' | 'client_code' | 'name'>>
+}
+
+/** A client's assigned-employee row (for the client detail page's tab). */
+export interface ClientEmployeeRow {
+  id: string
+  employee: Pick<Employee, 'id' | 'employee_code' | 'name' | 'status'>
+  assigned_at: string
+}
+

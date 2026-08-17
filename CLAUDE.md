@@ -6,6 +6,17 @@ boundaries. If code conflicts with the spec, the spec wins. Note: the tail of
 the spec copy (after §85) was truncated in transfer — ask the owner for the
 full document if you need the testing/later sections.
 
+## Changelog convention
+
+**`CHANGELOG.md` (repo root) gets a dated entry for every day changes are
+made** — newest day at the top. When you finish a piece of work (or before
+ending a session where you changed something), add or extend today's
+section with a short summary of what changed, grouped by feature/area, not
+a raw file list. This is separate from the `## Status` phase log below:
+Status tracks the big, feature-level "what exists now" narrative; the
+changelog tracks day-by-day "what happened," including hardening passes,
+bug fixes, and anything else that isn't a whole new named feature.
+
 ## Status
 
 - **Phase 0 (architecture verification): done** — conventions below were
@@ -347,19 +358,81 @@ full document if you need the testing/later sections.
     emerald language the admin side already uses for low-balance/high-due
     alerts — previously plain black regardless of urgency, on the one page
     where it's the client's own money at stake.
-  - **Left open, needs an owner decision, not done**: whether any
-    Meta-sourced data (specifically "Remaining" — the client's own spend
-    headroom before Meta pauses their ads) should ever reach the client
-    portal. Every Meta fn today requires `AD_ACCOUNTS_MANAGE`
-    (`requireAdmin`), by design — spec §9 doesn't ask for it, and none of
-    the existing Meta server fns are client-safe (no `requireClientMembership`
-    path, no scoping to "only this client's own account"). If this is ever
-    wanted, it needs new client-scoped fns, not reuse of the admin ones.
   - **Also identified, not yet built**: profile editing is still a hardcoded
     "later phase" stub in `portal/profile/index.tsx` (the one spec §9
     capability with zero implementation), and the client ad-accounts table
     folds spec §67's "Pending Request" column into the action button's
     label instead of a separate column.
+- **"Remaining" surfaced to clients (post-Phase-8 addition): done, pending
+  owner review** — the open decision above got resolved: owner chose to add
+  Meta spend headroom ("Remaining") to `/portal/ad-accounts`, the client's
+  own ad accounts list. New `listMyAccountsMetaRemainingFn`
+  (`meta.fns.ts`, new "Client" section — the file was previously all-admin)
+  is **not** a relaxed version of an admin fn; it's a new function gated by
+  `requireClientMembership()`, not `requireAdmin`. It reuses the same bulk
+  `listMetaBusinessAdAccounts()` call the admin side uses (still 2 Graph API
+  calls total, not one per client) but the full portfolio response never
+  leaves the server — it's filtered down to only the calling client's own
+  actively-assigned `external_account_id`s before being returned. Verified
+  live: correct remaining values for a real client's 6 accounts, **and
+  confirmed zero overlap with another client's account set** (the
+  authorization boundary that matters most here). Wired into
+  `portal/ad-accounts/index.tsx` as a new "Remaining" column, best-effort
+  (`retry: false`, shows `—` per row rather than breaking the page if Meta
+  is unreachable). No currency gate on the displayed value itself
+  (display-only — same reasoning as `formatCurrencyAmount` elsewhere).
+  A follow-up added the same low-balance red `Bell` next to the account
+  name as the admin side (`LOW_BALANCE_THRESHOLD`, shared from
+  `src/lib/meta/thresholds.ts` — same "≤60, open-ended below" semantics,
+  not the closed-band mistake made and fixed earlier), **with the same
+  `currency === 'USD'` gate the admin side needed fixed** — applied
+  correctly from the start here rather than repeating that bug. Verified
+  live: CL-0002's "DF IT - Own" at $19.90 correctly triggers it, the other
+  5 of that client's accounts (all well above $60) correctly don't.
+  "Meta Due" and Meta's own spend_cap were deliberately still left out
+  client-side (see the reasoning
+  above) — only "Remaining" was judged to actually belong to the client.
+- **Employees + Team Members (post-Phase-8 addition): done, pending owner
+  review** — two deliberately separate features that both use the word
+  "employee" colloquially but must never be confused (a naming-collision
+  risk flagged and avoided up front, same discipline as the "Remaining" vs
+  "Current balance" vs "Meta Due" separation above):
+  - **Employees** (agency staff assigned to service clients — admin-only).
+    New tables `employees` + `client_employees` (migration `…0012`,
+    `EMP-000N` codes via the same sequence-default pattern as
+    `CL-000N`/`ADA-000N`; plain many-to-many junction, no assignment
+    history/status — not asked for). New permissions `employees.view` /
+    `employees.manage`, granted to ADMIN by default, not sensitive.
+    `src/server/employees/employee.fns.ts`. UI: `/admin/employees` (the
+    "All Employees" reverse lookup — employee → every client they serve)
+    and a new "Employees" tab on the existing client detail page
+    (assign/unassign) — an *addition* to that page, nothing existing there
+    was touched. RLS is admin-only (`is_admin()`) — the client portal has
+    no visibility into this at all, by design.
+  - **Team Members** (a client's own staff, self-added from the portal,
+    granted real portal login access) — **not a new table.** Reuses
+    `client_memberships`/`user_profiles`/`auth.users`, the exact mechanism
+    the admin's existing "Add login" already writes to. New
+    `src/server/team/team.fns.ts`, guarded by `requireClientMembership()`
+    instead of `requireAdmin()` — the `client_id` is always taken from the
+    caller's own membership, never accepted as input, so a client can only
+    ever add/manage teammates under their own account. UI: `/portal/team`.
+    Any active member of a client can add/deactivate a teammate — no
+    owner/admin tier exists among client users (confirmed with the owner
+    before building rather than inventing one).
+  - **This was a request to restructure the whole app** (a diagram showing
+    `Rush Tracker → Clients → Employees`) that turned out, after
+    clarification, to mean "add two new, mostly-independent features
+    alongside the existing system" — the ad-account/limit/ledger/payment/
+    Meta domain (the app's actual reason to exist) was **never touched**.
+    Seeded 6 placeholder employees (E1–E6, real `EMP-000N` codes) mapped
+    onto the 3 real clients per the owner's diagram (xRush Agency/DF
+    IT/KiKi ← C1/C2/C3); the diagram's C4 has no real-client counterpart,
+    so E6's second assignment was skipped rather than inventing a fake
+    4th client — flagged explicitly, not silently dropped. Verified live
+    against the exact query the "All Employees" page runs: `EMP-0003 "E3"
+    → xRush Agency, DF IT` confirms the many-to-many case (one employee,
+    two clients) round-trips correctly.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT
