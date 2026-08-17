@@ -8,6 +8,10 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-08-17
 
+**Added a "Fetch" button** to the ad account detail page header — refetches
+the account's own data, assignment history, and live Meta data together in
+one click, matching the list page's "Refresh" button.
+
 **Added Delete for employees** (blocks if still assigned to any client,
 same precaution as client deletion) — while verifying it live, ran into a
 confirmed intentional use of the "Clear all data" Danger Zone feature,

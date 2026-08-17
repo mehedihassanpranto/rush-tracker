@@ -105,12 +105,21 @@ function AccountDetailPage() {
   const [metaFetchOpen, setMetaFetchOpen] = useState(false)
   const [spendCapOpen, setSpendCapOpen] = useState(false)
 
-  const { data: account, isLoading } = useQuery({
+  const {
+    data: account,
+    isLoading,
+    refetch: refetchAccount,
+    isFetching: accountFetching,
+  } = useQuery({
     queryKey: ['ad-account', accountId],
     queryFn: () => getAccount({ data: { id: accountId } }),
   })
 
-  const { data: history } = useQuery({
+  const {
+    data: history,
+    refetch: refetchHistory,
+    isFetching: historyFetching,
+  } = useQuery({
     queryKey: ['assignment-history', accountId],
     queryFn: () => listHistory({ data: { ad_account_id: accountId } }),
   })
@@ -120,6 +129,8 @@ function AccountDetailPage() {
     data: metaLive,
     isLoading: metaLoading,
     isError: metaError,
+    refetch: refetchMetaLive,
+    isFetching: metaFetching,
   } = useQuery({
     queryKey: ['meta-live', externalAccountId],
     queryFn: () =>
@@ -127,6 +138,32 @@ function AccountDetailPage() {
     enabled: canManageMeta && Boolean(externalAccountId),
     retry: false,
   })
+
+  const fetchingAll = accountFetching || historyFetching || metaFetching
+
+  // Force-refetches everything shown on this page in one click — our own
+  // stored fields, assignment history, and live Meta data together. Meta
+  // failure (e.g. not configured, or this account has no external id) is
+  // reported separately rather than failing the whole action, same pattern
+  // as the list page's Refresh button.
+  async function handleFetchAll() {
+    const results = await Promise.all([
+      refetchAccount(),
+      refetchHistory(),
+      canManageMeta && externalAccountId
+        ? refetchMetaLive()
+        : Promise.resolve(null),
+    ])
+    const metaResult = results[2]
+    if (metaResult && metaResult.isError) {
+      toast.warning('Fetched, but live Meta data failed to load', {
+        description:
+          metaResult.error instanceof Error ? metaResult.error.message : undefined,
+      })
+    } else {
+      toast.success('Fetched latest data')
+    }
+  }
 
   const statusMutation = useMutation({
     mutationFn: (status: 'ACTIVE' | 'INACTIVE') =>
@@ -157,6 +194,10 @@ function AccountDetailPage() {
       </Link>
 
       <PageHeader title={account.name}>
+        <Button variant="outline" onClick={() => void handleFetchAll()} disabled={fetchingAll}>
+          <RefreshCw className={`size-4 ${fetchingAll ? 'animate-spin' : ''}`} />
+          Fetch
+        </Button>
         {account.status === 'AVAILABLE' && (
           <Button onClick={() => setAssignOpen(true)}>
             <UserPlus className="size-4" />

@@ -480,6 +480,18 @@ bug fixes, and anything else that isn't a whole new named feature.
   leave this as-is for now rather than fix `reset_all_data()` to also
   clear `employees` — noted here so a future session doesn't have to
   rediscover it.
+- **"Fetch" button on the ad account detail page (post-Phase-8 addition):
+  done, pending owner review** — a visible page-header button (matching
+  the list page's "Refresh"), refetches everything shown on the page in
+  one click: the account's own stored fields, assignment history, and
+  (if linked + permitted) live Meta data together via `Promise.all`. A
+  Meta-side failure is reported as a separate warning toast rather than
+  failing the whole action — same graceful-degradation pattern as the list
+  page. Distinct from the existing "Fetch from Meta" dropdown item, which
+  opens `MetaFetchDialog` for a narrower purpose (preview Meta's live
+  spend cap before optionally applying it as `current_limit_usd`) — kept
+  both since they serve different jobs, not true duplicates despite the
+  similar naming.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT
