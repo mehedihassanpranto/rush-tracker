@@ -28,9 +28,12 @@ import { Skeleton } from '@/components/ui/skeleton'
  *
  * Input is an increase amount, not an absolute new cap — same additive
  * model as the rest of the app's limit-request flow (spec §20: new limit =
- * opening balance + approved amount). The absolute new cap is computed here
- * and shown before submit, but that computed value — not the raw
- * increment — is what's actually sent to updateMetaSpendCapFn.
+ * opening balance + approved amount). The preview below is computed here
+ * for display, but only the raw increment is sent to updateMetaSpendCapFn —
+ * the server computes the actual new cap from Meta's live spend_cap at
+ * write time, not from whatever this dialog had cached when it opened (a
+ * stale local computation here couldn't detect a concurrent change made by
+ * another admin in between).
  */
 export function MetaSpendCapDialog({
   open,
@@ -70,7 +73,7 @@ export function MetaSpendCapDialog({
   const mutation = useMutation({
     mutationFn: () =>
       updateSpendCap({
-        data: { id: accountId, spend_cap_usd: Number(newCap!.toFixed(2)) },
+        data: { id: accountId, increase_by_usd: Number(parsedIncrease!.toFixed(2)) },
       }),
     onSuccess: () => {
       toast.success('Spend cap updated on Meta')
@@ -147,9 +150,15 @@ export function MetaSpendCapDialog({
 
             {newCap && (
               <div className="rounded-md border bg-muted/50 p-3 text-sm">
-                <div className="text-muted-foreground">New spend cap</div>
+                <div className="text-muted-foreground">
+                  Estimated new spend cap
+                </div>
                 <div className="text-lg font-medium">
                   {formatCurrencyAmount(newCap.toFixed(2), meta.currency)}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Computed fresh from Meta again on submit — may differ
+                  slightly if the cap changed since this dialog opened.
                 </div>
               </div>
             )}
@@ -158,7 +167,7 @@ export function MetaSpendCapDialog({
               <div className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
                 <TriangleAlert className="mt-0.5 size-4 shrink-0" />
                 <span>
-                  The new spend cap would still be below the $
+                  The estimated new spend cap is below the $
                   {amountSpent?.toFixed(2)} already spent — Meta would pause
                   all delivery on this account immediately. Choose a larger
                   increase.

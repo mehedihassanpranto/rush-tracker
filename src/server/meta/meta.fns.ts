@@ -17,6 +17,35 @@ import {
 } from '@/server/meta/meta.server'
 import type { MetaAdAccountSummary } from '@/server/meta/meta.server'
 import type { AdAccount } from '@/types/domain'
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+/**
+ * Shared precondition for both spend-cap fns below: load the account row,
+ * require it's linked to Meta, and require the live Meta currency is USD
+ * (no FX conversion path here). Kept in one place so a future change to
+ * this financial safety check (e.g. an allow-list of other currencies)
+ * can't be applied to one call site and silently missed on the other.
+ */
+async function loadUsdLinkedAccount(admin: SupabaseClient, id: string) {
+  const { data: before, error: fetchError } = await admin
+    .from('ad_accounts')
+    .select('*')
+    .eq('id', id)
+    .single()
+  if (fetchError) throw new Error(fetchError.message)
+  if (!before.external_account_id) {
+    throw new Error('This account has no linked Meta external ID')
+  }
+
+  const externalAccountId: string = before.external_account_id
+  const meta = await fetchMetaAdAccount(externalAccountId)
+  if (meta.currency !== 'USD') {
+    throw new Error(
+      `Meta reports this account's currency as ${meta.currency ?? 'unknown'}, not USD — this app can't push/apply a limit for a non-USD account`,
+    )
+  }
+  return { before: before as AdAccount, externalAccountId, meta }
+}
 
 export type MetaImportCandidate = MetaAdAccountSummary & {
   already_linked: boolean
@@ -73,17 +102,46 @@ export const listMetaBusinessAdAccountsFn = createServerFn({
  * starts AVAILABLE / unassigned with current_limit_usd 0 — Meta's spend_cap
  * is a different concept from our operational limit baseline (spec §20) and
  * is never auto-mapped onto it; admins set the real baseline via the normal
- * limit-request flow after import. */
+ * limit-request flow after import.
+ *
+ * Re-checks for already-linked external_account_ids immediately before
+ * inserting (the import dialog's candidate list can be stale by the time an
+ * admin submits — another admin, or a double-submit, may have imported one
+ * of the same accounts in between). This narrows but doesn't eliminate the
+ * race window; the unique partial index on external_account_id (migration
+ * …0011) is the hard backstop — if the tiny remaining window is ever hit,
+ * the insert fails with a clear constraint error instead of silently
+ * creating a duplicate row for the same Meta account. */
 export const importMetaAdAccountsFn = createServerFn({ method: 'POST' })
   .validator(importMetaAdAccountsSchema)
   .handler(async ({ data }): Promise<Array<AdAccount>> => {
     const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
     const admin = getSupabaseAdminClient()
 
+    const { data: existing, error: existingError } = await admin
+      .from('ad_accounts')
+      .select('external_account_id')
+      .in(
+        'external_account_id',
+        data.accounts.map((a) => a.external_account_id),
+      )
+    if (existingError) throw new Error(existingError.message)
+    const alreadyLinked = new Set(
+      (existing ?? []).map((r) => r.external_account_id as string),
+    )
+    const toInsert = data.accounts.filter(
+      (a) => !alreadyLinked.has(a.external_account_id),
+    )
+    if (toInsert.length === 0) {
+      throw new Error(
+        'All selected accounts were already imported (likely by another admin just now) — nothing new to add.',
+      )
+    }
+
     const { data: accounts, error } = await admin
       .from('ad_accounts')
       .insert(
-        data.accounts.map((a) => ({
+        toInsert.map((a) => ({
           name: a.name,
           external_account_id: a.external_account_id,
           platform: 'META',
@@ -127,22 +185,7 @@ export const applyMetaSpendCapFn = createServerFn({ method: 'POST' })
     const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
     const admin = getSupabaseAdminClient()
 
-    const { data: before, error: fetchError } = await admin
-      .from('ad_accounts')
-      .select('*')
-      .eq('id', data.id)
-      .single()
-    if (fetchError) throw new Error(fetchError.message)
-    if (!before.external_account_id) {
-      throw new Error('This account has no linked Meta external ID')
-    }
-
-    const meta = await fetchMetaAdAccount(before.external_account_id)
-    if (meta.currency !== 'USD') {
-      throw new Error(
-        `Meta reports this account's currency as ${meta.currency ?? 'unknown'}, not USD — apply the limit manually`,
-      )
-    }
+    const { before, meta } = await loadUsdLinkedAccount(admin, data.id)
     if (meta.spend_cap == null) {
       throw new Error('Meta reports no spend cap for this account')
     }
@@ -171,13 +214,23 @@ export const applyMetaSpendCapFn = createServerFn({ method: 'POST' })
  * Push a new spend_cap to Meta AND update our own current_limit_usd to
  * match (owner-directed: keep both sides in sync rather than letting them
  * silently disagree). The only WRITE this integration makes to Meta —
- * everything else here is read-only. Re-fetches live Meta data server-side
- * first (never trusts a client-supplied amount_spent) to enforce two
- * guards before writing anything:
- *   - USD only (no FX conversion path here, same gate as applyMetaSpendCapFn)
- *   - new cap must be >= current amount_spent, or Meta would immediately
- *     pause all delivery on the account — blocked here rather than letting
- *     an admin accidentally do that from a confirm dialog.
+ * everything else here is read-only.
+ *
+ * Takes an INCREASE, not an absolute cap, and computes the new absolute
+ * cap here from Meta's live spend_cap fetched in this same call — never
+ * from a client-supplied absolute number. This closes two problems a
+ * client-computed absolute value would have: (1) the money rule ("never
+ * trust frontend-computed amounts") — a submitted absolute figure can't be
+ * verified against anything; (2) a stale-baseline race — if the dialog was
+ * opened a while ago, or another admin changed the cap in between, an
+ * absolute value computed from what the dialog showed at open time would
+ * silently overwrite that concurrent change. Building the new cap from the
+ * fetch made *in this request* means it always adds on top of whatever the
+ * live cap actually is at write time, same spirit as the limit-request
+ * flow's stale-baseline detection (spec §30).
+ *
+ * Also blocks (before writing anything) if the computed new cap would fall
+ * below current amount_spent — Meta would pause all delivery immediately.
  */
 export const updateMetaSpendCapFn = createServerFn({ method: 'POST' })
   .validator(updateMetaSpendCapSchema)
@@ -185,33 +238,22 @@ export const updateMetaSpendCapFn = createServerFn({ method: 'POST' })
     const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
     const admin = getSupabaseAdminClient()
 
-    const { data: before, error: fetchError } = await admin
-      .from('ad_accounts')
-      .select('*')
-      .eq('id', data.id)
-      .single()
-    if (fetchError) throw new Error(fetchError.message)
-    if (!before.external_account_id) {
-      throw new Error('This account has no linked Meta external ID')
-    }
-
-    const meta = await fetchMetaAdAccount(before.external_account_id)
-    if (meta.currency !== 'USD') {
-      throw new Error(
-        `Meta reports this account's currency as ${meta.currency ?? 'unknown'}, not USD — this app can't push a limit to a non-USD account`,
-      )
-    }
+    const { before, externalAccountId, meta } = await loadUsdLinkedAccount(
+      admin,
+      data.id,
+    )
     const amountSpent = dec(meta.amount_spent ?? 0)
-    const newCap = dec(data.spend_cap_usd)
+    const liveCap = meta.spend_cap != null ? dec(meta.spend_cap) : dec(0)
+    const newCap = liveCap.plus(dec(data.increase_by_usd))
     if (newCap.lt(amountSpent)) {
       throw new Error(
-        `New spend cap ($${newCap.toFixed(2)}) is below the $${amountSpent.toFixed(2)} already spent on this account — Meta would pause all delivery immediately. Choose a higher amount.`,
+        `New spend cap ($${newCap.toFixed(2)}) is below the $${amountSpent.toFixed(2)} already spent on this account — Meta would pause all delivery immediately. Choose a larger increase.`,
       )
     }
 
     // Write direction is asymmetric from read (see updateMetaAdAccountSpendCap
     // for the unit trap) — pass the major-unit dollar value straight through.
-    await updateMetaAdAccountSpendCap(before.external_account_id, newCap.toFixed(2))
+    await updateMetaAdAccountSpendCap(externalAccountId, newCap.toFixed(2))
 
     const { data: account, error } = await admin
       .from('ad_accounts')

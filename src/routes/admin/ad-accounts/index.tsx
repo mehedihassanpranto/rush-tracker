@@ -9,6 +9,8 @@ import { listAdAccountsFn } from '@/server/ad-accounts/ad-account.fns'
 import { listMetaBusinessAdAccountsFn } from '@/server/meta/meta.fns'
 import { dec, formatBdt, formatCurrencyAmount, formatUsd } from '@/lib/money/money'
 import { LOW_BALANCE_THRESHOLD, META_DUE_THRESHOLD } from '@/lib/meta/thresholds'
+import { hasPermission } from '@/lib/auth/types'
+import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { AccountCreateDialog } from '@/components/admin/ad-account/account-dialogs'
@@ -30,6 +32,8 @@ export const Route = createFileRoute('/admin/ad-accounts/')({
 })
 
 function AdAccountsPage() {
+  const { user } = Route.useRouteContext()
+  const canManageMeta = hasPermission(user, PERMISSIONS.AD_ACCOUNTS_MANAGE)
   const listAccounts = useServerFn(listAdAccountsFn)
   const listMetaAccounts = useServerFn(listMetaBusinessAdAccountsFn)
   const [createOpen, setCreateOpen] = useState(false)
@@ -47,7 +51,10 @@ function AdAccountsPage() {
 
   // Reuses the same bulk Meta fetch that powers "Import from Meta" (two
   // Graph API calls total, not one per row) — errors (e.g. Meta not
-  // configured) just mean no bells show, never break the list.
+  // configured) just mean no bells show, never break the list. Gated on
+  // ad_accounts.manage client-side too, matching the server guard — a
+  // view-only admin would otherwise get a silent FORBIDDEN that looks like
+  // a Meta outage instead of just not seeing Meta-only data.
   const {
     data: metaAccounts,
     refetch: refetchMeta,
@@ -55,6 +62,7 @@ function AdAccountsPage() {
   } = useQuery({
     queryKey: ['meta-business-ad-accounts'],
     queryFn: () => listMetaAccounts(),
+    enabled: canManageMeta,
     staleTime: 2 * 60 * 1000,
     retry: false,
     throwOnError: false,
@@ -86,13 +94,19 @@ function AdAccountsPage() {
   >()
   for (const m of metaAccounts ?? []) {
     if (!m.linked_account_id) continue
+    // Alert thresholds are flat USD-scale numbers (60, 100) with no FX
+    // conversion — same gate as every other Meta-money code path in this
+    // integration. Non-USD accounts still show their real figures, they
+    // just never trip an alert that would be meaningless at their scale.
+    const isUsd = m.currency === 'USD'
     const remaining =
       m.spend_cap != null ? dec(m.spend_cap).minus(dec(m.amount_spent ?? 0)) : null
     balanceByAccountId.set(m.linked_account_id, {
       remaining: remaining ? remaining.toFixed(2) : null,
-      low: remaining ? remaining.lte(LOW_BALANCE_THRESHOLD) : false,
+      low: isUsd && remaining ? remaining.lte(LOW_BALANCE_THRESHOLD) : false,
       metaDue: m.meta_balance,
-      metaDueHigh: m.meta_balance != null && dec(m.meta_balance).gte(META_DUE_THRESHOLD),
+      metaDueHigh:
+        isUsd && m.meta_balance != null && dec(m.meta_balance).gte(META_DUE_THRESHOLD),
       currency: m.currency ?? '',
     })
   }
@@ -103,14 +117,18 @@ function AdAccountsPage() {
         title="Ad Accounts"
         description="Advertising accounts and their current spending limits."
       >
-        <Button variant="outline" onClick={handleRefresh} disabled={refreshing}>
-          <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
-        <Button variant="outline" onClick={() => setImportOpen(true)}>
-          <Download className="size-4" />
-          Import from Meta
-        </Button>
+        {canManageMeta && (
+          <>
+            <Button variant="outline" onClick={handleRefresh} disabled={refreshing}>
+              <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <Download className="size-4" />
+              Import from Meta
+            </Button>
+          </>
+        )}
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="size-4" />
           New account

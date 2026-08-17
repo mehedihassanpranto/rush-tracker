@@ -24,6 +24,8 @@ import {
 import { fetchMetaAdAccountFn } from '@/server/meta/meta.fns'
 import { dec, formatBdt, formatCurrencyAmount, formatUsd } from '@/lib/money/money'
 import { LOW_BALANCE_THRESHOLD } from '@/lib/meta/thresholds'
+import { hasPermission } from '@/lib/auth/types'
+import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import {
@@ -87,6 +89,8 @@ function fmtDate(value: string | null): string {
 
 function AccountDetailPage() {
   const { accountId } = Route.useParams()
+  const { user } = Route.useRouteContext()
+  const canManageMeta = hasPermission(user, PERMISSIONS.AD_ACCOUNTS_MANAGE)
   const queryClient = useQueryClient()
   const getAccount = useServerFn(getAdAccountFn)
   const listHistory = useServerFn(listAssignmentHistoryFn)
@@ -120,7 +124,7 @@ function AccountDetailPage() {
     queryKey: ['meta-live', externalAccountId],
     queryFn: () =>
       fetchMetaAccount({ data: { external_account_id: externalAccountId! } }),
-    enabled: Boolean(externalAccountId),
+    enabled: canManageMeta && Boolean(externalAccountId),
     retry: false,
   })
 
@@ -180,7 +184,7 @@ function AccountDetailPage() {
               <Pencil className="size-4" />
               Edit details
             </DropdownMenuItem>
-            {account.external_account_id && (
+            {canManageMeta && account.external_account_id && (
               <DropdownMenuItem onSelect={() => setMetaFetchOpen(true)}>
                 <RefreshCw className="size-4" />
                 Fetch from Meta
@@ -292,7 +296,7 @@ function AccountDetailPage() {
             </CardContent>
           </Card>
 
-          {externalAccountId && (
+          {canManageMeta && externalAccountId && (
             <Card className="mt-4">
               <CardHeader>
                 <CardTitle className="text-base">Meta live data</CardTitle>
@@ -334,7 +338,11 @@ function AccountDetailPage() {
                             const remaining = dec(metaLive.spend_cap).minus(
                               dec(metaLive.amount_spent ?? 0),
                             )
-                            const low = remaining.lte(LOW_BALANCE_THRESHOLD)
+                            // Flat USD-scale threshold, no FX conversion —
+                            // same gate as the list page's bell/Meta Due.
+                            const low =
+                              metaLive.currency === 'USD' &&
+                              remaining.lte(LOW_BALANCE_THRESHOLD)
                             return (
                               <span
                                 className={

@@ -31,7 +31,11 @@ export const applyMetaSpendCapSchema = z.object({
 
 export const updateMetaSpendCapSchema = z.object({
   id: z.uuid(),
-  spend_cap_usd: z.coerce
+  // The increase itself, not the resulting absolute cap — the server
+  // computes the new cap from Meta's live spend_cap at write time (never
+  // trusts a client-computed absolute number, and can't be raced by a
+  // stale dialog baseline; see updateMetaSpendCapFn).
+  increase_by_usd: z.coerce
     .number({ message: 'Enter a valid amount' })
     .gt(0, 'Must be greater than zero')
     .max(1_000_000_000, 'Amount is too large'),

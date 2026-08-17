@@ -34,20 +34,37 @@ async function currentClientMap(
     .eq('status', 'ACTIVE')
     .in('ad_account_id', accountIds)
 
-  // current_due is ledger-derived (spec §35), never a stored column — merged
-  // in from all_client_dues() the same way listClientsFn does it, so an ad
-  // account's "current balance" is the assigned client's actual due, not
-  // anything Meta-side.
+  const rows = (data ?? []) as unknown as Array<ActiveAssignmentRow>
+  const distinctClientIds = [
+    ...new Set(rows.flatMap((r) => (r.client ? [r.client.id] : []))),
+  ]
+
+  // current_due is ledger-derived (spec §35), never a stored column. A
+  // single client (the account detail page's [data.id] call) uses the
+  // cheap single-client client_financials() RPC instead of paying for the
+  // bulk all_client_dues() aggregate just to resolve one row; the list
+  // page's many-clients call still uses the bulk RPC (one round trip either
+  // way, never O(accounts) due lookups).
   const dueByClient = new Map<string, string>()
-  const { data: dueRows } = await admin.rpc('all_client_dues')
-  for (const r of (dueRows ?? []) as Array<{
-    client_id: string
-    current_due: string | number
-  }>) {
-    dueByClient.set(r.client_id, String(r.current_due))
+  if (distinctClientIds.length === 1) {
+    const { data: financials } = await admin.rpc('client_financials', {
+      p_client_id: distinctClientIds[0],
+    })
+    const due = (
+      financials as Array<{ current_due: string | number }> | null
+    )?.[0]?.current_due
+    dueByClient.set(distinctClientIds[0], String(due ?? '0'))
+  } else if (distinctClientIds.length > 1) {
+    const { data: dueRows } = await admin.rpc('all_client_dues')
+    for (const r of (dueRows ?? []) as Array<{
+      client_id: string
+      current_due: string | number
+    }>) {
+      dueByClient.set(r.client_id, String(r.current_due))
+    }
   }
 
-  for (const row of (data ?? []) as unknown as Array<ActiveAssignmentRow>) {
+  for (const row of rows) {
     if (row.client) {
       map.set(row.ad_account_id, {
         ...row.client,

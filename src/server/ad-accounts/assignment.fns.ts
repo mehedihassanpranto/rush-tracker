@@ -56,12 +56,32 @@ export const listClientAccountsFn = createServerFn({ method: 'GET' })
       .eq('status', 'ACTIVE')
     if (error) throw new Error(error.message)
 
+    // current_due is ledger-derived (spec §35), never a stored column — one
+    // client_financials() call since every row here shares the same
+    // client_id (single-client RPC, not the bulk all_client_dues()).
+    const { data: financials } = await admin.rpc('client_financials', {
+      p_client_id: data.client_id,
+    })
+    const currentDue = String(
+      (financials as Array<{ current_due: string | number }> | null)?.[0]
+        ?.current_due ?? '0',
+    )
+
     const parsed = (rows ?? []) as unknown as Array<{
       account: AdAccount | null
-      client: AdAccountClient | null
+      client: Pick<AdAccountClient, 'id' | 'client_code' | 'name'> | null
     }>
     return parsed.flatMap((r) =>
-      r.account ? [{ ...r.account, current_client: r.client }] : [],
+      r.account
+        ? [
+            {
+              ...r.account,
+              current_client: r.client
+                ? { ...r.client, current_due: currentDue }
+                : null,
+            },
+          ]
+        : [],
     )
   })
 
