@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
-import { requireAdmin } from '@/server/auth/guards.server'
+import { requireAdmin, requireClientMembership } from '@/server/auth/guards.server'
 import { writeAudit } from '@/server/audit/audit.service'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { dec } from '@/lib/money/money'
@@ -52,6 +52,10 @@ export type MetaImportCandidate = MetaAdAccountSummary & {
   linked_account_id: string | null
   linked_account_code: string | null
 }
+
+// ===========================================================================
+// Admin
+// ===========================================================================
 
 /** Fetch one Meta ad account's live details by account id — verify/prefill
  * use on the create form and the account detail page. Read-only. */
@@ -280,3 +284,77 @@ export const updateMetaSpendCapFn = createServerFn({ method: 'POST' })
     })
     return account as AdAccount
   })
+
+// ===========================================================================
+// Client
+// ===========================================================================
+
+export interface MyAccountRemaining {
+  ad_account_id: string
+  remaining: string | null
+  currency: string | null
+}
+
+/**
+ * Remaining Meta spend headroom (spend_cap − amount_spent) for the signed-in
+ * client's own actively-assigned accounts — never anything beyond them. All
+ * other Meta fns in this file are requireAdmin-gated and would leak the
+ * whole Business Portfolio if reused directly; this reuses the same
+ * underlying bulk Graph API fetch (still 2 calls total, not one per
+ * account) but the response never leaves the server until it's been
+ * filtered down to only this client's own external_account_ids.
+ *
+ * Display-only — no currency gate on the value itself (that's only needed
+ * for the admin side's alert thresholds, which don't exist here);
+ * formatCurrencyAmount renders any currency correctly client-side.
+ */
+export const listMyAccountsMetaRemainingFn = createServerFn({
+  method: 'GET',
+}).handler(async (): Promise<Array<MyAccountRemaining>> => {
+  const { membership } = await requireClientMembership()
+  const admin = getSupabaseAdminClient()
+
+  const { data: assignments, error } = await admin
+    .from('ad_account_assignments')
+    .select('ad_account_id, account:ad_accounts(external_account_id)')
+    .eq('client_id', membership.clientId)
+    .eq('status', 'ACTIVE')
+  if (error) throw new Error(error.message)
+
+  const rows = (assignments ?? []) as unknown as Array<{
+    ad_account_id: string
+    account: { external_account_id: string | null } | null
+  }>
+  const linkedRows = rows.filter((r) => r.account?.external_account_id)
+  if (linkedRows.length === 0) return []
+
+  let metaAccounts: Array<MetaAdAccountSummary>
+  try {
+    metaAccounts = await listMetaBusinessAdAccounts()
+  } catch {
+    // Meta not configured / unreachable — the portal just shows no data,
+    // same graceful degradation as the admin side.
+    return []
+  }
+  const byExternalId = new Map(
+    metaAccounts.map((m) => [m.external_account_id, m]),
+  )
+
+  return linkedRows.map((r) => {
+    const externalId = r.account!.external_account_id!
+    const m = byExternalId.get(externalId)
+    if (!m || m.spend_cap == null) {
+      return {
+        ad_account_id: r.ad_account_id,
+        remaining: null,
+        currency: m?.currency ?? null,
+      }
+    }
+    const remaining = dec(m.spend_cap).minus(dec(m.amount_spent ?? 0))
+    return {
+      ad_account_id: r.ad_account_id,
+      remaining: remaining.toFixed(2),
+      currency: m.currency,
+    }
+  })
+})
