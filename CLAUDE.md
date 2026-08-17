@@ -265,6 +265,101 @@ full document if you need the testing/later sections.
   column. Verified live: `ADA-0012 "DF IT - Random 4"` at $112.11 correctly
   triggers it; every other linked account (all under $100) correctly
   doesn't.
+- **Meta integration hardening pass (post-Phase-8 addition): done, pending
+  owner review** — a `/code-review --level max` audit of the whole Meta
+  integration (4 parallel review angles) surfaced 8 findings; 7 fixed here,
+  1 explicitly left open pending live verification:
+  - **`updateMetaSpendCapFn` no longer trusts a client-computed absolute
+    spend_cap.** Schema changed `spend_cap_usd` → `increase_by_usd`; the
+    server now computes `newCap = live meta.spend_cap (fetched in this same
+    call) + increase_by_usd`, never from whatever the dialog had cached
+    when it opened. Fixes both the "never trust frontend-computed amounts"
+    violation and a stale-baseline race (two admins editing concurrently
+    could silently overwrite each other). `MetaSpendCapDialog` now sends
+    the raw increment; its "New spend cap" preview is relabeled "Estimated"
+    since the server recomputes from fresh data at submit time.
+  - **Real crash bug fixed**: `listClientAccountsFn` (`assignment.fns.ts`,
+    powers the client detail page's Ad Accounts tab) cast a client row to
+    `AdAccountClient` via `as unknown as` without supplying the (session-
+    added) required `current_due` field — `formatBdt(undefined)` would have
+    thrown the moment anything read it. Now resolves the client's due via
+    `client_financials(client_id)`.
+  - **`getAdAccountFn`/`listClientAccountsFn` efficiency**: both were
+    (transitively) paying for the bulk `all_client_dues()` cross-client
+    aggregate to resolve a single client's due. `currentClientMap()` now
+    branches: one distinct client → `client_financials(client_id)` (cheap,
+    single-row); multiple distinct clients (the list page) → still the bulk
+    RPC. Verified the single-client RPC returns byte-identical values to
+    the bulk one for 3 real clients before relying on it.
+  - **Permission-gating inconsistency fixed**: `fetchMetaAdAccountFn` /
+    `listMetaBusinessAdAccountsFn` require `ad_accounts.manage`, but the
+    list/detail pages only required `ad_accounts.view` and rendered the
+    Meta buttons/queries unconditionally — a view-only admin got a
+    FORBIDDEN that looked like a Meta outage. Both pages now compute
+    `canManageMeta = hasPermission(user, PERMISSIONS.AD_ACCOUNTS_MANAGE)`
+    (same pattern as `clients/index.tsx`'s `canManage`) and gate the Meta
+    queries' `enabled` plus the Import/Refresh/Fetch/Edit-spend-cap
+    buttons and the whole "Meta live data" card on it.
+  - **Currency-blind thresholds fixed**: `LOW_BALANCE_THRESHOLD` /
+    `META_DUE_THRESHOLD` were compared against `remaining`/`meta_balance`
+    regardless of currency, unlike every other Meta-money code path in this
+    integration (deliberately USD-gated, no FX conversion). The bell/Meta
+    Due alert flags (not the raw displayed values, which still show
+    correctly for any currency) now only evaluate when `currency === 'USD'`.
+  - **Duplicate-import race narrowed + backstopped**: `importMetaAdAccountsFn`
+    now re-checks for already-linked `external_account_id`s immediately
+    before inserting (the import dialog's candidate list can be stale by
+    submit time). Migration `20260723000011_ad_accounts_external_id_unique.sql`
+    adds a **unique partial index** (`where external_account_id is not
+    null`) as the hard backstop — confirmed zero existing duplicates in
+    live data before adding it, so it applies cleanly. **This migration is
+    not yet applied to the live project — apply via `supabase db push` or
+    the SQL editor before the fix takes effect at the DB level.**
+  - Duplicated USD/linked-account guard logic between `applyMetaSpendCapFn`
+    and `updateMetaSpendCapFn` extracted into a shared `loadUsdLinkedAccount()`.
+  - **Left open, not fixed**: whether `spend_cap` writes are really in
+    dollars (as documented/implemented) or cents (as one review pass
+    suspected) was never empirically confirmed — a live test write was
+    blocked by Claude Code's safety classifier. Research (Meta's official
+    docs page + a corroborating web search + the official Python SDK typing
+    `spend_cap` as `float` in write params) favors "dollars" 3-to-1, but
+    this has NOT been proven by an actual write-and-read-back. **Do not
+    rely on `updateMetaSpendCapFn` for a real financial decision until
+    someone runs that test** (see the conversation this session for the
+    exact curl command against a safe $0-spend test account).
+- **Client portal quick fixes (post-Phase-8 addition): done, pending owner
+  review** — a portal-side survey (comparing `/portal` against spec §9/§66-68
+  and the admin side's Meta hardening) turned up two safe fixes, applied:
+  - **Data over-exposure fixed**: `clientDashboardSectionsFn`
+    (`dashboard.fns.ts`) was selecting the full `ad_accounts` row
+    (`account:ad_accounts(*)`) for the dashboard's "My Ad Accounts" section,
+    shipping `usd_rate` (internal per-account billing rate) and
+    `external_account_id` (raw Meta id) to the client bundle even though
+    neither was rendered. Narrowed to `id, name, current_limit_usd, status`
+    — new `ClientDashboardAccount = Pick<AdAccount, ...>` type, matching the
+    already-correct pattern in `listMyRequestableAccountsFn`
+    (`limit-request.fns.ts`). Verified live: query still returns correct
+    shape for a real client (CL-0002, 6 accounts).
+  - **Due-amount urgency styling added**: both places "Current Due" appears
+    client-side (`portal/index.tsx`'s dashboard stat card,
+    `portal/due/index.tsx`'s Due page card) now color it red/bold when > 0
+    and emerald when 0 ("You're all settled up"), reusing the same red/
+    emerald language the admin side already uses for low-balance/high-due
+    alerts — previously plain black regardless of urgency, on the one page
+    where it's the client's own money at stake.
+  - **Left open, needs an owner decision, not done**: whether any
+    Meta-sourced data (specifically "Remaining" — the client's own spend
+    headroom before Meta pauses their ads) should ever reach the client
+    portal. Every Meta fn today requires `AD_ACCOUNTS_MANAGE`
+    (`requireAdmin`), by design — spec §9 doesn't ask for it, and none of
+    the existing Meta server fns are client-safe (no `requireClientMembership`
+    path, no scoping to "only this client's own account"). If this is ever
+    wanted, it needs new client-scoped fns, not reuse of the admin ones.
+  - **Also identified, not yet built**: profile editing is still a hardcoded
+    "later phase" stub in `portal/profile/index.tsx` (the one spec §9
+    capability with zero implementation), and the client ad-accounts table
+    folds spec §67's "Pending Request" column into the action button's
+    label instead of a separate column.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

@@ -28,14 +28,24 @@ export const Route = createFileRoute('/portal/')({
 type StatKey = keyof ClientDashboardStats
 type Money = 'bdt' | 'usd'
 
-const SUMMARY_CARDS: Array<{ label: string; stat: StatKey; money?: Money }> = [
+const SUMMARY_CARDS: Array<{
+  label: string
+  stat: StatKey
+  money?: Money
+  dueStyle?: boolean
+}> = [
   { label: 'Active Ad Accounts', stat: 'activeAccounts' },
   { label: 'Pending Limit Requests', stat: 'pendingLimitRequests' },
   { label: 'Total Approved Limit (USD)', stat: 'totalApprovedUsd', money: 'usd' },
   { label: 'Total Billed (BDT)', stat: 'totalBilledBdt', money: 'bdt' },
   { label: 'Total Paid (BDT)', stat: 'totalPaidBdt', money: 'bdt' },
-  { label: 'Current Due (BDT)', stat: 'currentDueBdt', money: 'bdt' },
-  { label: 'Current Due (USD, approx.)', stat: 'currentDueUsd', money: 'usd' },
+  { label: 'Current Due (BDT)', stat: 'currentDueBdt', money: 'bdt', dueStyle: true },
+  {
+    label: 'Current Due (USD, approx.)',
+    stat: 'currentDueUsd',
+    money: 'usd',
+    dueStyle: true,
+  },
 ]
 
 function ClientDashboard() {
@@ -78,11 +88,17 @@ function ClientDashboard() {
                 : card.money === 'usd'
                   ? formatUsd(raw)
                   : Number(raw).toLocaleString()
+          const dueColor =
+            card.dueStyle && raw !== undefined
+              ? Number(raw) > 0
+                ? 'text-red-600 dark:text-red-400'
+                : 'text-emerald-600 dark:text-emerald-400'
+              : ''
           return (
             <Card key={card.label}>
               <CardHeader className="pb-2">
                 <CardDescription>{card.label}</CardDescription>
-                <CardTitle className="text-2xl">
+                <CardTitle className={`text-2xl ${dueColor}`}>
                   {isLoading ? <Skeleton className="h-8 w-20" /> : display}
                 </CardTitle>
               </CardHeader>

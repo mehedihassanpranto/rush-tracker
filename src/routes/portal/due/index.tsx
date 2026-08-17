@@ -97,9 +97,20 @@ function DuePage() {
           <Card>
             <CardContent className="py-4">
               <CardDescription>Current Due</CardDescription>
-              <div className="mt-1 text-2xl font-semibold">
+              <div
+                className={`mt-1 text-2xl font-semibold ${
+                  Number(due.current_due) > 0
+                    ? 'text-red-600 dark:text-red-400'
+                    : 'text-emerald-600 dark:text-emerald-400'
+                }`}
+              >
                 {formatBdt(due.current_due)}
               </div>
+              {Number(due.current_due) === 0 && (
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  You're all settled up
+                </p>
+              )}
             </CardContent>
           </Card>
           <Card>

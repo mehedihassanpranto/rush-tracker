@@ -290,8 +290,17 @@ export const adminDashboardSectionsFn = createServerFn({ method: 'GET' }).handle
   },
 )
 
+/** Only what the dashboard's "My Ad Accounts" section renders — never the
+ * full row. In particular usd_rate (internal per-account billing rate) and
+ * external_account_id (raw Meta id) have no business reaching the client
+ * bundle, rendered or not. */
+export type ClientDashboardAccount = Pick<
+  AdAccount,
+  'id' | 'name' | 'current_limit_usd' | 'status'
+>
+
 export interface ClientDashboardSections {
-  accounts: Array<AdAccount>
+  accounts: Array<ClientDashboardAccount>
   pendingLimitRequests: Array<LimitRequestWithRefs>
   paymentRequests: Array<PaymentRequest>
   recentPayments: Array<Payment>
@@ -311,7 +320,7 @@ export const clientDashboardSectionsFn = createServerFn({
     await Promise.all([
       admin
         .from('ad_account_assignments')
-        .select('account:ad_accounts(*)')
+        .select('account:ad_accounts(id, name, current_limit_usd, status)')
         .eq('client_id', cid)
         .eq('status', 'ACTIVE')
         .limit(6),
@@ -350,10 +359,10 @@ export const clientDashboardSectionsFn = createServerFn({
     ])
 
   const accounts = ((assignments.data ?? []) as unknown as Array<{
-    account: AdAccount | null
+    account: ClientDashboardAccount | null
   }>)
     .map((r) => r.account)
-    .filter((a): a is AdAccount => a !== null)
+    .filter((a): a is ClientDashboardAccount => a !== null)
 
   return {
     accounts,
