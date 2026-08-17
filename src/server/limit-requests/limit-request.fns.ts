@@ -1,4 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
+import { z } from 'zod'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import {
   requireAdmin,
@@ -259,6 +260,30 @@ export const listLimitRequestsFn = createServerFn({ method: 'GET' })
     if (data.status !== 'ALL') query = query.eq('status', data.status)
 
     const { data: rows, error } = await query
+    if (error) throw new Error(error.message)
+    return rows as unknown as Array<LimitRequestWithRefs>
+  })
+
+/**
+ * Usage history for one ad account (spec §28's additive model, surfaced as
+ * a running trail): every APPROVED limit request against this account,
+ * chronological, across every client that has ever held it — each row is
+ * already a complete opening-balance -> +approved -> new-limit record, so
+ * no separate tracking table is needed.
+ */
+export const listAdAccountUsageFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ ad_account_id: z.uuid() }))
+  .handler(async ({ data }): Promise<Array<LimitRequestWithRefs>> => {
+    await requireAdmin(PERMISSIONS.LIMIT_REQUESTS_VIEW)
+    const admin = getSupabaseAdminClient()
+    const { data: rows, error } = await admin
+      .from('limit_requests')
+      .select(
+        '*, client:clients(id, client_code, name), ad_account:ad_accounts(id, account_code, name)',
+      )
+      .eq('ad_account_id', data.ad_account_id)
+      .eq('status', 'APPROVED')
+      .order('approved_at', { ascending: true })
     if (error) throw new Error(error.message)
     return rows as unknown as Array<LimitRequestWithRefs>
   })

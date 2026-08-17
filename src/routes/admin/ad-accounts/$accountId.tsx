@@ -21,6 +21,7 @@ import {
   listAssignmentHistoryFn,
   setAdAccountStatusFn,
 } from '@/server/ad-accounts/ad-account.fns'
+import { listAdAccountUsageFn } from '@/server/limit-requests/limit-request.fns'
 import { fetchMetaAdAccountFn } from '@/server/meta/meta.fns'
 import { dec, formatBdt, formatCurrencyAmount, formatUsd } from '@/lib/money/money'
 import { LOW_BALANCE_THRESHOLD } from '@/lib/meta/thresholds'
@@ -94,6 +95,7 @@ function AccountDetailPage() {
   const queryClient = useQueryClient()
   const getAccount = useServerFn(getAdAccountFn)
   const listHistory = useServerFn(listAssignmentHistoryFn)
+  const listUsage = useServerFn(listAdAccountUsageFn)
   const setStatus = useServerFn(setAdAccountStatusFn)
   const fetchMetaAccount = useServerFn(fetchMetaAdAccountFn)
 
@@ -124,6 +126,19 @@ function AccountDetailPage() {
     queryFn: () => listHistory({ data: { ad_account_id: accountId } }),
   })
 
+  const {
+    data: usage,
+    refetch: refetchUsage,
+    isFetching: usageFetching,
+  } = useQuery({
+    queryKey: ['ad-account-usage', accountId],
+    queryFn: () => listUsage({ data: { ad_account_id: accountId } }),
+  })
+  const totalUsage = (usage ?? []).reduce(
+    (sum, r) => sum.plus(dec(r.approved_amount_usd ?? 0)),
+    dec(0),
+  )
+
   const externalAccountId = account?.external_account_id ?? null
   const {
     data: metaLive,
@@ -139,22 +154,24 @@ function AccountDetailPage() {
     retry: false,
   })
 
-  const fetchingAll = accountFetching || historyFetching || metaFetching
+  const fetchingAll =
+    accountFetching || historyFetching || usageFetching || metaFetching
 
   // Force-refetches everything shown on this page in one click — our own
-  // stored fields, assignment history, and live Meta data together. Meta
-  // failure (e.g. not configured, or this account has no external id) is
-  // reported separately rather than failing the whole action, same pattern
-  // as the list page's Refresh button.
+  // stored fields, assignment history, usage history, and live Meta data
+  // together. Meta failure (e.g. not configured, or this account has no
+  // external id) is reported separately rather than failing the whole
+  // action, same pattern as the list page's Refresh button.
   async function handleFetchAll() {
     const results = await Promise.all([
       refetchAccount(),
       refetchHistory(),
+      refetchUsage(),
       canManageMeta && externalAccountId
         ? refetchMetaLive()
         : Promise.resolve(null),
     ])
-    const metaResult = results[2]
+    const metaResult = results[3]
     if (metaResult && metaResult.isError) {
       toast.warning('Fetched, but live Meta data failed to load', {
         description:
@@ -272,6 +289,7 @@ function AccountDetailPage() {
           <TabsTrigger value="history">
             Assignment History ({history?.length ?? 0})
           </TabsTrigger>
+          <TabsTrigger value="usage">Usage ({usage?.length ?? 0})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -424,6 +442,7 @@ function AccountDetailPage() {
                   <TableHead>Client</TableHead>
                   <TableHead className="text-right">Opening</TableHead>
                   <TableHead className="text-right">Closing</TableHead>
+                  <TableHead className="text-right">Spent Amount</TableHead>
                   <TableHead>Assigned</TableHead>
                   <TableHead>Released</TableHead>
                   <TableHead>Status</TableHead>
@@ -432,7 +451,7 @@ function AccountDetailPage() {
               <TableBody>
                 {(history?.length ?? 0) === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6}>
+                    <TableCell colSpan={7}>
                       <div className="py-8 text-center text-sm text-muted-foreground">
                         No assignment history yet.
                       </div>
@@ -450,10 +469,82 @@ function AccountDetailPage() {
                         ? formatUsd(row.closing_limit_usd)
                         : '—'}
                     </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {row.closing_limit_usd
+                        ? formatUsd(
+                            dec(row.closing_limit_usd)
+                              .minus(dec(row.opening_limit_usd))
+                              .toFixed(2),
+                          )
+                        : '—'}
+                    </TableCell>
                     <TableCell>{fmtDate(row.assigned_at)}</TableCell>
                     <TableCell>{fmtDate(row.released_at)}</TableCell>
                     <TableCell>
                       <StatusBadge status={row.status} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="usage">
+          <Card className="mb-4">
+            <CardHeader>
+              <CardTitle className="text-base">Total USD used</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-semibold">
+                {formatUsd(totalUsage.toFixed(2))}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Sum of every approved limit request against this account,
+                across all clients that have held it.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Approved</TableHead>
+                  <TableHead className="text-right">Opening balance</TableHead>
+                  <TableHead className="text-right">Requested</TableHead>
+                  <TableHead className="text-right">Approved amount</TableHead>
+                  <TableHead className="text-right">New limit</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(usage?.length ?? 0) === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6}>
+                      <div className="py-8 text-center text-sm text-muted-foreground">
+                        No approved limit requests yet.
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+                {usage?.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell>{row.client?.name ?? '—'}</TableCell>
+                    <TableCell>{fmtDate(row.approved_at)}</TableCell>
+                    <TableCell className="text-right">
+                      {formatUsd(row.opening_balance_usd)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatUsd(row.requested_amount_usd)}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatUsd(row.approved_amount_usd ?? 0)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {row.approved_new_limit_usd
+                        ? formatUsd(row.approved_new_limit_usd)
+                        : '—'}
                     </TableCell>
                   </TableRow>
                 ))}

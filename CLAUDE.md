@@ -492,6 +492,28 @@ bug fixes, and anything else that isn't a whole new named feature.
   spend cap before optionally applying it as `current_limit_usd`) — kept
   both since they serve different jobs, not true duplicates despite the
   similar naming.
+- **"Usage" tab on the ad account detail page (post-Phase-8 addition): done,
+  pending owner review** — surfaces a per-account cumulative USD usage trail
+  (`Overview | Assignment History | Usage`). Turned out to need **no new
+  table or migration**: spec §28's additive model
+  (`opening_balance_usd` → `+approved_amount_usd` → `approved_new_limit_usd`)
+  was already captured on every `limit_requests` row, just never displayed
+  as a running history — it was only ever used internally for stale-baseline
+  validation (§30). New `listAdAccountUsageFn`
+  (`limit-request.fns.ts`, `LIMIT_REQUESTS_VIEW`) returns every **APPROVED**
+  request for one `ad_account_id`, chronological, across every client that
+  has ever held the account (same all-time scope as Assignment History) —
+  PENDING/REJECTED/CANCELLED requests are excluded since they never became
+  real usage. Tab shows a "Total USD used" summary card (client-side sum via
+  `dec()`, decimal.js — display aggregation only, not a write) plus a table
+  of Client / Approved date / Opening balance / Requested / Approved amount /
+  New limit per row. Wired into the existing page-header "Fetch" button's
+  `Promise.all` alongside the account/history/Meta refetches. Added the
+  long-missing `approved_at` field to the `LimitRequest` TS type (the DB
+  column existed since the Phase 3 migration; only `reviewed_at` had ever
+  been exposed to TypeScript). Verified live: `ADA-0012 "DF IT - Darun Food
+  03"` — one approved request, opening $700 + $100 → $800, matching the
+  account's live `current_limit_usd` exactly.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

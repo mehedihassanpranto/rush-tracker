@@ -6,6 +6,28 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-08-18
+
+**Added a "Usage" tab** to the ad account detail page (`Overview |
+Assignment History | Usage`) — a running total of USD requested/approved
+against the account, starting from its opening balance and accumulating
+every subsequent approved limit request. No new table or migration needed:
+the additive opening-balance model (spec §28) was already recorded on every
+`limit_requests` row, just never surfaced as a history view before. Shows a
+"Total USD used" summary plus a per-request table (client, approval date,
+opening balance, requested, approved, new limit), scoped to the account's
+whole lifetime across every client that has held it. Verified against a
+real account (`ADA-0012`): one approved request, $700 opening + $100 →
+$800, matching the account's live current limit exactly.
+
+**Added a "Spent Amount" column** to the Assignment History table
+(after Closing) — `closing_limit_usd − opening_limit_usd` per assignment
+period, decimal.js. Implemented as closing-minus-opening rather than the
+literally-requested opening-minus-closing, since limits only ever grow
+during an assignment; the reverse would show negative numbers on nearly
+every row. Shows `—` for the currently-active (not yet released)
+assignment, same as the existing Closing column.
+
 ## 2026-08-17
 
 **Added a "Fetch" button** to the ad account detail page header — refetches

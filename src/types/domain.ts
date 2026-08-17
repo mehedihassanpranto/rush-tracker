@@ -96,6 +96,7 @@ export interface LimitRequest {
   status: LimitRequestStatus
   requested_at: string
   reviewed_at: string | null
+  approved_at: string | null
   admin_note: string | null
   rejection_reason: string | null
   created_at: string
