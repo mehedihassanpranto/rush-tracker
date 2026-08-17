@@ -5,6 +5,7 @@ import { useServerFn } from '@tanstack/react-start'
 import {
   ArrowLeft,
   HandCoins,
+  MoreHorizontal,
   Pencil,
   Plus,
   SlidersHorizontal,
@@ -12,7 +13,12 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { getClientFn, listClientUsersFn } from '@/server/clients/client.fns'
+import {
+  getClientFn,
+  listClientUsersFn,
+  setClientMembershipStatusFn,
+} from '@/server/clients/client.fns'
+import type { ClientUserRow } from '@/server/clients/client.fns'
 import { listClientAccountsFn } from '@/server/ad-accounts/assignment.fns'
 import {
   clientFinancialsFn,
@@ -33,6 +39,7 @@ import { LedgerTable } from '@/components/shared/ledger-table'
 import { ClientFormDialog } from '@/components/admin/client/client-form-dialog'
 import { AssignAccountDialog } from '@/components/admin/client/assign-account-dialog'
 import { AddLoginDialog } from '@/components/admin/client/add-login-dialog'
+import { EditLoginDialog } from '@/components/admin/client/edit-login-dialog'
 import { AssignEmployeeDialog } from '@/components/admin/employee/assign-employee-dialog'
 import { CreateAdjustmentDialog } from '@/components/admin/adjustment/create-adjustment-dialog'
 import { ReverseDialog } from '@/components/admin/adjustment/reverse-dialog'
@@ -41,6 +48,12 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Table,
   TableBody,
@@ -91,6 +104,7 @@ function ClientDetailPage() {
   const listAdjustments = useServerFn(listAdjustmentsFn)
   const listEmployees = useServerFn(listClientEmployeesFn)
   const unassignEmployee = useServerFn(unassignEmployeeFromClientFn)
+  const setMembershipStatus = useServerFn(setClientMembershipStatusFn)
 
   const [editOpen, setEditOpen] = useState(false)
   const [assignOpen, setAssignOpen] = useState(false)
@@ -98,6 +112,9 @@ function ClientDetailPage() {
   const [adjustOpen, setAdjustOpen] = useState(false)
   const [requestPayOpen, setRequestPayOpen] = useState(false)
   const [assignEmployeeOpen, setAssignEmployeeOpen] = useState(false)
+  const [editLoginTarget, setEditLoginTarget] = useState<ClientUserRow | null>(
+    null,
+  )
   const [reverseEntry, setReverseEntry] = useState<LedgerEntryWithBalance | null>(
     null,
   )
@@ -128,6 +145,15 @@ function ClientDetailPage() {
     onSuccess: () => {
       toast.success('Employee unassigned')
       void queryClient.invalidateQueries({ queryKey: ['client-employees', clientId] })
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
+  })
+  const membershipStatusMutation = useMutation({
+    mutationFn: (input: { user_id: string; status: 'ACTIVE' | 'INACTIVE' }) =>
+      setMembershipStatus({ data: { ...input, client_id: clientId } }),
+    onSuccess: () => {
+      toast.success('Membership status updated')
+      void queryClient.invalidateQueries({ queryKey: ['client-users', clientId] })
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
   })
@@ -348,12 +374,13 @@ function ClientDetailPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Membership</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {(users?.length ?? 0) === 0 && (
                   <TableRow>
-                    <TableCell colSpan={3}>
+                    <TableCell colSpan={4}>
                       <div className="py-8 text-center text-sm text-muted-foreground">
                         No logins yet. Add one so this client can access the
                         portal.
@@ -369,6 +396,43 @@ function ClientDetailPage() {
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={u.membership_status} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="size-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => setEditLoginTarget(u)}>
+                            Edit profile
+                          </DropdownMenuItem>
+                          {u.membership_status === 'ACTIVE' ? (
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                membershipStatusMutation.mutate({
+                                  user_id: u.user_id,
+                                  status: 'INACTIVE',
+                                })
+                              }
+                            >
+                              Deactivate
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                membershipStatusMutation.mutate({
+                                  user_id: u.user_id,
+                                  status: 'ACTIVE',
+                                })
+                              }
+                            >
+                              Activate
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -458,6 +522,12 @@ function ClientDetailPage() {
         open={loginOpen}
         onOpenChange={setLoginOpen}
         clientId={clientId}
+      />
+      <EditLoginDialog
+        open={editLoginTarget !== null}
+        onOpenChange={(o) => !o && setEditLoginTarget(null)}
+        clientId={clientId}
+        login={editLoginTarget}
       />
       <CreateAdjustmentDialog
         open={adjustOpen}

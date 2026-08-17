@@ -44,6 +44,20 @@ export const clientUserCreateSchema = z.object({
   password: z.string().min(8, 'At least 8 characters'),
 })
 
+export const clientUserUpdateSchema = z.object({
+  user_id: z.uuid(),
+  client_id: z.uuid(),
+  full_name: z.string().trim().min(1, 'Name is required').max(200),
+  email: z.email('Enter a valid email'),
+})
+
+export const clientMembershipStatusSchema = z.object({
+  user_id: z.uuid(),
+  client_id: z.uuid(),
+  status: z.enum(['ACTIVE', 'INACTIVE']),
+})
+
 export type ClientCreateInput = z.infer<typeof clientCreateSchema>
 export type ClientUpdateInput = z.infer<typeof clientUpdateSchema>
 export type ClientUserCreateInput = z.infer<typeof clientUserCreateSchema>
+export type ClientUserUpdateInput = z.infer<typeof clientUserUpdateSchema>

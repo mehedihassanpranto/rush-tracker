@@ -8,6 +8,25 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-08-17
 
+**Added Delete for employees** (blocks if still assigned to any client,
+same precaution as client deletion) — while verifying it live, ran into a
+confirmed intentional use of the "Clear all data" Danger Zone feature,
+which pre-dates the employees feature and doesn't clear
+`employees`/`client_employees`, leaving employees orphaned after a reset.
+Owner's call: leave that as-is for now. Re-verified the delete feature
+itself with a fully self-contained test afterward (creates and cleans up
+its own temp data) — works correctly.
+
+**Fixed a real lockout**: a client login (`mehedi.h.pranto@gmail.com`,
+CL-0002 DF IT) hit "No active client access" because its
+`client_memberships.status` was INACTIVE — with no admin UI to fix it,
+requiring a direct database update. Added `setClientMembershipStatusFn` and
+`updateClientUserProfileFn` (scoped to the exact user+client pair, never by
+user alone) plus a dropdown per row on the client detail page's Logins tab
+(Edit profile / Activate / Deactivate) so this is self-service for admins
+going forward. Verified live: deactivate/reactivate round-trips correctly,
+and a mismatched (user, wrong client) pair correctly touches nothing.
+
 **Employees + Team Members** — a request that arrived as a diagram proposing
 to restructure the whole app around `Rush Tracker → Clients → Employees`.
 Turned out, after clarification, to mean two additive features, with the

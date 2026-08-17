@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import { MoreHorizontal, Plus, UserRound } from 'lucide-react'
+import { MoreHorizontal, Plus, Trash2, UserRound } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { listEmployeesFn, setEmployeeStatusFn } from '@/server/employees/employee.fns'
@@ -11,6 +11,7 @@ import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmployeeFormDialog } from '@/components/admin/employee/employee-form-dialog'
+import { DeleteEmployeeDialog } from '@/components/admin/employee/delete-employee-dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
@@ -44,6 +45,10 @@ function EmployeesPage() {
 
   const [createOpen, setCreateOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<Employee | undefined>()
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string
+    name: string
+  } | null>(null)
 
   const { data: employees, isLoading } = useQuery({
     queryKey: ['employees'],
@@ -171,6 +176,13 @@ function EmployeesPage() {
                             Activate
                           </DropdownMenuItem>
                         )}
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onSelect={() => setDeleteTarget({ id: e.id, name: e.name })}
+                        >
+                          <Trash2 className="size-4" />
+                          Delete
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -185,6 +197,11 @@ function EmployeesPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         employee={editTarget}
+      />
+      <DeleteEmployeeDialog
+        employee={deleteTarget}
+        open={deleteTarget !== null}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
       />
     </div>
   )

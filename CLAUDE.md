@@ -433,6 +433,53 @@ bug fixes, and anything else that isn't a whole new named feature.
     against the exact query the "All Employees" page runs: `EMP-0003 "E3"
     → xRush Agency, DF IT` confirms the many-to-many case (one employee,
     two clients) round-trips correctly.
+- **Edit login profile + membership status (post-Phase-8 addition): done,
+  pending owner review** — closes a real gap found live: a client's
+  `client_memberships.status` could go INACTIVE (in this case, from testing
+  the new self-service "Team Members" deactivate action) with **no admin
+  UI to reverse it** — the Logins tab showed the status as a read-only
+  badge only, forcing a direct database fix the first time it happened.
+  `setClientMembershipStatusFn` and `updateClientUserProfileFn`
+  (`client.fns.ts`, both `CLIENTS_MANAGE`) — both take **both**
+  `user_id` and `client_id` and scope the update to that exact pair via a
+  double `.eq()`, never by `user_id` alone, so a login belonging to
+  multiple clients (theoretically possible, not yet a real case) can't
+  have the wrong membership touched. Verified live against the account
+  that triggered this: deactivate → reactivate round-tripped correctly,
+  and a deliberately mismatched (user, wrong client) pair correctly
+  matched zero rows instead of silently touching something. Wired into
+  the Logins tab as a dropdown per row (Edit profile / Activate /
+  Deactivate) — same pattern as the Employees tab's row actions.
+  Password reset is explicitly out of scope here (a different, larger
+  concern — not requested).
+- **Delete employee (post-Phase-8 addition): done, pending owner review** —
+  `deleteEmployeeFn` (`employee.fns.ts`, `EMPLOYEES_MANAGE`) mirrors
+  `deleteClientFn`'s precaution exactly: blocks with a clear error if the
+  employee has any current `client_employees` link, telling the admin to
+  unassign first rather than silently cascading (unlike clients there's no
+  *financial* history at stake here, but "unassign first" keeps the same
+  predictable Delete behavior admins already expect elsewhere in the app).
+  `DeleteEmployeeDialog` mirrors `DeleteClientDialog`. Verified with a
+  fully self-contained test (creates its own temp client + employee +
+  link, confirms blocked-while-assigned and allowed-after-unassigning,
+  deletes everything it created) — deliberately not tested against real
+  seed data after an earlier verification attempt against the real `E1`
+  employee turned into a live incident (see below).
+  **Incident, for the record**: that verification coincided with
+  discovering `reset_all_data()` (the Settings → Danger Zone "Clear all
+  data" feature) had been run — an intentional, confirmed action, not data
+  corruption, and not something this delete feature caused. Confirmed
+  live: `clients`/`client_memberships`/`ad_account_assignments`/ledger/
+  payments/all CLIENT logins were wiped exactly as that function
+  documents. One real gap surfaced by this: **`reset_all_data()` predates
+  `employees`/`client_employees` (added this session) and doesn't clear
+  them** — `TRUNCATE ... CASCADE` on `clients` cascades into
+  `client_employees` (FK reference) but `employees` itself has no such FK,
+  so employee rows survive a reset while every one of their client
+  assignments doesn't, leaving them orphaned/"Unassigned". Owner's call:
+  leave this as-is for now rather than fix `reset_all_data()` to also
+  clear `employees` — noted here so a future session doesn't have to
+  rediscover it.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

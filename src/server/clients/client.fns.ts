@@ -7,9 +7,11 @@ import { bdtToUsd } from '@/server/exchange-rates/rate.service'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import {
   clientCreateSchema,
+  clientMembershipStatusSchema,
   clientStatusSchema,
   clientUpdateSchema,
   clientUserCreateSchema,
+  clientUserUpdateSchema,
 } from '@/schemas/client'
 import type { Client } from '@/types/domain'
 
@@ -344,4 +346,77 @@ export const createClientUserFn = createServerFn({ method: 'POST' })
       newValues: { user_id: userId, email: data.email },
     })
     return { user_id: userId }
+  })
+
+/** Edit a client login's name/email (admin, from the client detail page's
+ * Logins tab). Password reset is a separate, not-yet-built concern. */
+export const updateClientUserProfileFn = createServerFn({ method: 'POST' })
+  .validator(clientUserUpdateSchema)
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const actor = await requireAdmin(PERMISSIONS.CLIENTS_MANAGE)
+    const admin = getSupabaseAdminClient()
+
+    // Scope check: the target user must actually be a member of this client
+    // — never trust the client_id/user_id pairing without verifying it.
+    const { data: membership } = await admin
+      .from('client_memberships')
+      .select('user_id')
+      .eq('user_id', data.user_id)
+      .eq('client_id', data.client_id)
+      .maybeSingle()
+    if (!membership) {
+      throw new Error('That login is not a member of this client')
+    }
+
+    const { error: profileErr } = await admin
+      .from('user_profiles')
+      .update({ full_name: data.full_name })
+      .eq('user_id', data.user_id)
+    if (profileErr) throw new Error(profileErr.message)
+
+    const { error: authErr } = await admin.auth.admin.updateUserById(
+      data.user_id,
+      { email: data.email, email_confirm: true },
+    )
+    if (authErr) throw new Error(authErr.message)
+
+    await writeAudit({
+      actorUserId: actor.id,
+      action: 'CLIENT_USER_UPDATED',
+      entityType: 'CLIENT',
+      entityId: data.client_id,
+      newValues: { user_id: data.user_id, full_name: data.full_name, email: data.email },
+    })
+    return { ok: true }
+  })
+
+/** Activate/deactivate a client login's membership (admin, from the Logins
+ * tab) — the fix for spec's "no active client access" lockout screen,
+ * previously only fixable by editing the database directly. */
+export const setClientMembershipStatusFn = createServerFn({ method: 'POST' })
+  .validator(clientMembershipStatusSchema)
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const actor = await requireAdmin(PERMISSIONS.CLIENTS_MANAGE)
+    const admin = getSupabaseAdminClient()
+
+    const { data: updated, error } = await admin
+      .from('client_memberships')
+      .update({ status: data.status })
+      .eq('user_id', data.user_id)
+      .eq('client_id', data.client_id)
+      .select('user_id')
+      .maybeSingle()
+    if (error) throw new Error(error.message)
+    if (!updated) {
+      throw new Error('That login is not a member of this client')
+    }
+
+    await writeAudit({
+      actorUserId: actor.id,
+      action: 'CLIENT_MEMBERSHIP_STATUS_CHANGED',
+      entityType: 'CLIENT',
+      entityId: data.client_id,
+      newValues: { user_id: data.user_id, status: data.status },
+    })
+    return { ok: true }
   })

@@ -254,3 +254,48 @@ export const unassignEmployeeFromClientFn = createServerFn({ method: 'POST' })
     })
     return { ok: true }
   })
+
+/**
+ * Delete an employee — only when they have no current client assignments,
+ * same precaution as deleteClientFn (spec pattern: block deletion when
+ * anything still references the row, point the admin at unassigning first
+ * rather than silently cascading). Unlike clients there's no financial
+ * history to protect here (client_employees is a plain current-state
+ * junction, not a ledger), but "unassign first" keeps the same predictable
+ * behavior admins already expect from Delete elsewhere in this app.
+ */
+export const deleteEmployeeFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ id: z.uuid() }))
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const actor = await requireAdmin(PERMISSIONS.EMPLOYEES_MANAGE)
+    const admin = getSupabaseAdminClient()
+
+    const { data: employee } = await admin
+      .from('employees')
+      .select('id, employee_code, name')
+      .eq('id', data.id)
+      .single()
+    if (!employee) throw new Error('Employee not found')
+
+    const { count } = await admin
+      .from('client_employees')
+      .select('id', { count: 'exact', head: true })
+      .eq('employee_id', data.id)
+    if ((count ?? 0) > 0) {
+      throw new Error(
+        `This employee is assigned to ${count} client(s) and cannot be deleted. Unassign them first.`,
+      )
+    }
+
+    const { error } = await admin.from('employees').delete().eq('id', data.id)
+    if (error) throw new Error(error.message)
+
+    await writeAudit({
+      actorUserId: actor.id,
+      action: 'EMPLOYEE_DELETED',
+      entityType: 'EMPLOYEE',
+      entityId: data.id,
+      oldValues: employee,
+    })
+    return { ok: true }
+  })
