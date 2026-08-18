@@ -21,7 +21,7 @@ npm test          # one-shot
 npm run test:watch
 ```
 
-Current suite (31 tests, all passing):
+Current suite (45 tests, all passing):
 
 | File | Covers (§85) |
 | --- | --- |
@@ -30,6 +30,8 @@ Current suite (31 tests, all passing):
 | `lib/auth/types.test.ts` | RBAC (SUPER_ADMIN bypass, ADMIN explicit grants, sensitive-permission denial); cross-client isolation via `activeMemberships`. |
 | `lib/permissions/permissions.test.ts` | Permission catalog integrity; sensitive-permission set. |
 | `lib/csv/csv.test.ts` | Report CSV escaping/quoting. |
+| `lib/meta/spend-cap-sync-decision.test.ts` | Meta spend_cap auto-sync branching (not §85): unlinked/non-USD skip, would-pause-delivery guard, already-synced idempotency, write. Not §85 — a post-Phase-8 addition. |
+| `server/meta/spend-cap-sync.test.ts` | Same feature's Meta-calling core, with `fetchMetaAdAccount`/`updateMetaAdAccountSpendCap` mocked: success write, retry-then-fail on fetch/write errors, no write when already in sync. Not §85. |
 
 ## 2. §85 coverage map
 
@@ -161,6 +163,53 @@ an opposite ledger row + adjustment row appear; reversing the same entry twice i
 blocked (duplicate-reversal guard).
 
 **H — see reconciliation §3** (run after A–G; all checks return 0 rows).
+
+**J — Meta spend_cap auto-sync after approval (post-Phase-8 addition).**
+Covers the automatic push from an approved limit request to the linked Meta
+ad account's `spend_cap` (`syncAndPersistAdAccountSpendCap`,
+`src/server/meta/spend-cap-sync.server.ts`), triggered from
+`approveLimitRequestFn`. Needs a real, safe test Meta ad account (USD
+currency, $0 or near-$0 spend — do not use a live-spending account) linked
+via `external_account_id` to a real `ad_accounts` row assigned to a test
+client.
+
+*Success path:*
+1. Note the account's live `spend_cap` on Meta (Ads Manager or a `GET
+   act_{id}?fields=spend_cap`) and its `current_limit_usd` here — they
+   should already match from a prior run, or don't if this is the first run.
+2. As the client, request a small increase (e.g. +$10). As admin, upload
+   proof and approve.
+3. Confirm `ad_accounts.current_limit_usd` updated to the new value (already
+   covered by procedure A) **and** re-fetch the account live from Meta —
+   `spend_cap` should now equal the same new value. Confirm
+   `meta_sync_pending = false` and `meta_sync_error is null` on the row.
+4. Check `audit_logs` for one new `AD_ACCOUNT_UPDATED` row with
+   `metadata->>'source' = 'META_SPEND_CAP_AUTO_SYNC'` and
+   `actor_user_id` = the approving admin's id.
+
+*Failure path:* force the Meta call to fail — easiest is temporarily
+renaming `META_SYSTEM_USER_TOKEN` in the environment (or, if testing against
+a deployed environment, temporarily pointing the test account's
+`external_account_id` at a bogus id) — then repeat steps 2–3 with a fresh
+limit request.
+1. Confirm the approval still succeeds (ledger debit + `APPROVED` status +
+   `current_limit_usd` updated) — a Meta failure must never block or roll
+   back the approval itself.
+2. Confirm `ad_accounts.meta_sync_pending = true` and `meta_sync_error` is
+   set to a readable message.
+3. Confirm a `notifications` row was created for every ACTIVE admin with
+   `type = 'META_SPEND_CAP_SYNC_FAILED'`.
+4. Restore the token/external id, then click "Retry sync" on the account
+   detail page (or wait for the next `/api/cron/meta-sync` run, which also
+   calls `retryPendingMetaSpendCapSyncs()`) — confirm `meta_sync_pending`
+   clears and Meta's live `spend_cap` now matches `current_limit_usd`.
+
+*Idempotency:* with the account already in sync (`meta_sync_pending =
+false`, live `spend_cap` = `current_limit_usd`), manually invoke the sync
+again (retry button, or re-run the cron) — confirm no new Meta write happens
+(no change to Meta's `spend_cap`) and no duplicate audit row is written; the
+account should report `synced` without a `graphPost` call
+(`decideSpendCapSync`'s `already_synced` branch).
 
 ---
 

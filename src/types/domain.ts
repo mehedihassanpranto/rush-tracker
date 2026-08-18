@@ -34,6 +34,12 @@ export interface AdAccount {
    * client's rate for limit requests; '0' means unset and falls back to it.
    */
   usd_rate: string
+  /** True when current_limit_usd hasn't been confirmed pushed to Meta's
+   * spend_cap after an approval — see spend-cap-sync.server.ts. Never true
+   * for unlinked or non-USD accounts (never auto-synced, not a failure). */
+  meta_sync_pending: boolean
+  meta_sync_error: string | null
+  meta_sync_attempted_at: string | null
   created_at: string
   updated_at: string
 }

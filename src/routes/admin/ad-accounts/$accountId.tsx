@@ -22,7 +22,7 @@ import {
   setAdAccountStatusFn,
 } from '@/server/ad-accounts/ad-account.fns'
 import { listAdAccountUsageFn } from '@/server/limit-requests/limit-request.fns'
-import { fetchMetaAdAccountFn } from '@/server/meta/meta.fns'
+import { fetchMetaAdAccountFn, retryMetaSpendCapSyncFn } from '@/server/meta/meta.fns'
 import { dec, formatBdt, formatCurrencyAmount, formatUsd } from '@/lib/money/money'
 import { LOW_BALANCE_THRESHOLD } from '@/lib/meta/thresholds'
 import { hasPermission } from '@/lib/auth/types'
@@ -98,6 +98,7 @@ function AccountDetailPage() {
   const listUsage = useServerFn(listAdAccountUsageFn)
   const setStatus = useServerFn(setAdAccountStatusFn)
   const fetchMetaAccount = useServerFn(fetchMetaAdAccountFn)
+  const retrySpendCapSync = useServerFn(retryMetaSpendCapSyncFn)
 
   const [renameOpen, setRenameOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -193,6 +194,22 @@ function AccountDetailPage() {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
   })
 
+  const retrySyncMutation = useMutation({
+    mutationFn: () => retrySpendCapSync({ data: { id: accountId } }),
+    onSuccess: (updated) => {
+      if (updated.meta_sync_pending) {
+        toast.warning('Retried, but still out of sync', {
+          description: updated.meta_sync_error ?? undefined,
+        })
+      } else {
+        toast.success('Spend cap synced with Meta')
+      }
+      void queryClient.invalidateQueries({ queryKey: ['ad-account', accountId] })
+    },
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : 'Retry failed'),
+  })
+
   if (isLoading || !account) {
     return <Skeleton className="h-64 w-full" />
   }
@@ -282,6 +299,33 @@ function AccountDetailPage() {
         </span>
         <StatusBadge status={account.status} />
       </div>
+
+      {account.meta_sync_pending && (
+        <div className="mb-4 flex items-start justify-between gap-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm dark:border-red-900 dark:bg-red-950">
+          <div>
+            <p className="font-medium text-red-700 dark:text-red-400">
+              Spend cap out of sync with Meta
+            </p>
+            <p className="text-red-600 dark:text-red-400">
+              {account.meta_sync_error ??
+                'The last automatic sync attempt failed.'}
+            </p>
+          </div>
+          {canManageMeta && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => retrySyncMutation.mutate()}
+              disabled={retrySyncMutation.isPending}
+            >
+              <RefreshCw
+                className={`size-4 ${retrySyncMutation.isPending ? 'animate-spin' : ''}`}
+              />
+              Retry sync
+            </Button>
+          )}
+        </div>
+      )}
 
       <Tabs defaultValue="overview">
         <TabsList>

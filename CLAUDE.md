@@ -519,6 +519,64 @@ bug fixes, and anything else that isn't a whole new named feature.
   been exposed to TypeScript). Verified live: `ADA-0012 "DF IT - Darun Food
   03"` — one approved request, opening $700 + $100 → $800, matching the
   account's live `current_limit_usd` exactly.
+- **Auto-push approved limit increases to Meta spend_cap (post-Phase-8
+  addition): done, pending owner review** — closes the manual step where an
+  admin approves a client's limit increase and someone still has to update
+  the linked Meta ad account's spend cap by hand. After `approve_limit_request`
+  commits, `approveLimitRequestFn` (`limit-request.fns.ts`) now calls the new
+  `syncAndPersistAdAccountSpendCap()` (`src/server/meta/spend-cap-sync.server.ts`)
+  as a best-effort step (same pattern as the existing post-approval
+  notification call — never blocks or rolls back the approval). Reuses the
+  existing `updateMetaAdAccountSpendCap()`/`fetchMetaAdAccount()` Meta client
+  and the same USD-only, no-FX-path rule the manual "Edit spend cap" dialog
+  already enforces — non-USD or unlinked accounts are skipped as
+  not-applicable, never treated as failures. The branching (skip /
+  already-synced / would-pause-delivery / write) is a pure function,
+  `decideSpendCapSync()` (`src/lib/meta/spend-cap-sync-decision.ts`), unit
+  tested with no mocks; the Meta-calling core `syncAdAccountSpendCap()` is
+  unit tested separately with the Meta client mocked (14 new tests, 45
+  total — `npm test`).
+  **Never rolls back an approval on a Meta failure** — the ledger debit,
+  `current_limit_usd` update, and audit row already commit atomically inside
+  `approve_limit_request` before any Meta HTTP call is even possible, and
+  approved financial records are immutable by spec. A Meta failure instead
+  flags the account (`ad_accounts.meta_sync_pending` / `meta_sync_error` /
+  `meta_sync_attempted_at`, migration
+  `20260723000013_ad_account_meta_sync_state.sql`), fires a new
+  `META_SPEND_CAP_SYNC_FAILED` admin notification, and logs. Retried via the
+  existing daily `/api/cron/meta-sync` job, which now also calls the new
+  `retryPendingMetaSpendCapSyncs()` — deliberately **no new cron entry**, to
+  avoid any assumption about the Vercel plan's cron-frequency limits — plus
+  an immediate manual "Retry sync" button + red out-of-sync banner on the ad
+  account detail page (`retryMetaSpendCapSyncFn`, `AD_ACCOUNTS_MANAGE`).
+  Idempotent by construction: `decideSpendCapSync()` compares Meta's live
+  spend_cap to the target before writing, so retries/duplicate triggers
+  converge without re-POSTing. Audited as `AD_ACCOUNT_UPDATED` with a new,
+  distinct `metadata.source: 'META_SPEND_CAP_AUTO_SYNC'` — kept separate
+  from the existing manual-dialog source `'META_SPEND_CAP_PUSH'` so the
+  audit trail can tell an admin's manual push apart from the system's
+  automatic one. New live-DB test procedure: `docs/TESTING.md` §4,
+  Procedure J (success, forced failure, retry, idempotency) — matches this
+  codebase's existing Phase 8 split (Vitest for DB-independent pure logic
+  only, live-project procedures for DB-enforced flows) rather than
+  introducing a new Supabase-mocking test pattern.
+  **Verified live end-to-end on 2026-08-18** against the real linked account
+  `ADA-0012` ("DF IT - Darun Food 03") and a throwaway account with a bogus
+  Meta id: real Meta write + audit row on success, correct idempotent no-op
+  on a second run (this caught a real bug — `syncAndPersistAdAccountSpendCap`
+  was writing a duplicate-looking audit row on every already-in-sync
+  re-check; fixed by splitting the outcome into `synced` vs
+  `already_synced`, only the former is audit-worthy), correct
+  `meta_sync_pending`/`meta_sync_error`/notification on a real Graph API
+  failure, and `retryPendingMetaSpendCapSyncs()` correctly picking up and
+  retrying the pending row. The real account was fully restored afterward
+  (Meta `spend_cap` and the three sync-state columns back to their exact
+  pre-test values); the throwaway account was deleted. The banner + "Retry
+  sync" button on the ad account detail page were also visually verified in
+  a real (headless) browser against a logged-in admin session — screenshots
+  confirmed the red banner, error text, and button render correctly and
+  that clicking it round-trips through `retryMetaSpendCapSyncFn` with the
+  correct toast.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

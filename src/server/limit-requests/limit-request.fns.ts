@@ -10,6 +10,7 @@ import {
   notifyAdmins,
   notifyClientMembers,
 } from '@/server/notifications/notification.service'
+import { syncAndPersistAdAccountSpendCap } from '@/server/meta/spend-cap-sync.server'
 import { uploadProof, signProofUrl } from '@/server/storage/storage.service'
 import { adAccountUsdRate } from '@/server/exchange-rates/rate.service'
 import { addUsd, formatUsd } from '@/lib/money/money'
@@ -400,11 +401,15 @@ export const approveLimitRequestFn = createServerFn({ method: 'POST' })
 
     const { data: req } = await admin
       .from('limit_requests')
-      .select('client_id, request_number')
+      .select('client_id, request_number, ad_account_id')
       .eq('id', data.id)
       .maybeSingle()
     if (req) {
-      const r = req as { client_id: string; request_number: string }
+      const r = req as {
+        client_id: string
+        request_number: string
+        ad_account_id: string
+      }
       await notifyClientMembers(r.client_id, {
         type: 'LIMIT_REQUEST_APPROVED',
         title: 'Limit request approved',
@@ -413,6 +418,16 @@ export const approveLimitRequestFn = createServerFn({ method: 'POST' })
         )}`,
         entityType: 'LIMIT_REQUEST',
         entityId: data.id,
+      })
+
+      // Best-effort: push the new limit to the linked Meta ad account's
+      // spend_cap. Never throws — a Meta-side failure must not roll back
+      // this approval (already committed atomically above); it's flagged
+      // via meta_sync_pending + a notification + retry instead (spec
+      // decision: see the "Auto-push approved limit to Meta spend_cap" plan).
+      await syncAndPersistAdAccountSpendCap(r.ad_account_id, {
+        actorUserId: actor.id,
+        source: 'META_SPEND_CAP_AUTO_SYNC',
       })
     }
     return { ledger_id: ledgerId as string }

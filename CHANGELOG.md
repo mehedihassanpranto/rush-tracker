@@ -29,6 +29,68 @@ returned to `"70000"`. `amount_spent` was `"0"` throughout, so no live
 delivery was ever at risk. `updateMetaSpendCapFn`'s existing dollars-write
 assumption is now confirmed correct; no code change was needed.
 
+**Auto-push approved limit increases to Meta's spend_cap** — closes the
+manual step where an admin approves a client's limit increase and someone
+still has to go update the linked Meta ad account's spend cap by hand.
+After `approve_limit_request` commits, `approveLimitRequestFn`
+(`src/server/limit-requests/limit-request.fns.ts`) now calls the new
+`syncAndPersistAdAccountSpendCap()` (`src/server/meta/spend-cap-sync.server.ts`)
+as a best-effort step, same "never blocks the primary operation" pattern as
+the existing notification calls. It reuses the existing
+`updateMetaAdAccountSpendCap()`/`fetchMetaAdAccount()` Meta client rather
+than adding a parallel Graph API path, and the same USD-only, no-FX-path
+rule the manual "Edit spend cap" dialog already enforces (non-USD or
+unlinked accounts are skipped as not-applicable, never treated as
+failures). The actual branching logic (skip/already-synced/would-pause-
+delivery/write) is a pure function, `decideSpendCapSync()`
+(`src/lib/meta/spend-cap-sync-decision.ts`), unit tested directly with no
+mocks; the Meta-calling core `syncAdAccountSpendCap()` is unit tested
+separately with `fetchMetaAdAccount`/`updateMetaAdAccountSpendCap` mocked —
+14 new tests, 45 total.
+
+**Approvals are never rolled back on a Meta failure.** The ledger debit,
+`current_limit_usd` update, and audit row already commit atomically inside
+`approve_limit_request` before any Meta HTTP call is even possible, and the
+spec treats approved financial records as immutable — so a Meta-side
+failure instead flags the account (`ad_accounts.meta_sync_pending` +
+`meta_sync_error` + `meta_sync_attempted_at`, migration
+`20260723000013_ad_account_meta_sync_state.sql`), fires a new
+`META_SPEND_CAP_SYNC_FAILED` admin notification, and logs. Retried two ways:
+the existing daily `/api/cron/meta-sync` job now also calls the new
+`retryPendingMetaSpendCapSyncs()` (no new cron entry — avoids any
+assumption about the Vercel plan's cron-frequency limits), and admins get an
+immediate manual "Retry sync" button + a red out-of-sync banner on the ad
+account detail page (`retryMetaSpendCapSyncFn`, `AD_ACCOUNTS_MANAGE`-gated).
+Idempotent by construction: the decision function compares Meta's live
+spend_cap to the target before writing, so retries/duplicate triggers
+converge without re-POSTing.
+
+Audited as `AD_ACCOUNT_UPDATED` with a new, distinct
+`metadata.source: 'META_SPEND_CAP_AUTO_SYNC'` — kept separate from the
+existing manual-dialog source `META_SPEND_CAP_PUSH'` so the audit trail can
+tell an admin's manual push apart from the system's automatic one.
+
+Added a new documented live-DB test procedure (`docs/TESTING.md` §4,
+Procedure J) for the full approve → sync flow (success, forced failure,
+retry, and idempotency) — matches this codebase's existing Phase 8 split
+(Vitest for DB-independent pure logic only, live-project procedures for
+DB-enforced flows) rather than introducing a new Supabase-mocking test
+pattern.
+
+**Ran Procedure J live** against the real linked account `ADA-0012` and a
+throwaway account with a bogus Meta id — real Meta write + audit on
+success, correct no-op on a repeat run, correct failure flagging +
+notification on a real Graph API error, and the retry cron correctly
+picking up the pending row; the real account was fully restored afterward.
+This caught one real bug, fixed in the same pass: `already_synced` was
+collapsing into the same `synced` status as an actual write, so a retry or
+duplicate trigger against an already-in-sync account wrote a redundant
+audit row every time. Also visually verified the out-of-sync banner +
+"Retry sync" button in a real headless-browser session (screenshots,
+logged in via a magic link for a real admin account rather than a shared
+password) — renders correctly, click round-trips through the real server
+function with the correct toast.
+
 ## 2026-08-18
 
 **Added a "Usage" tab** to the ad account detail page (`Overview |

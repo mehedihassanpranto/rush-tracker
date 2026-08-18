@@ -8,6 +8,7 @@ import {
   applyMetaSpendCapSchema,
   fetchMetaAdAccountSchema,
   importMetaAdAccountsSchema,
+  retryMetaSpendCapSyncSchema,
   updateMetaSpendCapSchema,
 } from '@/schemas/meta'
 import {
@@ -15,6 +16,7 @@ import {
   listMetaBusinessAdAccounts,
   updateMetaAdAccountSpendCap,
 } from '@/server/meta/meta.server'
+import { syncAndPersistAdAccountSpendCap } from '@/server/meta/spend-cap-sync.server'
 import type { MetaAdAccountSummary } from '@/server/meta/meta.server'
 import type { AdAccount } from '@/types/domain'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -282,6 +284,34 @@ export const updateMetaSpendCapFn = createServerFn({ method: 'POST' })
       },
       metadata: { source: 'META_SPEND_CAP_PUSH' },
     })
+    return account as AdAccount
+  })
+
+/**
+ * Manually retry pushing this account's current_limit_usd to Meta's
+ * spend_cap, when the automatic post-approval push (see
+ * spend-cap-sync.server.ts, triggered from approveLimitRequestFn) failed and
+ * the account is flagged meta_sync_pending. Gives an admin an immediate
+ * escape hatch instead of waiting for the daily retry cron. Reuses the same
+ * best-effort sync path — never throws on a Meta-side failure; the returned
+ * account row reflects whether meta_sync_pending cleared or is still set.
+ */
+export const retryMetaSpendCapSyncFn = createServerFn({ method: 'POST' })
+  .validator(retryMetaSpendCapSyncSchema)
+  .handler(async ({ data }): Promise<AdAccount> => {
+    const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
+    await syncAndPersistAdAccountSpendCap(data.id, {
+      actorUserId: actor.id,
+      source: 'META_SPEND_CAP_AUTO_SYNC',
+    })
+
+    const admin = getSupabaseAdminClient()
+    const { data: account, error } = await admin
+      .from('ad_accounts')
+      .select('*')
+      .eq('id', data.id)
+      .single()
+    if (error) throw new Error(error.message)
     return account as AdAccount
   })
 

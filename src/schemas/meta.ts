@@ -41,9 +41,16 @@ export const updateMetaSpendCapSchema = z.object({
     .max(1_000_000_000, 'Amount is too large'),
 })
 
+export const retryMetaSpendCapSyncSchema = z.object({
+  id: z.uuid(),
+})
+
 export type FetchMetaAdAccountInput = z.infer<typeof fetchMetaAdAccountSchema>
 export type ImportMetaAdAccountsInput = z.infer<
   typeof importMetaAdAccountsSchema
 >
 export type ApplyMetaSpendCapInput = z.infer<typeof applyMetaSpendCapSchema>
 export type UpdateMetaSpendCapInput = z.infer<typeof updateMetaSpendCapSchema>
+export type RetryMetaSpendCapSyncInput = z.infer<
+  typeof retryMetaSpendCapSyncSchema
+>
