@@ -6,6 +6,29 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-08-19
+
+**Confirmed migration `20260723000011_ad_accounts_external_id_unique.sql`
+is live** — a second SQL-editor run of the file surfaced `42P07: relation
+"idx_ad_accounts_external_unique" already exists`, which only happens once
+the first run already succeeded. So the unique-partial-index backstop
+against duplicate Meta account links has been applied since (at latest)
+this check; `CLAUDE.md`'s "not yet applied" note from the Phase 8 hardening
+pass was stale and is now updated. Flagged that the migration file itself
+isn't safely re-runnable (its `drop index if exists` only targets the
+pre-migration index name) — don't re-run it through the SQL editor again.
+
+**Resolved the open `spend_cap` write-units question** from the Meta
+integration hardening pass — ran a live read-write-read-restore test
+against a safe $0-spend account (`act_963630549557499`, "DF IT - Darun
+Food 03") using the System User token: original raw `spend_cap: "70000"`
+(= $700.00), wrote `157`, read back `"15700"` (= $157.00, confirming the
+write field is dollars, not cents — a cents write would have read back
+`"157"` = $1.57), then restored to `700` and verified the raw value
+returned to `"70000"`. `amount_spent` was `"0"` throughout, so no live
+delivery was ever at risk. `updateMetaSpendCapFn`'s existing dollars-write
+assumption is now confirmed correct; no code change was needed.
+
 ## 2026-08-18
 
 **Added a "Usage" tab** to the ad account detail page (`Overview |

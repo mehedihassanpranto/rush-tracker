@@ -323,21 +323,26 @@ bug fixes, and anything else that isn't a whole new named feature.
     submit time). Migration `20260723000011_ad_accounts_external_id_unique.sql`
     adds a **unique partial index** (`where external_account_id is not
     null`) as the hard backstop — confirmed zero existing duplicates in
-    live data before adding it, so it applies cleanly. **This migration is
-    not yet applied to the live project — apply via `supabase db push` or
-    the SQL editor before the fix takes effect at the DB level.**
+    live data before adding it, so it applies cleanly. **Confirmed applied
+    to the live project on 2026-08-19** — re-running the file's `create
+    unique index` a second time surfaced `42P07: relation
+    "idx_ad_accounts_external_unique" already exists`, which is only
+    possible once the first run already succeeded. Note the migration
+    itself isn't safely re-runnable (line 13's `drop index if exists`
+    targets the pre-migration index name, not this one), so don't re-run
+    this file through the SQL editor a second time.
   - Duplicated USD/linked-account guard logic between `applyMetaSpendCapFn`
     and `updateMetaSpendCapFn` extracted into a shared `loadUsdLinkedAccount()`.
-  - **Left open, not fixed**: whether `spend_cap` writes are really in
-    dollars (as documented/implemented) or cents (as one review pass
-    suspected) was never empirically confirmed — a live test write was
-    blocked by Claude Code's safety classifier. Research (Meta's official
-    docs page + a corroborating web search + the official Python SDK typing
-    `spend_cap` as `float` in write params) favors "dollars" 3-to-1, but
-    this has NOT been proven by an actual write-and-read-back. **Do not
-    rely on `updateMetaSpendCapFn` for a real financial decision until
-    someone runs that test** (see the conversation this session for the
-    exact curl command against a safe $0-spend test account).
+  - **Resolved 2026-08-19**: whether `spend_cap` writes are in dollars (as
+    documented/implemented) or cents was empirically confirmed live against
+    a safe $0-spend account (`act_963630549557499`, "DF IT - Darun Food
+    03"). Read original `spend_cap: "70000"` (= $700.00, minor-unit read
+    convention), wrote `spend_cap=157`, read back `"15700"` (= $157.00 —
+    matches the dollars theory exactly; a cents write would have read back
+    `"157"` = $1.57), then restored `spend_cap=700` and verified the raw
+    value returned to `"70000"`. `amount_spent` stayed `"0"` throughout, so
+    no live delivery was ever at risk. `updateMetaSpendCapFn`'s existing
+    dollars-write assumption is confirmed correct — no code change needed.
 - **Client portal quick fixes (post-Phase-8 addition): done, pending owner
   review** — a portal-side survey (comparing `/portal` against spec §9/§66-68
   and the admin side's Meta hardening) turned up two safe fixes, applied:
