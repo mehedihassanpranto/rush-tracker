@@ -113,6 +113,15 @@ during an assignment; the reverse would show negative numbers on nearly
 every row. Shows `—` for the currently-active (not yet released)
 assignment, same as the existing Closing column.
 
+**Added a "Limit Requests" tab** to the client detail page, between
+Adjustments and Logins — every approved limit request the client has ever
+had, across all their ad accounts, most-recent-first. Shows which account,
+the approved USD amount, and the approval date in a custom format
+(`08:00pm, 7 april 2026`), driven by `approved_at` per the owner's
+instruction. Verified live against both real clients with approval
+history (7 and 3 requests respectively) — accounts, amounts, and dates all
+correct.
+
 ## 2026-08-17
 
 **Added a "Fetch" button** to the ad account detail page header — refetches

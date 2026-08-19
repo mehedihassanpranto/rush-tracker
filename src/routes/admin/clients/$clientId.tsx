@@ -25,6 +25,7 @@ import {
   listClientLedgerFn,
 } from '@/server/ledger/ledger.fns'
 import { listAdjustmentsFn } from '@/server/adjustments/adjustment.fns'
+import { listClientLimitRequestsFn } from '@/server/limit-requests/limit-request.fns'
 import {
   listClientEmployeesFn,
   unassignEmployeeFromClientFn,
@@ -85,6 +86,21 @@ function fmtDate(value: string): string {
   })
 }
 
+/** "08:00pm, 7 april 2026" — approval-time format for the Limit Requests tab. */
+function fmtApprovalDateTime(value: string | null): string {
+  if (!value) return '—'
+  const d = new Date(value)
+  let hours = d.getHours()
+  const ampm = hours >= 12 ? 'pm' : 'am'
+  hours = hours % 12 || 12
+  const hh = String(hours).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  const month = d
+    .toLocaleDateString(undefined, { month: 'long' })
+    .toLowerCase()
+  return `${hh}:${mm}${ampm}, ${d.getDate()} ${month} ${d.getFullYear()}`
+}
+
 function ClientDetailPage() {
   const { clientId } = Route.useParams()
   const { user } = Route.useRouteContext()
@@ -102,6 +118,7 @@ function ClientDetailPage() {
   const getFinancials = useServerFn(clientFinancialsFn)
   const listLedger = useServerFn(listClientLedgerFn)
   const listAdjustments = useServerFn(listAdjustmentsFn)
+  const listLimitRequests = useServerFn(listClientLimitRequestsFn)
   const listEmployees = useServerFn(listClientEmployeesFn)
   const unassignEmployee = useServerFn(unassignEmployeeFromClientFn)
   const setMembershipStatus = useServerFn(setClientMembershipStatusFn)
@@ -165,6 +182,10 @@ function ClientDetailPage() {
     queryKey: ['adjustments', clientId],
     queryFn: () => listAdjustments({ data: { client_id: clientId } }),
   })
+  const { data: limitRequests } = useQuery({
+    queryKey: ['client-limit-requests', clientId],
+    queryFn: () => listLimitRequests({ data: { client_id: clientId } }),
+  })
 
   if (isLoading || !client) {
     return <Skeleton className="h-64 w-full" />
@@ -221,6 +242,9 @@ function ClientDetailPage() {
           <TabsTrigger value="ledger">Ledger</TabsTrigger>
           <TabsTrigger value="adjustments">
             Adjustments ({adjustments?.length ?? 0})
+          </TabsTrigger>
+          <TabsTrigger value="limit-requests">
+            Limit Requests ({limitRequests?.length ?? 0})
           </TabsTrigger>
           <TabsTrigger value="logins">Logins ({users?.length ?? 0})</TabsTrigger>
           <TabsTrigger value="employees">
@@ -352,6 +376,54 @@ function ClientDetailPage() {
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">
                       {fmtDate(a.created_at)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="limit-requests">
+          <Card className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Account</TableHead>
+                  <TableHead className="text-right">USD</TableHead>
+                  <TableHead>Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(limitRequests?.length ?? 0) === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={3}>
+                      <div className="py-8 text-center text-sm text-muted-foreground">
+                        No approved limit requests yet.
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+                {limitRequests?.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell>
+                      {r.ad_account ? (
+                        <Link
+                          to="/admin/ad-accounts/$accountId"
+                          params={{ accountId: r.ad_account.id }}
+                          className="font-medium text-primary underline-offset-4 hover:underline"
+                        >
+                          {r.ad_account.name}
+                        </Link>
+                      ) : (
+                        '—'
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatUsd(r.approved_amount_usd ?? 0)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {fmtApprovalDateTime(r.approved_at)}
                     </TableCell>
                   </TableRow>
                 ))}

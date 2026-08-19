@@ -577,6 +577,33 @@ bug fixes, and anything else that isn't a whole new named feature.
   confirmed the red banner, error text, and button render correctly and
   that clicking it round-trips through `retryMetaSpendCapSyncFn` with the
   correct toast.
+- **"Spent Amount" column on the ad account detail page's Assignment
+  History (post-Phase-8 addition): done, pending owner review** —
+  `closing_limit_usd − opening_limit_usd` per assignment period
+  (decimal.js), placed after Closing. Requested as "opening − closing"
+  literally, but built as closing − opening instead: limits only ever grow
+  during an assignment, so the literal formula would show a negative number
+  on nearly every real row. Shows `—` for the currently-active (not yet
+  released) assignment, same as the existing Closing column already does.
+- **"Limit Requests" tab on the client detail page (post-Phase-8 addition):
+  done, pending owner review** — inserted between Adjustments and Logins
+  (`... | Adjustments | Limit Requests | Logins | Employees`). New
+  `listClientLimitRequestsFn` (`limit-request.fns.ts`,
+  `LIMIT_REQUESTS_VIEW`) mirrors the ad account Usage tab's fn but flipped:
+  every **APPROVED** request for one `client_id` across every ad account
+  they've ever held, most-recent-approval-first (Usage sorts ascending
+  since it's a running trail to the current limit; this is a plain activity
+  feed, matching the Adjustments tab's newest-first convention). Columns:
+  Account (links to the ad account detail page) / USD (`approved_amount_usd`)
+  / Date. Date is a custom format the owner specified literally —
+  `08:00pm, 7 april 2026` (zero-padded 12h time + lowercase am/pm, then day
+  + lowercase full month name + year) — not an `Intl.DateTimeFormat` preset,
+  so a dedicated `fmtApprovalDateTime()` was written for it, driven by
+  `approved_at` (not `requested_at`), matching the owner's "time will be
+  based on approval time" instruction. Verified live against both real
+  clients with approval history: `CL-0002` (7 approved requests across 4
+  accounts) and `CL-0003` (3 approved requests, one account) — correct
+  accounts, amounts, and formatted dates on every row.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

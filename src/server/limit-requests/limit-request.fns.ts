@@ -289,6 +289,28 @@ export const listAdAccountUsageFn = createServerFn({ method: 'GET' })
     return rows as unknown as Array<LimitRequestWithRefs>
   })
 
+/**
+ * A client's approved limit-request history (client detail page's Limit
+ * Requests tab) — every APPROVED request across every ad account this
+ * client has ever held, most recent approval first.
+ */
+export const listClientLimitRequestsFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ client_id: z.uuid() }))
+  .handler(async ({ data }): Promise<Array<LimitRequestWithRefs>> => {
+    await requireAdmin(PERMISSIONS.LIMIT_REQUESTS_VIEW)
+    const admin = getSupabaseAdminClient()
+    const { data: rows, error } = await admin
+      .from('limit_requests')
+      .select(
+        '*, client:clients(id, client_code, name), ad_account:ad_accounts(id, account_code, name)',
+      )
+      .eq('client_id', data.client_id)
+      .eq('status', 'APPROVED')
+      .order('approved_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return rows as unknown as Array<LimitRequestWithRefs>
+  })
+
 export const getLimitRequestDetailFn = createServerFn({ method: 'GET' })
   .validator(limitRequestIdSchema)
   .handler(async ({ data }): Promise<LimitRequestDetail> => {
