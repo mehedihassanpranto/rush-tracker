@@ -363,11 +363,12 @@ bug fixes, and anything else that isn't a whole new named feature.
     emerald language the admin side already uses for low-balance/high-due
     alerts — previously plain black regardless of urgency, on the one page
     where it's the client's own money at stake.
-  - **Also identified, not yet built**: profile editing is still a hardcoded
-    "later phase" stub in `portal/profile/index.tsx` (the one spec §9
-    capability with zero implementation), and the client ad-accounts table
-    folds spec §67's "Pending Request" column into the action button's
-    label instead of a separate column.
+  - **Also identified, not yet built**: the client ad-accounts table folds
+    spec §67's "Pending Request" column into the action button's label
+    instead of a separate column (a dedicated-column version was tried and
+    then deliberately reverted per owner feedback — the button-label
+    version reads better). The profile-editing stub noted here was closed
+    later — see the dedicated entry further below.
 - **"Remaining" surfaced to clients (post-Phase-8 addition): done, pending
   owner review** — the open decision above got resolved: owner chose to add
   Meta spend headroom ("Remaining") to `/portal/ad-accounts`, the client's
@@ -616,6 +617,68 @@ bug fixes, and anything else that isn't a whole new named feature.
   employees. **Owner must apply this migration via the SQL editor or
   `supabase db push` before the next "Clear all data" run** — no DB
   connection is available in this dev environment to apply it directly.
+- **Client-portal profile editing (post-Phase-8 addition): done, pending
+  owner review** — closes the spec §9 gap where `portal/profile/index.tsx`
+  was a hardcoded "later phase" stub with zero write capability. Scope:
+  **full name only**. New, dedicated `updateMyProfileFn`
+  (`src/server/profile/profile.fns.ts`) rather than a relaxed call into the
+  admin-side `updateClientUserProfileFn` — that fn is `requireAdmin()`-gated
+  and also force-confirms email changes via
+  `admin.auth.admin.updateUserById(..., { email_confirm: true })` with no
+  verification step, which is fine for a trusted admin fixing someone's
+  login but not safe to expose to self-service. The new fn is
+  `requireClientMembership()`-gated instead, touches only
+  `user_profiles.full_name`, and derives the target `user_id` exclusively
+  from the caller's own session (`actor.id`) — never accepted as input, so
+  a client can only ever edit their own row. Email editing is explicitly
+  out of scope (needs a real re-verification flow, a separate concern —
+  same "out of scope for now" treatment as password reset on the admin-side
+  edit-login feature). New `src/schemas/profile.ts`
+  (`myProfileUpdateSchema`, name-only). UI: an "Edit" button on the
+  Account card opens `EditProfileDialog` (React Hook Form + Zod, mirrors
+  `EditLoginDialog`/`AddTeamMemberDialog`'s existing pattern), toast on
+  success/failure, and `router.invalidate()` on success since the signed-in
+  name lives in root route context (loaded once at `beforeLoad`) rather
+  than a query — needed so the header's name/avatar refresh immediately
+  instead of only after a manual reload. Audited as `PROFILE_UPDATED` /
+  `entityType: 'USER'` / `metadata.source: 'CLIENT_SELF_SERVICE'` (same
+  `entityType: 'USER'` convention already used by the admin-side user
+  management fns, not `'CLIENT'`, since this isn't scoped to any one client
+  relationship).
+  **Verified live end-to-end**, not just typecheck/build: no chromium-cli
+  or Playwright was available in this environment, so Playwright + a
+  headless Chromium were installed on demand (`npx playwright install
+  chromium`, browser cached under `~/.cache/ms-playwright`; the `playwright`
+  npm package itself installed into this repo via `npm install --no-save`
+  so it never touched `package.json`/the lockfile, and was uninstalled again
+  after). Logged in as a real client login (`sabbir@gmail.com`, CL-0002 "DF
+  IT Solutions") against a **local dev server pointed at the real
+  production Supabase project** (nothing had been deployed to Vercel yet at
+  verification time) — a Supabase magic link was generated server-side via
+  the service-role key, then exchanged for an access/refresh token pair via
+  a manual `fetch` against the verify endpoint (`redirect: 'manual'`,
+  reading the token pair from the redirect's hash fragment) and turned into
+  a real session cookie using the app's own `@supabase/ssr`
+  `createServerClient` cookie-writing logic (guarantees byte-identical
+  cookie format to what the app's own `getSupabaseServerClient()` expects
+  to read), fed into the browser context via
+  `context.addCookies()` — chosen after the more obvious approach (driving
+  the existing client-side `/reset-password` hash-consuming page with
+  Playwright) turned out not to reliably establish the SSR-readable cookie
+  in a headless run. Confirmed: name showed "sabbir@gmail.com" before
+  editing, "Edit" → change to "Sabbir Verified Test" → save → success toast
+  → name updates immediately in both the Account card and the header
+  avatar (proving the `router.invalidate()` refresh works), **survives a
+  full hard-navigation reload** (proving real server-side persistence, not
+  optimistic UI state), zero console errors throughout. Cross-client
+  isolation independently confirmed via a read-only DB check: the edited
+  user's `user_profiles.full_name` changed and *only* that row changed —
+  the other login on the very same client (CL-0002) and the login on a
+  different client (CL-0003) were both byte-identical to before. The
+  `PROFILE_UPDATED` audit row was also inspected directly and matches
+  exactly (`entity_id` = the editing user, correct `actor_user_id`, correct
+  `metadata.source`). The test account's name was deliberately left as
+  "Sabbir Verified Test" rather than reverted, per instruction.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

@@ -6,6 +6,23 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-08-20
+
+**Closed the spec §9 profile-editing gap** — `/portal/profile` was a
+hardcoded "later phase" stub with no write capability. Clients can now
+edit their display name via an "Edit" button on the Account card. New,
+dedicated `updateMyProfileFn` (not a relaxed call into the admin-side
+login-edit fn, since that one force-confirms email changes with no
+verification — unsafe to expose to self-service); this one only touches
+`full_name`, scoped entirely to the caller's own session. Email editing is
+explicitly out of scope for now. Verified end-to-end with a real headless
+browser session against a real client login and the live Supabase
+project (Playwright installed on demand for this, then removed again;
+`package.json` untouched) — edited the name, saw the success toast and the
+header update immediately, reloaded the page to confirm it actually
+persisted server-side, and separately confirmed via the database that no
+other login (including another one on the very same client) was touched.
+
 ## 2026-08-19
 
 **Confirmed migration `20260723000011_ad_accounts_external_id_unique.sql`

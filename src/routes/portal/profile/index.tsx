@@ -1,8 +1,18 @@
+import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
+import { Pencil } from 'lucide-react'
 import { activeMemberships } from '@/lib/auth/types'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { EditProfileDialog } from '@/components/client/edit-profile-dialog'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 
 export const Route = createFileRoute('/portal/profile/')({
   component: ProfilePage,
@@ -20,6 +30,7 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 function ProfilePage() {
   const { user } = Route.useRouteContext()
   const memberships = activeMemberships(user)
+  const [editOpen, setEditOpen] = useState(false)
 
   return (
     <div>
@@ -29,6 +40,16 @@ function ProfilePage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Account</CardTitle>
+            <CardAction>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditOpen(true)}
+              >
+                <Pencil className="size-4" />
+                Edit
+              </Button>
+            </CardAction>
           </CardHeader>
           <CardContent>
             <dl className="divide-y">
@@ -62,8 +83,14 @@ function ProfilePage() {
       </div>
 
       <p className="mt-4 text-xs text-muted-foreground">
-        Editing profile details will be enabled in a later phase.
+        Email changes aren't supported here yet.
       </p>
+
+      <EditProfileDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        currentName={user.fullName}
+      />
     </div>
   )
 }
