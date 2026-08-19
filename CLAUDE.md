@@ -481,10 +481,9 @@ bug fixes, and anything else that isn't a whole new named feature.
   them** — `TRUNCATE ... CASCADE` on `clients` cascades into
   `client_employees` (FK reference) but `employees` itself has no such FK,
   so employee rows survive a reset while every one of their client
-  assignments doesn't, leaving them orphaned/"Unassigned". Owner's call:
-  leave this as-is for now rather than fix `reset_all_data()` to also
-  clear `employees` — noted here so a future session doesn't have to
-  rediscover it.
+  assignments doesn't, leaving them orphaned/"Unassigned". Left as-is at
+  the time; later fixed — see the `reset_all_data() now clears employees`
+  entry below.
 - **"Fetch" button on the ad account detail page (post-Phase-8 addition):
   done, pending owner review** — a visible page-header button (matching
   the list page's "Refresh"), refetches everything shown on the page in
@@ -604,6 +603,19 @@ bug fixes, and anything else that isn't a whole new named feature.
   clients with approval history: `CL-0002` (7 approved requests across 4
   accounts) and `CL-0003` (3 approved requests, one account) — correct
   accounts, amounts, and formatted dates on every row.
+- **`reset_all_data()` now clears employees too (post-Phase-8 addition):
+  pending owner review, migration NOT YET APPLIED to the live project** —
+  closes the orphaning gap documented above in the Employees+Delete entry.
+  Migration `20260723000014_reset_includes_employees.sql`
+  (`create or replace function`, same file pattern as the original
+  `…0008_reset_function.sql`) adds `public.employees` to the `TRUNCATE …
+  CASCADE` list (`client_employees` already cascaded correctly via its FK
+  to `clients`; only `employees` itself, which has no such FK, was
+  surviving) and resets `employee_code_seq` alongside the other document
+  counters. `ResetDataDialog`'s confirmation text updated to mention
+  employees. **Owner must apply this migration via the SQL editor or
+  `supabase db push` before the next "Clear all data" run** — no DB
+  connection is available in this dev environment to apply it directly.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

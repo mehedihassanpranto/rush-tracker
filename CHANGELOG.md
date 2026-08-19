@@ -122,6 +122,13 @@ instruction. Verified live against both real clients with approval
 history (7 and 3 requests respectively) — accounts, amounts, and dates all
 correct.
 
+**Fixed the `reset_all_data()` orphaned-employees gap** (documented as a
+known issue on 2026-08-17): "Clear all data" now also truncates `employees`
+(migration `20260723000014`) and resets its code counter, instead of
+leaving employee rows behind with dead client links. Dialog copy updated to
+mention employees. **Migration not yet applied to the live project** —
+needs to be run before the next reset.
+
 ## 2026-08-17
 
 **Added a "Fetch" button** to the ad account detail page header — refetches
