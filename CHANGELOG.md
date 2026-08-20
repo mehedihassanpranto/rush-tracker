@@ -23,6 +23,40 @@ header update immediately, reloaded the page to confirm it actually
 persisted server-side, and separately confirmed via the database that no
 other login (including another one on the very same client) was touched.
 
+**Added DB-backed integration settings** — a new "Meta integration" card
+on `/admin/settings` where the three Meta credentials
+(`META_SYSTEM_USER_TOKEN`, `META_BUSINESS_ID`, `META_API_VERSION`) can be
+set/updated live, no redeploy needed. This exists because environment
+variables genuinely can't be live-updated from application code on any
+serverless platform — they're baked in per deployment. New `app_settings`
+table (zero RLS access for authenticated users, service-role only — this
+can hold a live secret) with env vars kept as the automatic fallback when
+nothing's set in the DB, so nothing breaks for anyone who hasn't touched
+this yet. New sensitive `integrations.manage` permission (SUPER_ADMIN by
+default). The token is masked (last 4 chars) everywhere it's shown and
+never round-trips to the browser after saving; a blank field on save means
+"leave unchanged," never "clear it." **Migration not yet applied to the
+live project** — confirmed live that the current pre-migration state falls
+back to env vars cleanly with zero disruption to existing Meta features in
+the meantime (the DB lookup's error is swallowed by design, logged, not
+thrown). Updated one existing test (`permissions.test.ts`'s hardcoded
+sensitive-permission count) — full suite (45 tests), typecheck, and build
+all pass.
+
+**Confirmed the integration-settings migration is live**, and fixed a real
+bug the owner caught from a screenshot of the working page: the Business
+Portfolio ID field showed autofilled with the owner's own email —
+`autocomplete="off"` doesn't reliably stop this in Chrome. Saving it
+unnoticed would have overwritten a working Business ID with garbage.
+Added format validation (digits-only for the business ID, version-shaped
+for the API version) as a hard backstop that rejects this regardless of
+what the browser autofills, verified directly against the exact
+autofilled value from the screenshot. Also caught and fixed a latent,
+unrelated bug this surfaced: the original schema's `.min(1).optional()`
+per field would have rejected a normal blank "leave unchanged" submit
+outright, since `.optional()` only skips validation for `undefined`, not
+an empty string.
+
 ## 2026-08-19
 
 **Confirmed migration `20260723000011_ad_accounts_external_id_unique.sql`

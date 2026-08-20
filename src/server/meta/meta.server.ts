@@ -1,5 +1,6 @@
 import { createServerOnlyFn } from '@tanstack/react-start'
 import { getServerEnv } from '@/lib/env/env.server'
+import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { dec } from '@/lib/money/money'
 
 /**
@@ -89,16 +90,46 @@ class MetaNotConfiguredError extends Error {
   }
 }
 
-const getMetaConfig = createServerOnlyFn((): MetaConfig => {
+/** app_settings keys — must match src/server/settings/settings.fns.ts. */
+const SETTING_KEYS = {
+  TOKEN: 'META_SYSTEM_USER_TOKEN',
+  BUSINESS_ID: 'META_BUSINESS_ID',
+  API_VERSION: 'META_API_VERSION',
+} as const
+
+/**
+ * Resolves Meta config from the database first (see the app_settings admin
+ * Settings screen, `settings.fns.ts`), falling back to env vars per-field
+ * when a key has no row. DB-backed so an admin can update credentials
+ * without a redeploy — env vars alone can't be live-updated on Vercel
+ * (baked in per-deployment). Queried fresh on every call rather than
+ * process-lifetime cached (unlike getServerEnv()) since the whole point is
+ * picking up a change immediately; callers resolve this once per operation
+ * and thread the result through, rather than re-querying per Graph API call.
+ */
+const getMetaConfig = createServerOnlyFn(async (): Promise<MetaConfig> => {
   const env = getServerEnv()
-  if (!env.META_SYSTEM_USER_TOKEN || !env.META_BUSINESS_ID) {
+  const admin = getSupabaseAdminClient()
+  const { data, error } = await admin
+    .from('app_settings')
+    .select('key, value')
+    .in('key', Object.values(SETTING_KEYS))
+  // Best-effort: a query failure (e.g. the app_settings migration hasn't
+  // been applied to this project yet) falls back to env vars rather than
+  // breaking every Meta feature — but still log it, since a genuine DB
+  // outage should be visible somewhere.
+  if (error) console.error('[meta] app_settings lookup failed, falling back to env vars:', error.message)
+  const db = new Map((data ?? []).map((r) => [r.key as string, r.value as string | null]))
+
+  const token = db.get(SETTING_KEYS.TOKEN) || env.META_SYSTEM_USER_TOKEN
+  const businessId = db.get(SETTING_KEYS.BUSINESS_ID) || env.META_BUSINESS_ID
+  const apiVersion =
+    db.get(SETTING_KEYS.API_VERSION) || env.META_API_VERSION
+
+  if (!token || !businessId) {
     throw new MetaNotConfiguredError()
   }
-  return {
-    token: env.META_SYSTEM_USER_TOKEN,
-    businessId: env.META_BUSINESS_ID,
-    apiVersion: env.META_API_VERSION,
-  }
+  return { token, businessId, apiVersion }
 })
 
 interface GraphErrorBody {
@@ -108,13 +139,13 @@ interface GraphErrorBody {
 async function graphGet<T>(
   path: string,
   params: Record<string, string>,
+  config: MetaConfig,
 ): Promise<T> {
-  const { token, apiVersion } = getMetaConfig()
-  const url = new URL(`https://graph.facebook.com/${apiVersion}/${path}`)
+  const url = new URL(`https://graph.facebook.com/${config.apiVersion}/${path}`)
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value)
   }
-  url.searchParams.set('access_token', token)
+  url.searchParams.set('access_token', config.token)
 
   const res = await fetch(url.toString())
   const body = (await res.json()) as GraphErrorBody & Record<string, unknown>
@@ -127,11 +158,11 @@ async function graphGet<T>(
 async function graphPost(
   path: string,
   params: Record<string, string>,
+  config: MetaConfig,
 ): Promise<void> {
-  const { token, apiVersion } = getMetaConfig()
-  const body = new URLSearchParams({ ...params, access_token: token })
+  const body = new URLSearchParams({ ...params, access_token: config.token })
 
-  const res = await fetch(`https://graph.facebook.com/${apiVersion}/${path}`, {
+  const res = await fetch(`https://graph.facebook.com/${config.apiVersion}/${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
@@ -172,12 +203,15 @@ const AD_ACCOUNT_FIELDS =
 export async function fetchMetaAdAccount(
   externalAccountId: string,
 ): Promise<MetaAdAccountSummary> {
+  const config = await getMetaConfig()
   const actId = externalAccountId.startsWith('act_')
     ? externalAccountId
     : `act_${externalAccountId}`
-  const raw = await graphGet<Parameters<typeof toSummary>[0]>(actId, {
-    fields: AD_ACCOUNT_FIELDS,
-  })
+  const raw = await graphGet<Parameters<typeof toSummary>[0]>(
+    actId,
+    { fields: AD_ACCOUNT_FIELDS },
+    config,
+  )
   return toSummary(raw)
 }
 
@@ -186,6 +220,7 @@ const MAX_PAGES = 10
 async function listEdge(
   businessId: string,
   edge: 'owned_ad_accounts' | 'client_ad_accounts',
+  config: MetaConfig,
 ): Promise<Array<MetaAdAccountSummary>> {
   const results: Array<MetaAdAccountSummary> = []
   let after: string | undefined
@@ -198,7 +233,7 @@ async function listEdge(
     const body = await graphGet<{
       data: Array<Parameters<typeof toSummary>[0]>
       paging?: { cursors?: { after?: string }; next?: string }
-    }>(`${businessId}/${edge}`, params)
+    }>(`${businessId}/${edge}`, params, config)
     results.push(...body.data.map(toSummary))
     after = body.paging?.next ? body.paging.cursors?.after : undefined
     if (!after) break
@@ -216,10 +251,10 @@ async function listEdge(
 export async function listMetaBusinessAdAccounts(): Promise<
   Array<MetaAdAccountSummary>
 > {
-  const { businessId } = getMetaConfig()
+  const config = await getMetaConfig()
   const [owned, client] = await Promise.all([
-    listEdge(businessId, 'owned_ad_accounts'),
-    listEdge(businessId, 'client_ad_accounts'),
+    listEdge(config.businessId, 'owned_ad_accounts', config),
+    listEdge(config.businessId, 'client_ad_accounts', config),
   ])
   const byId = new Map<string, MetaAdAccountSummary>()
   for (const account of [...owned, ...client]) {
@@ -246,8 +281,9 @@ export async function updateMetaAdAccountSpendCap(
   externalAccountId: string,
   spendCapMajorUnits: string,
 ): Promise<void> {
+  const config = await getMetaConfig()
   const actId = externalAccountId.startsWith('act_')
     ? externalAccountId
     : `act_${externalAccountId}`
-  await graphPost(actId, { spend_cap: spendCapMajorUnits })
+  await graphPost(actId, { spend_cap: spendCapMajorUnits }, config)
 }

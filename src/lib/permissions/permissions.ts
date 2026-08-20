@@ -36,6 +36,8 @@ export const PERMISSIONS = {
 
   EMPLOYEES_VIEW: 'employees.view',
   EMPLOYEES_MANAGE: 'employees.manage',
+
+  INTEGRATIONS_MANAGE: 'integrations.manage',
 } as const
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
@@ -48,6 +50,7 @@ export const SENSITIVE_PERMISSIONS: Array<PermissionKey> = [
   PERMISSIONS.ADJUSTMENTS_CREATE,
   PERMISSIONS.EXCHANGE_RATE_MANAGE,
   PERMISSIONS.USERS_MANAGE,
+  PERMISSIONS.INTEGRATIONS_MANAGE,
 ]
 
 /** Human-readable labels for the user-management UI. */
@@ -74,4 +77,5 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
   'audit_logs.view': 'View audit logs',
   'employees.view': 'View employees',
   'employees.manage': 'Manage employees',
+  'integrations.manage': 'Manage integration credentials',
 }

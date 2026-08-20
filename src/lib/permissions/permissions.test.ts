@@ -16,12 +16,13 @@ describe('permission catalog (spec §8)', () => {
     )
   })
 
-  it('marks the three sensitive permissions and nothing else', () => {
+  it('marks the four sensitive permissions and nothing else', () => {
     expect([...SENSITIVE_PERMISSIONS].sort()).toEqual(
       [
         PERMISSIONS.ADJUSTMENTS_CREATE,
         PERMISSIONS.EXCHANGE_RATE_MANAGE,
         PERMISSIONS.USERS_MANAGE,
+        PERMISSIONS.INTEGRATIONS_MANAGE,
       ].sort(),
     )
   })

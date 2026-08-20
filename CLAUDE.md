@@ -679,6 +679,85 @@ bug fixes, and anything else that isn't a whole new named feature.
   exactly (`entity_id` = the editing user, correct `actor_user_id`, correct
   `metadata.source`). The test account's name was deliberately left as
   "Sabbir Verified Test" rather than reverted, per instruction.
+- **DB-backed integration settings (post-Phase-8 addition): done, pending
+  owner review, migration NOT YET APPLIED to the live project** — closes a
+  real gap: environment variables can't be live-updated from application
+  code on any serverless platform (Vercel included) — they're baked in per
+  deployment, only take effect on the next build/cold start. So "add a
+  Settings-page field that updates the environment" isn't literally
+  buildable; the actual fix is to move the value out of env vars into the
+  database, which genuinely can be updated live with no redeploy. Scope:
+  the three Meta credentials (`META_SYSTEM_USER_TOKEN`, `META_BUSINESS_ID`,
+  `META_API_VERSION`).
+  New table `app_settings` (migration `20260723000015_app_settings.sql`,
+  key/value, `updated_by`/`updated_at`) — deliberately **zero RLS policies**
+  for `authenticated`, unlike every other table in this app (which get
+  SELECT-only policies): this table can hold a live secret (the Meta System
+  User token), so it must only ever be reachable through the service-role
+  server layer, never queried directly from an authenticated browser
+  session. New sensitive permission `integrations.manage` (SUPER_ADMIN by
+  default, same treatment as `exchange_rate.manage`/`users.manage` — an
+  ADMIN can still be granted it individually via the existing Users
+  screen).
+  `src/server/meta/meta.server.ts`'s `getMetaConfig()` now checks
+  `app_settings` first, falling back to env vars per-field when a key has
+  no DB row — env vars remain the out-of-the-box default, this is additive.
+  Resolved once per top-level operation (`fetchMetaAdAccount`,
+  `listMetaBusinessAdAccounts`, `updateMetaAdAccountSpendCap`) and threaded
+  through to the internal `graphGet`/`graphPost` helpers, rather than
+  re-querying the DB on every low-level Graph API call.
+  **Safe against the migration not being applied yet**: the `app_settings`
+  query's error is deliberately not thrown — a missing-table error (or any
+  other query failure) falls straight through to the env-var fallback,
+  logged via `console.error` for visibility rather than breaking every Meta
+  feature. Verified live against the actual current (pre-migration) project
+  state: `app_settings` query returns `PGRST205 — Could not find the table
+  'public.app_settings'`, confirming this exact fallback path is what's
+  running right now, with zero change to existing Meta behavior.
+  New `src/server/settings/settings.fns.ts`: `getIntegrationSettingsFn`
+  returns per-field status (`configured`, `source: 'database' | 'env' |
+  'unset'`, and a `preview` — masked to the last 4 characters for the
+  token, shown in full for business id / API version since those aren't
+  credentials) — the raw token is never sent to the browser, not even
+  after saving. `updateIntegrationSettingsFn` upserts only the fields
+  actually provided (a blank field means "leave unchanged," since the form
+  never prefills the real current value); `clearIntegrationSettingFn`
+  deletes one field's DB row, reverting it to the env-var default. Neither
+  write logs the raw secret value in the audit trail (`INTEGRATION_
+  SETTINGS_UPDATED`/`_CLEARED`, `entityType: 'APP_SETTINGS'`) — only which
+  field changed. UI: a new "Meta integration" card at the top of
+  `/admin/settings` (above the existing Danger Zone), gated on
+  `integrations.manage`, showing each field's status/source/masked preview
+  with a "Clear override" action, and an "Edit" button opening
+  `EditIntegrationSettingsDialog` (RHF + Zod, all fields optional and
+  always blank on open, mirrors the existing dialog pattern).
+  **Confirmed applied to the live project** — the owner's own screenshot of
+  the working Settings card (real data, correctly labeled "Environment
+  variable" source on all three fields, no error) is what confirmed this,
+  not a check from this dev environment (which still has no DB connection).
+  **Real bug found from that same screenshot and fixed the same session**:
+  the Business Portfolio ID field showed autofilled with the owner's own
+  email address (`mehedi.h.prantoz@gmail.com`) — Chrome's autofill/password-
+  manager heuristics routinely ignore `autocomplete="off"` and fill a
+  saved value into whatever text field sits near a password field; saving
+  that unnoticed would have silently overwritten a working Business ID
+  with garbage. Fixed two ways: (1) format validation added to
+  `meta_business_id` (digits only) and `meta_api_version` (`v\d+(\.\d+)?`)
+  in `integrationSettingsUpdateSchema` — a hard backstop that rejects
+  autofilled garbage regardless of what the browser does, verified
+  directly against the exact autofilled value from the screenshot (now
+  rejected) alongside blank-submit and valid-value cases (still accepted).
+  This also surfaced and fixed a **latent, unrelated bug**: the original
+  schema used `.min(1).optional()` per field, but `.optional()` only skips
+  validation for `undefined` — an actually-submitted empty string (the
+  form's normal "leave unchanged" state) would have failed `.min(1)` and
+  blocked the form from submitting at all whenever any field was left
+  blank; switched to `z.union([z.literal(''), <real-value-schema>]).optional()`
+  for all three fields. (2) Swapped `autocomplete="off"` for the
+  higher-success-rate tricks browsers actually respect:
+  `autocomplete="new-password"` on the token field,
+  `autocomplete="one-time-code"` on the other two, plus `autocomplete="off"`
+  on the `<form>` itself.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

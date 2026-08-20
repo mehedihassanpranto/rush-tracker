@@ -2,10 +2,13 @@ import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { TriangleAlert } from 'lucide-react'
 
+import { hasPermission } from '@/lib/auth/types'
+import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { PageHeader } from '@/components/shared/page-header'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ResetDataDialog } from '@/components/admin/settings/reset-data-dialog'
+import { IntegrationSettingsCard } from '@/components/admin/settings/integration-settings-card'
 
 export const Route = createFileRoute('/admin/settings/')({
   component: SettingsPage,
@@ -14,6 +17,7 @@ export const Route = createFileRoute('/admin/settings/')({
 function SettingsPage() {
   const { user } = Route.useRouteContext()
   const isSuperAdmin = user.role === 'SUPER_ADMIN'
+  const canManageIntegrations = hasPermission(user, PERMISSIONS.INTEGRATIONS_MANAGE)
   const [resetOpen, setResetOpen] = useState(false)
 
   return (
@@ -22,6 +26,8 @@ function SettingsPage() {
         title="Settings"
         description="System configuration. The USD rate is now set per client, on each client's profile."
       />
+
+      {canManageIntegrations && <IntegrationSettingsCard />}
 
       {isSuperAdmin && (
         <div className="sm:max-w-lg">
