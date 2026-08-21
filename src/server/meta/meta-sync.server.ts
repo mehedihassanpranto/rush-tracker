@@ -20,6 +20,41 @@ import { listMetaBusinessAdAccounts } from '@/server/meta/meta.server'
  *   surfaced via notification; an admin imports them explicitly via the
  *   existing "Import from Meta" dialog.
  */
+/**
+ * Renames one linked account's `name` to match Meta's live value, if it
+ * actually differs — the single-account building block shared by the bulk
+ * cron sync below and the manual per-account/per-list "Fetch"/"Refresh"
+ * actions (meta.fns.ts's syncAdAccountNameFn). Same safe, non-financial
+ * auto-apply semantics either way; only the audit `metadata.source` and
+ * `actorUserId` differ (system vs. a signed-in admin).
+ */
+export async function syncAdAccountName(
+  accountId: string,
+  currentName: string,
+  metaName: string | null,
+  actorUserId: string | null,
+  source: 'META_SYNC' | 'META_MANUAL_SYNC',
+): Promise<{ renamed: boolean; newName?: string }> {
+  if (!metaName || metaName === currentName) return { renamed: false }
+  const admin = getSupabaseAdminClient()
+  const { error } = await admin
+    .from('ad_accounts')
+    .update({ name: metaName })
+    .eq('id', accountId)
+  if (error) throw new Error(error.message)
+
+  await writeAudit({
+    actorUserId,
+    action: 'AD_ACCOUNT_RENAMED',
+    entityType: 'AD_ACCOUNT',
+    entityId: accountId,
+    oldValues: { name: currentName },
+    newValues: { name: metaName },
+    metadata: { source },
+  })
+  return { renamed: true, newName: metaName }
+}
+
 export interface MetaSyncResult {
   checked: number
   renamed: Array<{ id: string; account_code: string; old_name: string; new_name: string }>
@@ -49,30 +84,24 @@ export async function syncMetaAdAccounts(): Promise<MetaSyncResult> {
       newAvailable++
       continue
     }
-    if (meta.name && meta.name !== row.name) {
-      const { error: updateError } = await admin
-        .from('ad_accounts')
-        .update({ name: meta.name })
-        .eq('id', row.id)
-      if (updateError) {
-        console.error('[meta-sync] failed to rename', row.id, updateError)
-        continue
+    try {
+      const result = await syncAdAccountName(
+        row.id,
+        row.name,
+        meta.name,
+        null, // system-initiated, no signed-in actor
+        'META_SYNC',
+      )
+      if (result.renamed && result.newName) {
+        renamed.push({
+          id: row.id,
+          account_code: row.account_code,
+          old_name: row.name,
+          new_name: result.newName,
+        })
       }
-      await writeAudit({
-        actorUserId: null, // system-initiated, no signed-in actor
-        action: 'AD_ACCOUNT_RENAMED',
-        entityType: 'AD_ACCOUNT',
-        entityId: row.id,
-        oldValues: { name: row.name },
-        newValues: { name: meta.name },
-        metadata: { source: 'META_SYNC' },
-      })
-      renamed.push({
-        id: row.id,
-        account_code: row.account_code,
-        old_name: row.name,
-        new_name: meta.name,
-      })
+    } catch (err) {
+      console.error('[meta-sync] failed to rename', row.id, err)
     }
   }
 

@@ -758,6 +758,51 @@ bug fixes, and anything else that isn't a whole new named feature.
   `autocomplete="new-password"` on the token field,
   `autocomplete="one-time-code"` on the other two, plus `autocomplete="off"`
   on the `<form>` itself.
+- **"Fetch"/"Refresh" now also sync the ad account name from Meta
+  (post-Phase-8 addition): done, pending owner review** — closes a real gap
+  the owner reported: renaming an account in Meta Business Manager and then
+  clicking "Fetch" on the detail page (or "Refresh" on the list page) did
+  nothing to our stored name. That's because name auto-sync only ever
+  existed in the once-daily background cron (`meta-sync.server.ts`'s
+  `syncMetaAdAccounts()`) — no manual action applied it, and the "Meta live
+  data" card doesn't even display Meta's name to notice the mismatch by eye.
+  Extracted the cron's inline rename-if-different logic into a shared,
+  exported `syncAdAccountName(accountId, currentName, metaName, actorUserId,
+  source)` in `meta-sync.server.ts` (same safe, non-financial, no-
+  confirmation-needed semantics as the cron's own auto-rename — renaming
+  carries no billing risk, unlike spend-cap writes). New
+  `syncAdAccountNameFn` (`meta.fns.ts`, `AD_ACCOUNTS_MANAGE`) takes the
+  already-fetched Meta name from the caller rather than re-fetching it
+  server-side (avoids a redundant Graph API call on every Fetch click; no
+  worse a trust boundary than the existing manual "Rename" dialog, which
+  already lets an admin set an arbitrary name with zero Meta verification).
+  Audited as `AD_ACCOUNT_RENAMED` with a new `metadata.source:
+  'META_MANUAL_SYNC'`, distinct from the cron's `'META_SYNC'` so the audit
+  trail can tell the two triggers apart.
+  Wired into both existing entry points: the ad account detail page's
+  "Fetch" button (`$accountId.tsx`) now compares the just-refetched live
+  Meta name against the just-refetched stored name and applies the sync if
+  they differ, refetching the account again afterward so the new name shows
+  immediately (page title included) — success toast distinguishes a plain
+  fetch from one that also renamed. The ad accounts list page's "Refresh"
+  button (`index.tsx`) does the bulk equivalent — compares every linked
+  account's Meta name against its stored name in one pass, syncs all
+  mismatches in parallel, and reports how many were renamed.
+  **Verified live** against a real linked account (`ADA-0026`, external id
+  `963630549557499`): confirmed its live Meta name still matched our stored
+  name (`"DF IT - Darun Food 03"`), so — to actually exercise the fix
+  rather than a no-op — temporarily set our own stored name to a stale
+  placeholder (a safe, local-only DB change; nothing was renamed on Meta's
+  side), then ran the sync logic against the account's real live Meta data:
+  correctly detected the mismatch, restored the name to
+  `"DF IT - Darun Food 03"`, and wrote a correct `AD_ACCOUNT_RENAMED` /
+  `metadata.source: 'META_MANUAL_SYNC'` audit row. (Couldn't import
+  `meta-sync.server.ts` directly into a standalone script for this — it
+  depends on `import.meta.env`, which only exists inside the Vite/TanStack
+  Start runtime — so the DB-write half of the function was exercised via an
+  exact mirror of its body instead; the comparison/routing half was already
+  proven correct via the real `fetchMetaAdAccount` Graph API call earlier in
+  the same check.)
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

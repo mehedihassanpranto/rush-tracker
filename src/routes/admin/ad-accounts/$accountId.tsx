@@ -22,7 +22,11 @@ import {
   setAdAccountStatusFn,
 } from '@/server/ad-accounts/ad-account.fns'
 import { listAdAccountUsageFn } from '@/server/limit-requests/limit-request.fns'
-import { fetchMetaAdAccountFn, retryMetaSpendCapSyncFn } from '@/server/meta/meta.fns'
+import {
+  fetchMetaAdAccountFn,
+  retryMetaSpendCapSyncFn,
+  syncAdAccountNameFn,
+} from '@/server/meta/meta.fns'
 import { dec, formatBdt, formatCurrencyAmount, formatUsd } from '@/lib/money/money'
 import { LOW_BALANCE_THRESHOLD } from '@/lib/meta/thresholds'
 import { hasPermission } from '@/lib/auth/types'
@@ -99,6 +103,7 @@ function AccountDetailPage() {
   const setStatus = useServerFn(setAdAccountStatusFn)
   const fetchMetaAccount = useServerFn(fetchMetaAdAccountFn)
   const retrySpendCapSync = useServerFn(retryMetaSpendCapSyncFn)
+  const syncAdAccountName = useServerFn(syncAdAccountNameFn)
 
   const [renameOpen, setRenameOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -162,7 +167,10 @@ function AccountDetailPage() {
   // stored fields, assignment history, usage history, and live Meta data
   // together. Meta failure (e.g. not configured, or this account has no
   // external id) is reported separately rather than failing the whole
-  // action, same pattern as the list page's Refresh button.
+  // action, same pattern as the list page's Refresh button. If Meta's live
+  // name differs from our stored name, applies it — the daily background
+  // sync already does this automatically once a day; this makes it happen
+  // immediately on a manual fetch too, instead of the admin having to wait.
   async function handleFetchAll() {
     const results = await Promise.all([
       refetchAccount(),
@@ -172,15 +180,36 @@ function AccountDetailPage() {
         ? refetchMetaLive()
         : Promise.resolve(null),
     ])
+    const accountResult = results[0]
     const metaResult = results[3]
     if (metaResult && metaResult.isError) {
       toast.warning('Fetched, but live Meta data failed to load', {
         description:
           metaResult.error instanceof Error ? metaResult.error.message : undefined,
       })
-    } else {
-      toast.success('Fetched latest data')
+      return
     }
+
+    const liveName = metaResult?.data?.name
+    const storedName = accountResult.data?.name
+    if (liveName && storedName && liveName !== storedName) {
+      try {
+        const syncResult = await syncAdAccountName({
+          data: { id: accountId, meta_name: liveName },
+        })
+        if (syncResult.renamed) {
+          await refetchAccount()
+          toast.success(`Fetched latest data — renamed to "${liveName}" to match Meta`)
+          return
+        }
+      } catch (err) {
+        toast.warning('Fetched latest data, but renaming to match Meta failed', {
+          description: err instanceof Error ? err.message : undefined,
+        })
+        return
+      }
+    }
+    toast.success('Fetched latest data')
   }
 
   const statusMutation = useMutation({

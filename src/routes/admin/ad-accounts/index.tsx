@@ -6,7 +6,7 @@ import { Bell, Download, Megaphone, Plus, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { listAdAccountsFn } from '@/server/ad-accounts/ad-account.fns'
-import { listMetaBusinessAdAccountsFn } from '@/server/meta/meta.fns'
+import { listMetaBusinessAdAccountsFn, syncAdAccountNameFn } from '@/server/meta/meta.fns'
 import { dec, formatBdt, formatCurrencyAmount, formatUsd } from '@/lib/money/money'
 import { LOW_BALANCE_THRESHOLD, META_DUE_THRESHOLD } from '@/lib/meta/thresholds'
 import { hasPermission } from '@/lib/auth/types'
@@ -36,6 +36,7 @@ function AdAccountsPage() {
   const canManageMeta = hasPermission(user, PERMISSIONS.AD_ACCOUNTS_MANAGE)
   const listAccounts = useServerFn(listAdAccountsFn)
   const listMetaAccounts = useServerFn(listMetaBusinessAdAccountsFn)
+  const syncAdAccountName = useServerFn(syncAdAccountNameFn)
   const [createOpen, setCreateOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
 
@@ -70,13 +71,56 @@ function AdAccountsPage() {
 
   const refreshing = accountsFetching || metaFetching
 
+  // If Meta's live name differs from our stored name for any linked
+  // account, apply it — same safe, non-financial auto-rename the daily
+  // background sync already does, just immediate instead of once a day.
+  async function syncRenamedAccounts(
+    accounts: Array<{ id: string; name: string }>,
+    metaAccounts: Array<{ linked_account_id: string | null; name: string }>,
+  ): Promise<number> {
+    const nameByAccountId = new Map(accounts.map((a) => [a.id, a.name]))
+    const mismatches = metaAccounts.filter(
+      (m) =>
+        m.linked_account_id &&
+        m.name &&
+        nameByAccountId.get(m.linked_account_id) !== m.name,
+    )
+    if (mismatches.length === 0) return 0
+
+    const results = await Promise.allSettled(
+      mismatches.map((m) =>
+        syncAdAccountName({
+          data: { id: m.linked_account_id!, meta_name: m.name },
+        }),
+      ),
+    )
+    return results.filter(
+      (r) => r.status === 'fulfilled' && r.value.renamed,
+    ).length
+  }
+
   async function handleRefresh() {
-    const [, metaResult] = await Promise.all([refetchAccounts(), refetchMeta()])
+    const [accountsResult, metaResult] = await Promise.all([
+      refetchAccounts(),
+      refetchMeta(),
+    ])
     if (metaResult.isError) {
       toast.warning('Refreshed, but live Meta data failed to load', {
         description:
           metaResult.error instanceof Error ? metaResult.error.message : undefined,
       })
+      return
+    }
+
+    const renamedCount = await syncRenamedAccounts(
+      accountsResult.data ?? [],
+      metaResult.data ?? [],
+    )
+    if (renamedCount > 0) {
+      await refetchAccounts()
+      toast.success(
+        `Refreshed from Meta — ${renamedCount} account name${renamedCount === 1 ? '' : 's'} updated to match Meta`,
+      )
     } else {
       toast.success('Refreshed from Meta')
     }

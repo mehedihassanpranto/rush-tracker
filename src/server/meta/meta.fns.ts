@@ -9,6 +9,7 @@ import {
   fetchMetaAdAccountSchema,
   importMetaAdAccountsSchema,
   retryMetaSpendCapSyncSchema,
+  syncAdAccountNameSchema,
   updateMetaSpendCapSchema,
 } from '@/schemas/meta'
 import {
@@ -17,6 +18,7 @@ import {
   updateMetaAdAccountSpendCap,
 } from '@/server/meta/meta.server'
 import { syncAndPersistAdAccountSpendCap } from '@/server/meta/spend-cap-sync.server'
+import { syncAdAccountName } from '@/server/meta/meta-sync.server'
 import type { MetaAdAccountSummary } from '@/server/meta/meta.server'
 import type { AdAccount } from '@/types/domain'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -66,6 +68,38 @@ export const fetchMetaAdAccountFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<MetaAdAccountSummary> => {
     await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
     return fetchMetaAdAccount(data.external_account_id)
+  })
+
+/**
+ * Applies Meta's live name to a linked account when it differs — the
+ * manual, immediate counterpart to the daily background sync's
+ * auto-rename (meta-sync.server.ts). Same safe, non-financial semantics:
+ * always applies when different, no confirmation needed (unlike spend-cap
+ * writes). Used by the ad account detail page's "Fetch" button and the ad
+ * accounts list page's "Refresh" button once either notices a name
+ * mismatch in the live Meta data they already fetched.
+ */
+export const syncAdAccountNameFn = createServerFn({ method: 'POST' })
+  .validator(syncAdAccountNameSchema)
+  .handler(async ({ data }): Promise<{ renamed: boolean; new_name: string | null }> => {
+    const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
+    const admin = getSupabaseAdminClient()
+
+    const { data: account, error } = await admin
+      .from('ad_accounts')
+      .select('name')
+      .eq('id', data.id)
+      .single()
+    if (error || !account) throw new Error('Ad account not found')
+
+    const result = await syncAdAccountName(
+      data.id,
+      (account as { name: string }).name,
+      data.meta_name,
+      actor.id,
+      'META_MANUAL_SYNC',
+    )
+    return { renamed: result.renamed, new_name: result.newName ?? null }
   })
 
 /** List every ad account in the connected Business Portfolio, annotated with

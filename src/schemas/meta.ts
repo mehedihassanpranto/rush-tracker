@@ -45,6 +45,16 @@ export const retryMetaSpendCapSyncSchema = z.object({
   id: z.uuid(),
 })
 
+export const syncAdAccountNameSchema = z.object({
+  id: z.uuid(),
+  // The caller already fetched this live (fetchMetaAdAccountFn /
+  // listMetaBusinessAdAccountsFn) — passed through rather than
+  // re-fetched here to avoid a redundant Graph API call. No worse a trust
+  // boundary than the existing manual "Rename" dialog, which lets an admin
+  // set an arbitrary name outright with zero Meta verification at all.
+  meta_name: z.string().trim().min(1),
+})
+
 export type FetchMetaAdAccountInput = z.infer<typeof fetchMetaAdAccountSchema>
 export type ImportMetaAdAccountsInput = z.infer<
   typeof importMetaAdAccountsSchema
@@ -54,3 +64,4 @@ export type UpdateMetaSpendCapInput = z.infer<typeof updateMetaSpendCapSchema>
 export type RetryMetaSpendCapSyncInput = z.infer<
   typeof retryMetaSpendCapSyncSchema
 >
+export type SyncAdAccountNameInput = z.infer<typeof syncAdAccountNameSchema>

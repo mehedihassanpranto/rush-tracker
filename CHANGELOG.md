@@ -6,6 +6,22 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-08-21
+
+**Fixed: renaming an account in Meta didn't update it here on "Fetch"** —
+name auto-sync only ever existed in the once-daily background cron; no
+manual action applied it, and the Meta live-data card doesn't even show
+Meta's name to notice a mismatch by eye. Extracted the cron's rename logic
+into a shared function and wired it into both the ad account detail page's
+"Fetch" button and the ad accounts list page's "Refresh" button — either
+one now applies Meta's live name immediately when it differs, same safe
+non-financial auto-apply the cron already does (no confirmation needed).
+Audited with a distinct `metadata.source` so manual vs. cron renames are
+still tellable apart in the audit trail. Verified live against a real
+linked account: temporarily set its stored name to a stale placeholder
+(local DB only, nothing touched on Meta's side), ran the sync, confirmed
+it correctly restored the real name and wrote the right audit row.
+
 ## 2026-08-20
 
 **Closed the spec §9 profile-editing gap** — `/portal/profile` was a
