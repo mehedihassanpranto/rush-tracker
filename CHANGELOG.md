@@ -22,6 +22,16 @@ linked account: temporarily set its stored name to a stale placeholder
 (local DB only, nothing touched on Meta's side), ran the sync, confirmed
 it correctly restored the real name and wrote the right audit row.
 
+**Added Current balance / Per USD / Remaining / Meta Due columns** to the
+client detail page's Ad Accounts tab, matching what the admin ad accounts
+list page already shows. Three of the four needed no new query — the
+client's due and each account's own USD rate were already in the existing
+data, just not rendered as columns. Remaining/Meta Due reuse the same bulk
+Meta fetch and red-highlight-when-critical logic already used on the admin
+list page. Verified live against a real client's data. Also added the
+same low-remaining/high-Meta-Due red bell icons next to the account name
+that the admin list page has, for full parity between the two views.
+
 ## 2026-08-20
 
 **Closed the spec §9 profile-editing gap** — `/portal/profile` was a

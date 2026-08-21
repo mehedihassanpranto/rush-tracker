@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import {
   ArrowLeft,
+  Bell,
   HandCoins,
   MoreHorizontal,
   Pencil,
@@ -30,7 +31,9 @@ import {
   listClientEmployeesFn,
   unassignEmployeeFromClientFn,
 } from '@/server/employees/employee.fns'
-import { formatBdt, formatUsd } from '@/lib/money/money'
+import { listMetaBusinessAdAccountsFn } from '@/server/meta/meta.fns'
+import { dec, formatBdt, formatCurrencyAmount, formatUsd } from '@/lib/money/money'
+import { LOW_BALANCE_THRESHOLD, META_DUE_THRESHOLD } from '@/lib/meta/thresholds'
 import { hasPermission } from '@/lib/auth/types'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { PageHeader } from '@/components/shared/page-header'
@@ -110,10 +113,12 @@ function ClientDetailPage() {
     PERMISSIONS.PAYMENT_REQUESTS_CREATE,
   )
   const canManageEmployees = hasPermission(user, PERMISSIONS.EMPLOYEES_MANAGE)
+  const canManageMeta = hasPermission(user, PERMISSIONS.AD_ACCOUNTS_MANAGE)
 
   const queryClient = useQueryClient()
   const getClient = useServerFn(getClientFn)
   const listAccounts = useServerFn(listClientAccountsFn)
+  const listMetaAccounts = useServerFn(listMetaBusinessAdAccountsFn)
   const listUsers = useServerFn(listClientUsersFn)
   const getFinancials = useServerFn(clientFinancialsFn)
   const listLedger = useServerFn(listClientLedgerFn)
@@ -148,6 +153,36 @@ function ClientDetailPage() {
     queryKey: ['client-accounts', clientId],
     queryFn: () => listAccounts({ data: { client_id: clientId } }),
   })
+
+  // Same bulk Meta fetch that powers the ad accounts list page's
+  // Remaining/Meta Due columns (two Graph API calls total, not one per
+  // row) — errors just mean those columns show '—', never break the page.
+  const { data: metaAccounts } = useQuery({
+    queryKey: ['meta-business-ad-accounts'],
+    queryFn: () => listMetaAccounts(),
+    enabled: canManageMeta,
+    staleTime: 2 * 60 * 1000,
+    retry: false,
+    throwOnError: false,
+  })
+  const balanceByAccountId = new Map<
+    string,
+    { remaining: string | null; low: boolean; metaDue: string | null; metaDueHigh: boolean; currency: string }
+  >()
+  for (const m of metaAccounts ?? []) {
+    if (!m.linked_account_id) continue
+    const isUsd = m.currency === 'USD'
+    const remaining =
+      m.spend_cap != null ? dec(m.spend_cap).minus(dec(m.amount_spent ?? 0)) : null
+    balanceByAccountId.set(m.linked_account_id, {
+      remaining: remaining ? remaining.toFixed(2) : null,
+      low: isUsd && remaining ? remaining.lte(LOW_BALANCE_THRESHOLD) : false,
+      metaDue: m.meta_balance,
+      metaDueHigh:
+        isUsd && m.meta_balance != null && dec(m.meta_balance).gte(META_DUE_THRESHOLD),
+      currency: m.currency ?? '',
+    })
+  }
   const { data: users } = useQuery({
     queryKey: ['client-users', clientId],
     queryFn: () => listUsers({ data: { client_id: clientId } }),
@@ -289,42 +324,85 @@ function ClientDetailPage() {
                 <TableRow>
                   <TableHead>Code</TableHead>
                   <TableHead>Account</TableHead>
+                  <TableHead className="text-right">Current balance</TableHead>
+                  <TableHead className="text-right">Per USD</TableHead>
                   <TableHead className="text-right">Current limit</TableHead>
+                  <TableHead className="text-right">Remaining</TableHead>
+                  <TableHead className="text-right">Meta Due</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {(accounts?.length ?? 0) === 0 && (
                   <TableRow>
-                    <TableCell colSpan={4}>
+                    <TableCell colSpan={8}>
                       <div className="py-8 text-center text-sm text-muted-foreground">
                         No active ad accounts assigned.
                       </div>
                     </TableCell>
                   </TableRow>
                 )}
-                {accounts?.map((a) => (
+                {accounts?.map((a) => {
+                  const balance = balanceByAccountId.get(a.id)
+                  return (
                   <TableRow key={a.id}>
                     <TableCell className="font-mono text-xs">
                       {a.account_code}
                     </TableCell>
                     <TableCell>
-                      <Link
-                        to="/admin/ad-accounts/$accountId"
-                        params={{ accountId: a.id }}
-                        className="font-medium text-primary underline-offset-4 hover:underline"
-                      >
-                        {a.name}
-                      </Link>
+                      <div className="flex items-center gap-1.5">
+                        <Link
+                          to="/admin/ad-accounts/$accountId"
+                          params={{ accountId: a.id }}
+                          className="font-medium text-primary underline-offset-4 hover:underline"
+                        >
+                          {a.name}
+                        </Link>
+                        {balance?.low && (
+                          <span
+                            title={`Low remaining Meta balance: ${balance.remaining} ${balance.currency}`}
+                          >
+                            <Bell className="size-3.5 shrink-0 text-red-600 dark:text-red-400" />
+                          </span>
+                        )}
+                        {balance?.metaDueHigh && (
+                          <span
+                            className="flex shrink-0 -space-x-1.5"
+                            title={`High balance owed to Meta: ${balance.metaDue} ${balance.currency}`}
+                          >
+                            <Bell className="size-3.5 text-red-600 dark:text-red-400" />
+                            <Bell className="size-3.5 text-red-600 dark:text-red-400" />
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {a.current_client
+                        ? formatBdt(a.current_client.current_due)
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {Number(a.usd_rate) > 0 ? `৳${a.usd_rate}` : '—'}
                     </TableCell>
                     <TableCell className="text-right font-medium">
                       {formatUsd(a.current_limit_usd)}
+                    </TableCell>
+                    <TableCell
+                      className={`text-right ${balance?.low ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}
+                    >
+                      {balance ? formatCurrencyAmount(balance.remaining, balance.currency) : '—'}
+                    </TableCell>
+                    <TableCell
+                      className={`text-right ${balance?.metaDueHigh ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}
+                    >
+                      {balance ? formatCurrencyAmount(balance.metaDue, balance.currency) : '—'}
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={a.status} />
                     </TableCell>
                   </TableRow>
-                ))}
+                  )
+                })}
               </TableBody>
             </Table>
           </Card>

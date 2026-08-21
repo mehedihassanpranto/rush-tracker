@@ -803,6 +803,28 @@ bug fixes, and anything else that isn't a whole new named feature.
   exact mirror of its body instead; the comparison/routing half was already
   proven correct via the real `fetchMetaAdAccount` Graph API call earlier in
   the same check.)
+- **Client detail page's Ad Accounts tab: added Current balance / Per USD /
+  Remaining / Meta Due columns (post-Phase-8 addition): done, pending
+  owner review** — that table only had Code / Account / Current limit /
+  Status; the owner asked for the same figures already shown on the admin
+  ad accounts list page. Three of the four needed **no new query** — the
+  existing `listClientAccountsFn` already returns each account's own
+  `usd_rate` (→ Per USD) and the client's ledger-derived due via
+  `client_financials()` on `current_client.current_due` (→ Current
+  balance, same value on every row here since the whole tab is scoped to
+  one client); Current limit was already a column. Only Remaining/Meta Due
+  needed new data — wired in the same bulk `listMetaBusinessAdAccountsFn`
+  fetch (two Graph API calls total) and the identical
+  `balanceByAccountId`/threshold/red-highlight logic already used on the
+  admin list page, gated on `ad_accounts.manage` the same way. Verified
+  live against a real client (CL-0002, "xRush Agency"): usd_rate/
+  current_limit_usd/current_due all resolve correctly for its one active
+  account. Follow-up: added the same single/double red `Bell` next to the
+  account name that the admin ad accounts list page has (low remaining /
+  high Meta Due), reusing the exact same `balance?.low` /
+  `balance?.metaDueHigh` render block — this tab now has full parity with
+  the list page's Meta-derived signals, just scoped to one client's
+  accounts instead of every account.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT
