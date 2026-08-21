@@ -6,6 +6,25 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-08-22
+
+**Security fix: closed a payment-submission race that could bypass the
+overpayment guard** — `submitPaymentFn` checked "amount ≤ due − pending
+payments" with two plain `SELECT`s in application code, then inserted
+afterward with no lock tying the read to the write. Two concurrent
+`submitPaymentFn` calls from the same client (a script, or an unlucky
+double-click) could both read the same pre-insert snapshot and each
+independently pass the guard, letting a client stack multiple full-amount
+`PENDING` payments beyond their real outstanding due — each looking like an
+individually-valid payment with proof attached, risking over-crediting the
+ledger if an admin approved more than one. New `submit_payment` RPC
+(migration `20260723000016_atomic_submit_payment.sql`, `SECURITY DEFINER`,
+row-locks the client via `for update` before computing due/pending and
+inserting) closes the race the same way `approve_payment`/
+`approve_limit_request` already do for their own atomic writes.
+`submitPaymentFn` now just calls the RPC instead of doing the check+insert
+itself; behavior and error messages are unchanged for the normal case.
+
 ## 2026-08-21
 
 **Fixed: renaming an account in Meta didn't update it here on "Fetch"** —

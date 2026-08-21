@@ -825,6 +825,36 @@ bug fixes, and anything else that isn't a whole new named feature.
   `balance?.metaDueHigh` render block — this tab now has full parity with
   the list page's Meta-derived signals, just scoped to one client's
   accounts instead of every account.
+- **Atomic payment submission (post-Phase-8 addition): done, pending owner
+  review, migration NOT YET APPLIED to the live project** — a security
+  audit found `submitPaymentFn`'s overpayment guard (spec §49) was a
+  classic TOCTOU race: it checked "amount ≤ due − pending payments" via
+  two plain `SELECT`s in application code, then inserted the payment
+  afterward with no row lock or transaction tying the read to the write.
+  Two concurrent submissions from the same client (a script, or even an
+  accidental double-click) could both read the same pre-insert snapshot
+  and each independently pass the guard, letting a client stack multiple
+  full-amount `PENDING` payments beyond their real outstanding due — each
+  one individually indistinguishable from a legitimate payment (own proof,
+  own row), risking over-crediting the ledger if an admin approved more
+  than one without noticing they were duplicative. Every *other* atomic
+  multi-step financial write in this app (`approve_payment`,
+  `approve_limit_request`, assign/release/transfer) already goes through a
+  row-locked `SECURITY DEFINER` RPC — this was the one place that should
+  have but didn't. Fixed with a new `submit_payment` RPC (migration
+  `20260723000016_atomic_submit_payment.sql`) that locks the client row
+  (`select ... for update` on `clients`) before computing due/pending and
+  inserting, mirroring `client_financials()`'s debit-minus-credit formula
+  directly rather than calling it (already inside the lock). Raises
+  `OVERPAYMENT: ...` on failure, unwrapped by the existing
+  `friendlyRpcError()` convention (same pattern as `STALE_BASELINE`).
+  `submitPaymentFn` now just calls the RPC and proceeds to the existing
+  proof-upload/rollback step; the admin-approval side (`approve_payment`)
+  is deliberately untouched — it stays override-capable by design, this
+  fix only closes the client-side submission race, not admin discretion at
+  approval time. **Owner must apply this migration via the SQL editor or
+  `supabase db push`** — no DB connection is available in this dev
+  environment to apply it directly.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

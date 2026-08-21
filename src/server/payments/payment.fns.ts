@@ -105,6 +105,11 @@ export const listMyPaymentsFn = createServerFn({ method: 'GET' }).handler(
  * Submit a payment WITH its proof (spec §42, §44). Creates a PENDING payment —
  * due does not change until an admin approves it. Blocks accidental
  * overpayment beyond the outstanding amount (spec §49).
+ *
+ * The overpayment check + insert happen inside the submit_payment RPC (one
+ * locked transaction on the client row), not as separate SELECTs here —
+ * two concurrent submissions from the same client can no longer both read
+ * the same pre-insert snapshot and each pass the guard independently.
  */
 export const submitPaymentFn = createServerFn({ method: 'POST' })
   .validator(paymentSubmitSchema)
@@ -112,42 +117,23 @@ export const submitPaymentFn = createServerFn({ method: 'POST' })
     const { user, membership } = await requireClientMembership()
     const admin = getSupabaseAdminClient()
 
-    // Overpayment guard against due minus already-pending payments.
-    const due = await currentDue(membership.clientId)
-    const pending = await pendingPaymentsTotal(membership.clientId)
-    const outstanding = dec(due).minus(pending)
-    if (outstanding.lte(0)) {
-      throw new Error('You have no outstanding due to pay right now')
-    }
-    if (dec(data.amount_bdt).gt(outstanding)) {
-      throw new Error(
-        `Amount exceeds your outstanding due of ${outstanding.toFixed(2)} BDT`,
-      )
-    }
-
-    // If linked to a payment request, verify it belongs to this client.
-    if (data.payment_request_id) {
-      const { data: pr } = await admin
-        .from('payment_requests')
-        .select('id')
-        .eq('id', data.payment_request_id)
-        .eq('client_id', membership.clientId)
-        .maybeSingle()
-      if (!pr) throw new Error('Payment request not found')
-    }
+    const { data: paymentId, error: rpcError } = await admin.rpc(
+      'submit_payment',
+      {
+        p_client_id: membership.clientId,
+        p_amount_bdt: data.amount_bdt,
+        p_payment_method: data.payment_method,
+        p_transaction_reference: data.transaction_reference ?? null,
+        p_payment_request_id: data.payment_request_id ?? null,
+        p_actor: user.id,
+      },
+    )
+    if (rpcError) throw new Error(friendlyRpcError(rpcError.message))
 
     const { data: payment, error } = await admin
       .from('payments')
-      .insert({
-        client_id: membership.clientId,
-        payment_request_id: data.payment_request_id ?? null,
-        amount_bdt: data.amount_bdt,
-        payment_method: data.payment_method,
-        transaction_reference: data.transaction_reference ?? null,
-        submitted_by: user.id,
-        status: 'PENDING',
-      })
       .select('*')
+      .eq('id', paymentId as string)
       .single()
     if (error) throw new Error(error.message)
 
