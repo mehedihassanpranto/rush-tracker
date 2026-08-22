@@ -25,6 +25,24 @@ inserting) closes the race the same way `approve_payment`/
 `submitPaymentFn` now just calls the RPC instead of doing the check+insert
 itself; behavior and error messages are unchanged for the normal case.
 
+**Added Telegram notifications for three events**: a client submits a limit
+request, an ad account gets disabled on Meta, and an ad account crosses the
+existing low-remaining-balance threshold — the latter two detected by the
+daily `/api/cron/meta-sync` job (which previously only handled renames and
+counting new unlinked accounts). New `sendTelegramMessage()`
+(`src/server/telegram/telegram.service.ts`), best-effort like the existing
+in-app `notify()`, no-ops when `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`
+aren't configured. Called only from these three specific event sites, not
+wired into every admin notification. Disabled/threshold alerts fire once
+per transition, not every day the account stays in that state — new
+`ad_accounts.meta_last_status_code` / `meta_low_balance_alerted` columns
+(migration `20260723000018_meta_alert_state.sql`) track last-seen state so
+the cron can tell "still disabled" apart from "just became disabled".
+Threshold reuses the existing `LOW_BALANCE_THRESHOLD` (≤60, USD-only) so
+there's one definition of "low" across the app, not two. The existing
+in-app "Meta Business Portfolio sync" digest notification now also mentions
+disabled/low-balance counts when they occur, so it stays accurate.
+
 ## 2026-08-21
 
 **Fixed: renaming an account in Meta didn't update it here on "Fetch"** —

@@ -855,6 +855,58 @@ bug fixes, and anything else that isn't a whole new named feature.
   approval time. **Owner must apply this migration via the SQL editor or
   `supabase db push`** — no DB connection is available in this dev
   environment to apply it directly.
+- **Telegram notifications for 3 events (post-Phase-8 addition): done,
+  pending owner review, migration NOT YET APPLIED to the live project** —
+  a client submitting a limit request, an ad account being disabled on
+  Meta, and an ad account crossing the low-remaining-balance threshold
+  (the latter two only detectable via the daily `/api/cron/meta-sync` job,
+  which previously only handled renames + counting new unlinked accounts —
+  it never looked at `meta_status_code` or spend headroom at all). New
+  `sendTelegramMessage()` (`src/server/telegram/telegram.service.ts`),
+  best-effort like the existing in-app `notify()` (never throws to the
+  caller, never blocks the operation it's attached to), no-ops silently
+  when `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` aren't configured — same
+  "optional integration, degrades gracefully" pattern the Meta integration
+  itself started with. **Deliberately called only from these 3 specific
+  event sites**, not wired into `notifyAdmins()`/`notify()` globally —
+  every other admin notification (payments, adjustments, etc.) stays
+  in-app only, on purpose, so Telegram doesn't get flooded.
+  Event 1 (limit request submitted): one extra line in the existing
+  `createLimitRequestFn`, right after its existing `notifyAdmins()` call —
+  reused the account row already being fetched for validation (extended
+  its `select` to also grab `account_code`/`name`) plus one small new
+  `clients.name` lookup, so the message reads "Client X requested $Y on
+  ADA-000N" rather than bare ids.
+  Events 2 & 3 (disabled / threshold crossed) needed real new logic in
+  `syncMetaAdAccounts()` (`meta-sync.server.ts`): both must fire **once per
+  transition**, not re-alert every single day the account stays in that
+  state (the cron runs daily — `vercel.json`'s actual schedule, `"0 3 * *
+  *"`; CLAUDE.md's older "every 6h" phrasing elsewhere was stale and left
+  uncorrected outside this entry). New `ad_accounts.meta_last_status_code`
+  / `meta_low_balance_alerted` columns (migration
+  `20260723000018_meta_alert_state.sql`) persist what the cron last saw
+  per account so `checkAdAccountAlerts()` (a pure comparison function) can
+  tell "still disabled" apart from "just became disabled", and reset the
+  low-balance flag once an account recovers above threshold so the next
+  crossing alerts again. "Threshold" reuses the existing
+  `LOW_BALANCE_THRESHOLD` (≤60, USD-only currency-native gate, same as the
+  display bell) rather than inventing a second definition of "low" — owner
+  confirmed this explicitly rather than assuming. Deliberately did **not**
+  add new audit-log entries for these two — audit entries are for changes
+  to our own data (like the existing rename audit), and these two are pure
+  external-signal detection with no data of ours changing beyond the
+  internal tracking columns. Did extend the existing "Meta Business
+  Portfolio sync" in-app digest notification to also mention
+  disabled/low-balance counts when they occur (it already existed and
+  already summarizes "what happened this sync" — leaving it silent about
+  two new categories of thing that can happen would make it misleading,
+  not just incomplete). All 45 existing tests, typecheck, and build pass
+  unchanged. **Owner must apply the new migration via the SQL editor or
+  `supabase db push`, and set `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`** (a
+  bot created via @BotFather, and the numeric chat id of whoever/wherever
+  should receive these — a DM chat or a group the bot's been added to) —
+  no DB connection or Telegram credentials are available in this dev
+  environment to apply/test this directly.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

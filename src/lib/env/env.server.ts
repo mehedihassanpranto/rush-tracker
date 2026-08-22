@@ -21,6 +21,11 @@ const serverEnvSchema = z.object({
   // it as `Authorization: Bearer <value>` automatically when this env var is
   // set on the project. Optional: unset disables the sync endpoint.
   CRON_SECRET: z.string().min(1).optional(),
+  // Telegram Bot API — optional: unset disables Telegram alerts entirely
+  // (sendTelegramMessage() no-ops), same "optional integration" pattern as
+  // the Meta credentials above.
+  TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
+  TELEGRAM_CHAT_ID: z.string().min(1).optional(),
 })
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>
@@ -42,6 +47,8 @@ export function getServerEnv(): ServerEnv {
       META_BUSINESS_ID: process.env.META_BUSINESS_ID,
       META_API_VERSION: process.env.META_API_VERSION,
       CRON_SECRET: process.env.CRON_SECRET,
+      TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+      TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID,
     })
     if (!parsed.success) {
       throw new Error(

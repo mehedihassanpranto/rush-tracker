@@ -40,6 +40,12 @@ export interface AdAccount {
   meta_sync_pending: boolean
   meta_sync_error: string | null
   meta_sync_attempted_at: string | null
+  /** Meta account_status code observed on the most recent cron sync — used
+   * only to detect a transition into Disabled for Telegram alerting. */
+  meta_last_status_code: number | null
+  /** True once a Telegram low-balance alert has been sent for the account's
+   * current below-threshold period; resets once it recovers. */
+  meta_low_balance_alerted: boolean
   created_at: string
   updated_at: string
 }

@@ -11,6 +11,7 @@ import {
   notifyClientMembers,
 } from '@/server/notifications/notification.service'
 import { syncAndPersistAdAccountSpendCap } from '@/server/meta/spend-cap-sync.server'
+import { sendTelegramMessage } from '@/server/telegram/telegram.service'
 import { uploadProof, signProofUrl } from '@/server/storage/storage.service'
 import { adAccountUsdRate } from '@/server/exchange-rates/rate.service'
 import { addUsd, formatUsd } from '@/lib/money/money'
@@ -104,7 +105,7 @@ export const createLimitRequestFn = createServerFn({ method: 'POST' })
 
     const { data: account } = await admin
       .from('ad_accounts')
-      .select('status, current_limit_usd')
+      .select('account_code, name, status, current_limit_usd')
       .eq('id', data.ad_account_id)
       .single()
     if (!account) throw new Error('Account not found')
@@ -112,7 +113,12 @@ export const createLimitRequestFn = createServerFn({ method: 'POST' })
       throw new Error('This account is not active and cannot receive requests')
     }
 
-    const opening = (account as { current_limit_usd: string }).current_limit_usd
+    const acc = account as {
+      account_code: string
+      name: string
+      current_limit_usd: string
+    }
+    const opening = acc.current_limit_usd
     const rate = await adAccountUsdRate(data.ad_account_id, membership.clientId)
     const expected = addUsd(opening, data.requested_amount_usd).toString()
 
@@ -161,6 +167,16 @@ export const createLimitRequestFn = createServerFn({ method: 'POST' })
       entityType: 'LIMIT_REQUEST',
       entityId: created.id,
     })
+
+    const { data: client } = await admin
+      .from('clients')
+      .select('name')
+      .eq('id', membership.clientId)
+      .maybeSingle()
+    await sendTelegramMessage(
+      `🔔 New limit request ${created.request_number}: ${(client as { name: string } | null)?.name ?? 'A client'} requested ${formatUsd(data.requested_amount_usd)} on ${acc.account_code} "${acc.name}".`,
+    )
+
     return created as LimitRequest
   })
 
