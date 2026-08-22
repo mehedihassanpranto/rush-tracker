@@ -371,12 +371,6 @@ function ApprovalPage() {
                   {detail.admin_note && (
                     <Row label="Note" value={detail.admin_note} />
                   )}
-                  <div className="mt-3">
-                    <Button variant="outline" size="sm" onClick={() => void viewProof()}>
-                      <FileText className="size-4" />
-                      View proof
-                    </Button>
-                  </div>
                 </>
               )}
               {detail.status === 'REJECTED' && (
