@@ -29,7 +29,11 @@ const usdRate = z.coerce
 
 export const adAccountCreateSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(200),
-  external_account_id: optionalText,
+  // Required for new accounts from 2026-08-22 onward — existing accounts
+  // created before this stay untouched (adAccountUpdateSchema below keeps
+  // it optional so editing an older account is never blocked on backfilling
+  // this field).
+  external_account_id: z.string().trim().min(1, 'Ad account ID is required').max(200),
   platform: z.string().trim().min(1).max(50).default('META'),
   current_limit_usd: usdAmount.default(0),
   usd_rate: usdRate,

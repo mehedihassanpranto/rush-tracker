@@ -907,6 +907,16 @@ bug fixes, and anything else that isn't a whole new named feature.
   should receive these — a DM chat or a group the bot's been added to) —
   no DB connection or Telegram credentials are available in this dev
   environment to apply/test this directly.
+- **"External ID" renamed to "Ad account ID", required on create
+  (post-Phase-8 addition): done, pending owner review** — display label
+  only (create/edit dialogs, detail page's Account details card); the
+  underlying `external_account_id` field/column is unchanged. Per owner
+  instruction ("not optional from today"), it's now required when
+  **creating** a new ad account — enforced in both the create dialog's Zod
+  schema and, the actual boundary that matters, the server-side
+  `adAccountCreateSchema` (`src/schemas/ad-account.ts`). Deliberately left
+  optional on `adAccountUpdateSchema`/the edit dialog, so editing any
+  account created before today isn't blocked on backfilling this field.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

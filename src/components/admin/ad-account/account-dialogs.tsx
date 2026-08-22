@@ -66,7 +66,7 @@ const rateField = z
 // ---------------------------------------------------------------------------
 const createSchema = z.object({
   name: z.string().trim().min(1, 'Name is required'),
-  external_account_id: z.string().trim().optional(),
+  external_account_id: z.string().trim().min(1, 'Ad account ID is required'),
   platform: z.string().trim().min(1, 'Required'),
   current_limit_usd: amountField,
   usd_rate: rateField,
@@ -197,7 +197,7 @@ export function AccountCreateDialog({
                 name="external_account_id"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>External ID (optional)</FormLabel>
+                    <FormLabel>Ad account ID</FormLabel>
                     <div className="flex gap-2">
                       <FormControl>
                         <Input placeholder="123456789" {...field} />
@@ -402,7 +402,7 @@ export function AccountEditDialog({
               name="external_account_id"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>External ID (optional)</FormLabel>
+                  <FormLabel>Ad account ID (optional)</FormLabel>
                   <FormControl>
                     <Input {...field} />
                   </FormControl>

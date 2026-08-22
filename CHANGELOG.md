@@ -43,6 +43,29 @@ there's one definition of "low" across the app, not two. The existing
 in-app "Meta Business Portfolio sync" digest notification now also mentions
 disabled/low-balance counts when they occur, so it stays accurate.
 
+**Renamed the "External ID" field to "Ad account ID"** across the ad
+account create/edit dialogs and the detail page's Account details card —
+display label only, the underlying `external_account_id` column/field name
+is unchanged. **Made it required on account creation** (both the create
+dialog's Zod schema and, more importantly, the server-side
+`adAccountCreateSchema` — the actual enforcement point): every new ad
+account must now be linked to a real Meta account id from the start.
+Editing an *existing* account still allows a blank value
+(`adAccountUpdateSchema` untouched), so accounts created before today
+aren't retroactively blocked from being edited until someone backfills
+this field.
+
+**Cleared xRush Digital's (CL-0001) financial history** at the owner's
+explicit request — deleted its `ledger_entries` (5), `limit_requests` (2),
+`adjustments` (3), and `payments` (1, + its proof file), leaving
+`client_financials()` at zero. Deliberately preserved: both of the
+client's logins, and its active ad account assignment (`ADA-0005`). This
+bypassed `deleteClientFn`'s own history guard by design (a manual,
+service-role script run outside the app, not a new feature) — logged as a
+`CLIENT_FINANCIAL_DATA_PURGED` audit entry noting the manual purge and
+what was deliberately kept, since audit history itself is never deleted
+anywhere in this app.
+
 ## 2026-08-21
 
 **Fixed: renaming an account in Meta didn't update it here on "Fetch"** —

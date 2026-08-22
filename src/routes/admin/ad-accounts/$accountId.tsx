@@ -375,7 +375,7 @@ function AccountDetailPage() {
                 <InfoRow label="Account code" value={account.account_code} />
                 <InfoRow label="Platform" value={account.platform} />
                 <InfoRow
-                  label="External ID"
+                  label="Ad account ID"
                   value={account.external_account_id}
                 />
                 <InfoRow
