@@ -422,12 +422,6 @@ export const approveLimitRequestFn = createServerFn({ method: 'POST' })
     const actor = await requireAdmin(PERMISSIONS.LIMIT_REQUESTS_APPROVE)
     const admin = getSupabaseAdminClient()
 
-    // Proof is mandatory before approval (spec §29).
-    const path = await proofPathForRequest(data.id)
-    if (!path) {
-      throw new Error('Upload the limit update proof before approving')
-    }
-
     const { data: ledgerId, error } = await admin.rpc('approve_limit_request', {
       p_request_id: data.id,
       p_approved_amount: data.approved_amount_usd,

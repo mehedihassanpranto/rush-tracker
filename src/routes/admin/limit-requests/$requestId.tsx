@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   FileText,
   Loader2,
-  Upload,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -18,15 +17,9 @@ import {
   getLimitRequestDetailFn,
   rebaseLimitRequestFn,
   rejectLimitRequestFn,
-  uploadLimitProofFn,
 } from '@/server/limit-requests/limit-request.fns'
 import { addUsd, formatBdt, formatUsd, multiplyUsdByRate } from '@/lib/money/money'
 import { ProofViewerDialog } from '@/components/shared/proof-viewer'
-import {
-  ALLOWED_PROOF_MIME,
-  MAX_PROOF_BYTES,
-} from '@/schemas/limit-request'
-import { fileToBase64, formatFileSize } from '@/lib/utils/file'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -64,12 +57,10 @@ function ApprovalPage() {
 
   const getDetail = useServerFn(getLimitRequestDetailFn)
   const getProofUrl = useServerFn(getLimitProofUrlFn)
-  const uploadProof = useServerFn(uploadLimitProofFn)
   const approve = useServerFn(approveLimitRequestFn)
   const reject = useServerFn(rejectLimitRequestFn)
   const rebase = useServerFn(rebaseLimitRequestFn)
 
-  const fileRef = useRef<HTMLInputElement>(null)
   const [amount, setAmount] = useState('')
   const [rate, setRate] = useState('')
   const [note, setNote] = useState('')
@@ -102,25 +93,6 @@ function ApprovalPage() {
     void queryClient.invalidateQueries({ queryKey: ['limit-requests'] })
     void queryClient.invalidateQueries({ queryKey: ['admin-dashboard-stats'] })
   }
-
-  const uploadMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const data_base64 = await fileToBase64(file)
-      return uploadProof({
-        data: {
-          request_id: requestId,
-          file_name: file.name,
-          mime_type: file.type as (typeof ALLOWED_PROOF_MIME)[number],
-          data_base64,
-        },
-      })
-    },
-    onSuccess: () => {
-      toast.success('Proof uploaded')
-      invalidate()
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Upload failed'),
-  })
 
   const approveMutation = useMutation({
     mutationFn: () =>
@@ -157,21 +129,6 @@ function ApprovalPage() {
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
   })
-
-  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!ALLOWED_PROOF_MIME.includes(file.type as never)) {
-      toast.error('Use JPG, PNG, WEBP or PDF')
-      return
-    }
-    if (file.size > MAX_PROOF_BYTES) {
-      toast.error('File must be 3 MB or smaller')
-      return
-    }
-    uploadMutation.mutate(file)
-    e.target.value = ''
-  }
 
   function viewProof() {
     setProofOpen(true)
@@ -333,53 +290,26 @@ function ApprovalPage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>Limit update proof</Label>
-                <div className="flex items-center gap-3">
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,application/pdf"
-                    className="hidden"
-                    onChange={onPickFile}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={uploadMutation.isPending}
-                    onClick={() => fileRef.current?.click()}
-                  >
-                    {uploadMutation.isPending ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Upload className="size-4" />
-                    )}
-                    {detail.has_proof ? 'Replace proof' : 'Upload proof'}
-                  </Button>
-                  {detail.has_proof && (
-                    <>
-                      <span className="flex items-center gap-1 text-sm text-emerald-600">
-                        <CheckCircle2 className="size-4" />
-                        Proof attached
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => void viewProof()}
-                      >
-                        <FileText className="size-4" />
-                        View
-                      </Button>
-                    </>
-                  )}
+              {detail.has_proof && (
+                <div className="space-y-2">
+                  <Label>Limit update proof</Label>
+                  <div className="flex items-center gap-3">
+                    <span className="flex items-center gap-1 text-sm text-emerald-600">
+                      <CheckCircle2 className="size-4" />
+                      Proof attached
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void viewProof()}
+                    >
+                      <FileText className="size-4" />
+                      View
+                    </Button>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  JPG, PNG, WEBP or PDF, up to {formatFileSize(MAX_PROOF_BYTES)}.
-                  Required before approval.
-                </p>
-              </div>
+              )}
 
               <div className="space-y-2">
                 <Label>Admin note (optional)</Label>
@@ -401,7 +331,6 @@ function ApprovalPage() {
                   disabled={
                     !amountValid ||
                     !rateValid ||
-                    !detail.has_proof ||
                     detail.is_stale ||
                     approveMutation.isPending
                   }
@@ -413,11 +342,6 @@ function ApprovalPage() {
                   Approve
                 </Button>
               </div>
-              {!detail.has_proof && (
-                <p className="text-right text-xs text-muted-foreground">
-                  Upload proof to enable approval.
-                </p>
-              )}
             </CardContent>
           </Card>
         ) : (

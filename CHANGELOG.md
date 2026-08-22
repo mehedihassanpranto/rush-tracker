@@ -6,6 +6,26 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-08-23
+
+**Removed the "Limit update proof" requirement from limit request
+approval** — this proof was never provided by the client (their submission
+form has no proof field at all); `uploadLimitProofFn` was `requireAdmin`-
+gated the whole time, meaning it was the *admin's* own evidence, almost
+certainly a screenshot of manually updating the spend cap on Meta before
+approving. The "Auto-push approved limit increases to Meta spend_cap"
+feature made that manual step obsolete. Removed both the server-side check
+in `approveLimitRequestFn` (spec §29's mandatory-proof rule) and the
+upload/replace UI on the admin approval screen; the "Proof attached ✓
+View" display stays, but only rendered when a historical request already
+has one — nothing can attach a new one anymore, so the block no longer
+shows a permanent "no proof attached" for every future request.
+**Correction made mid-implementation**: the first pass (removing only the
+upload button, keeping the server-side requirement) would have completely
+blocked approval on every future limit request, since nothing left in the
+app could ever satisfy that check again — caught and fixed before
+shipping.
+
 ## 2026-08-22
 
 **Security fix: closed a payment-submission race that could bypass the

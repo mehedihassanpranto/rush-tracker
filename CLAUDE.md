@@ -917,6 +917,27 @@ bug fixes, and anything else that isn't a whole new named feature.
   `adAccountCreateSchema` (`src/schemas/ad-account.ts`). Deliberately left
   optional on `adAccountUpdateSchema`/the edit dialog, so editing any
   account created before today isn't blocked on backfilling this field.
+- **Removed the mandatory "limit update proof" requirement from approval
+  (post-Phase-8 addition): done, pending owner review** — this proof was
+  never a client artifact: `uploadLimitProofFn` is `requireAdmin`-gated and
+  the client's own submission form (`limitRequestCreateSchema`) has no
+  proof field at all, so it was always the *admin's* own evidence,
+  almost certainly a screenshot of manually updating the spend cap on Meta
+  before approving. The "Auto-push approved limit increases to Meta
+  spend_cap" feature (already shipped) made that manual step obsolete, so
+  the owner asked to remove it. Dropped both the server-side check in
+  `approveLimitRequestFn` (spec §29's rule) and the upload/replace UI on
+  the admin approval screen (`/admin/limit-requests/$requestId`); "Proof
+  attached ✓ View" stays but only renders when a historical request
+  already has one attached — nothing can attach a new one anymore, so it
+  no longer shows a permanent "no proof attached" for every future
+  request. `uploadLimitProofFn`/`proofUploadSchema`/`getLimitProofUrlFn`
+  still exist (the latter still used for viewing old proofs) — see the
+  Phase 3 conventions note above for the "superseded" detail.
+  **Caught mid-implementation**: the first pass (remove only the upload
+  button, keep the server-side check) would have permanently blocked
+  approval on every future request, since nothing left in the app could
+  ever satisfy that check again — fixed before shipping, not after.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT
@@ -987,6 +1008,13 @@ bug fixes, and anything else that isn't a whole new named feature.
   `uploadLimitProofFn` as base64 JSON (≤3 MB, jpg/png/webp/pdf) — chosen over
   direct browser→storage upload to keep all writes server-side. Downloads use
   short-lived signed URLs (`signProofUrl`, 60s). Never make the bucket public.
+  **Superseded 2026-08-23**: this proof was always the *admin's* own evidence
+  (`uploadLimitProofFn` is `requireAdmin`-gated — the client never provides
+  one), almost certainly a screenshot of manually updating Meta's spend cap
+  before approving. No longer mandatory now that "Auto-push approved limit
+  increases to Meta spend_cap" does that automatically — see the post-Phase-8
+  entry below. `uploadLimitProofFn`/`proofUploadSchema` still exist (unused)
+  in case a future need for admin-attached proof comes back.
 - Approval RPC re-checks the stale baseline (`opening_balance_usd` vs live
   `current_limit_usd`) and raises `STALE_BASELINE: …`; the UI also shows the
   banner proactively from `getLimitRequestDetailFn`. Rebase via
