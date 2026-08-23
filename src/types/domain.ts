@@ -5,6 +5,8 @@ export type { ClientStatus }
 export type AdAccountStatus = 'AVAILABLE' | 'ACTIVE' | 'INACTIVE' | 'SUSPENDED'
 export type AssignmentStatus = 'ACTIVE' | 'RELEASED'
 
+export type ClientSegment = 'prepaid' | 'postpaid'
+
 export interface Client {
   id: string
   client_code: string
@@ -16,6 +18,9 @@ export interface Client {
   status: ClientStatus
   /** USD→BDT rate charged per dollar for this client. NUMERIC → string. */
   usd_rate: string
+  /** prepaid: pays (fully or partially) up front with proof at request time.
+   * postpaid: the original flow — full amount goes to due, settled later. */
+  segment: ClientSegment
   created_at: string
   updated_at: string
 }
@@ -105,6 +110,19 @@ export interface LimitRequest {
   expected_new_limit_usd: string
   approved_new_limit_usd: string | null
   bdt_charge: string | null
+  /** The requesting client's segment, snapshotted at request time — not a
+   * live join, so a client's segment changing later never rewrites past
+   * requests. */
+  segment: ClientSegment
+  /** requested_amount_usd * default_usd_rate, frozen at submission. Distinct
+   * from bdt_charge (computed at approval from the admin-editable amount). */
+  total_cost_bdt: string
+  /** What the client paid up front (prepaid only; '0' for postpaid). */
+  amount_paid_bdt: string
+  /** total_cost_bdt - amount_paid_bdt, computed server-side at submission.
+   * Informational only — the client's real running due is always the
+   * ledger (client_financials()), never this column. */
+  due_balance_bdt: string
   status: LimitRequestStatus
   requested_at: string
   reviewed_at: string | null

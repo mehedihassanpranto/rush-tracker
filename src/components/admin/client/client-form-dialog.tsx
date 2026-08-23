@@ -48,6 +48,7 @@ const formSchema = z.object({
     .min(1, 'Enter the USD rate')
     .refine((v) => Number(v) > 0, 'Must be greater than zero'),
   status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED']),
+  segment: z.enum(['prepaid', 'postpaid']),
 })
 
 type FormValues = z.infer<typeof formSchema>
@@ -76,6 +77,7 @@ export function ClientFormDialog({
       address: '',
       usd_rate: '',
       status: 'ACTIVE',
+      segment: 'postpaid',
     },
   })
 
@@ -89,6 +91,7 @@ export function ClientFormDialog({
         address: client?.address ?? '',
         usd_rate: client?.usd_rate ?? '',
         status: client?.status ?? 'ACTIVE',
+        segment: client?.segment ?? 'postpaid',
       })
     }
   }, [open, client, form])
@@ -235,6 +238,36 @@ export function ClientFormDialog({
                       <SelectItem value="SUSPENDED">Suspended</SelectItem>
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="segment"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Client segment</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a segment" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="prepaid">
+                        Prepaid (Instant Pay)
+                      </SelectItem>
+                      <SelectItem value="postpaid">
+                        Postpaid (Due System)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Prepaid clients pay up front (with proof) when requesting
+                    a limit increase. Postpaid clients request first and
+                    settle the due later.
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}

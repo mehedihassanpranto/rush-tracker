@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
   createLimitRequestFn,
   listMyRequestableAccountsFn,
 } from '@/server/limit-requests/limit-request.fns'
-import { addUsd, formatUsd } from '@/lib/money/money'
+import { addUsd, dec, formatBdt, formatUsd, multiplyUsdByRate } from '@/lib/money/money'
+import { ALLOWED_PROOF_MIME, MAX_PROOF_BYTES } from '@/schemas/limit-request'
+import { fileToBase64, formatFileSize } from '@/lib/utils/file'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -44,20 +46,29 @@ export function RequestLimitDialog({
   const queryClient = useQueryClient()
   const listAccounts = useServerFn(listMyRequestableAccountsFn)
   const createRequest = useServerFn(createLimitRequestFn)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const [accountId, setAccountId] = useState('')
   const [amount, setAmount] = useState('')
+  const [file, setFile] = useState<File | null>(null)
 
-  const { data: accounts } = useQuery({
+  const { data: result } = useQuery({
     queryKey: ['my-requestable-accounts'],
     queryFn: () => listAccounts(),
     enabled: open,
   })
+  const accounts = result?.accounts
+  const isPrepaid = result?.segment === 'prepaid'
+  const [amountPaid, setAmountPaid] = useState('')
+  const [paidTouched, setPaidTouched] = useState(false)
 
   useEffect(() => {
     if (open) {
       setAccountId(presetAccountId ?? '')
       setAmount('')
+      setAmountPaid('')
+      setPaidTouched(false)
+      setFile(null)
     }
   }, [open, presetAccountId])
 
@@ -74,12 +85,69 @@ export function RequestLimitDialog({
     selected && amountValid
       ? addUsd(selected.current_limit_usd, amountNum).toString()
       : null
+  // Automatically computed, not editable by the client — same rate
+  // resolution and rounding the approval RPC uses (adAccountUsdRate,
+  // round(amount * rate, 2)), shown here only as a preview of what they'll
+  // be charged.
+  const chargeBdt =
+    selected && amountValid && Number(selected.usd_rate) > 0
+      ? multiplyUsdByRate(amountNum, selected.usd_rate).toString()
+      : null
+
+  // Prepaid only: pre-fill "amount paid" with the full cost whenever it
+  // changes, but stop overwriting once the client has manually edited it
+  // (they can pay less than the full amount — the rest becomes due).
+  useEffect(() => {
+    if (isPrepaid && chargeBdt && !paidTouched) setAmountPaid(chargeBdt)
+  }, [isPrepaid, chargeBdt, paidTouched])
+
+  const amountPaidNum = Number(amountPaid)
+  const amountPaidValid =
+    !isPrepaid ||
+    (amountPaid !== '' &&
+      Number.isFinite(amountPaidNum) &&
+      amountPaidNum > 0 &&
+      chargeBdt !== null &&
+      amountPaidNum <= Number(chargeBdt))
+  const dueBalance =
+    isPrepaid && chargeBdt && amountPaidValid
+      ? dec(chargeBdt).minus(amountPaidNum).toFixed(2)
+      : null
+
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    if (!ALLOWED_PROOF_MIME.includes(f.type as never)) {
+      toast.error('Use JPG, PNG, WEBP or PDF')
+      return
+    }
+    if (f.size > MAX_PROOF_BYTES) {
+      toast.error('File must be 3 MB or smaller')
+      return
+    }
+    setFile(f)
+  }
 
   const mutation = useMutation({
-    mutationFn: () =>
-      createRequest({
-        data: { ad_account_id: accountId, requested_amount_usd: amountNum },
-      }),
+    mutationFn: async () => {
+      if (!isPrepaid) {
+        return createRequest({
+          data: { ad_account_id: accountId, requested_amount_usd: amountNum },
+        })
+      }
+      if (!file) throw new Error('Attach payment proof')
+      const data_base64 = await fileToBase64(file)
+      return createRequest({
+        data: {
+          ad_account_id: accountId,
+          requested_amount_usd: amountNum,
+          amount_paid_bdt: amountPaidNum,
+          file_name: file.name,
+          mime_type: file.type as (typeof ALLOWED_PROOF_MIME)[number],
+          data_base64,
+        },
+      })
+    },
     onSuccess: (req) => {
       toast.success(`Request ${req.request_number} submitted`)
       void queryClient.invalidateQueries({ queryKey: ['my-limit-requests'] })
@@ -159,7 +227,94 @@ export function RequestLimitDialog({
                   {expected ? formatUsd(expected) : '—'}
                 </div>
               </div>
+              <div>
+                <div className="text-muted-foreground">Rate</div>
+                <div className="font-medium">
+                  {Number(selected.usd_rate) > 0 ? `৳${selected.usd_rate}` : '—'}
+                </div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Total cost</div>
+                <div className="font-medium">
+                  {chargeBdt ? formatBdt(chargeBdt) : '—'}
+                </div>
+              </div>
             </div>
+          )}
+
+          {isPrepaid ? (
+            <>
+              <div className="space-y-2">
+                <Label>Amount paid (BDT)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={amountPaid}
+                  onChange={(e) => {
+                    setPaidTouched(true)
+                    setAmountPaid(e.target.value)
+                  }}
+                />
+                {chargeBdt && amountPaidValid && dueBalance && (
+                  <p
+                    className={
+                      Number(dueBalance) <= 0
+                        ? 'text-xs text-emerald-600'
+                        : 'text-xs text-muted-foreground'
+                    }
+                  >
+                    {Number(dueBalance) <= 0
+                      ? 'Fully paid'
+                      : `Due balance: ${formatBdt(dueBalance)}`}
+                  </p>
+                )}
+                {amountPaid !== '' && !amountPaidValid && (
+                  <p className="text-xs text-destructive">
+                    Enter an amount greater than 0
+                    {chargeBdt ? ` and up to ${formatBdt(chargeBdt)}` : ''}.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Payment proof</Label>
+                <div className="flex items-center gap-3">
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    className="hidden"
+                    onChange={onPickFile}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <Upload className="size-4" />
+                    {file ? 'Change file' : 'Choose file'}
+                  </Button>
+                  {file && (
+                    <span className="truncate text-sm text-muted-foreground">
+                      {file.name}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Pay the amount above, then upload proof (JPG, PNG, WEBP or
+                  PDF, up to {formatFileSize(MAX_PROOF_BYTES)}). Required.
+                </p>
+              </div>
+            </>
+          ) : (
+            selected && (
+              <p className="text-xs text-muted-foreground">
+                No payment needed now — the full amount will be added to
+                your due balance once approved.
+              </p>
+            )
           )}
         </div>
 
@@ -173,7 +328,8 @@ export function RequestLimitDialog({
               !amountValid ||
               selected?.has_pending ||
               selected?.status !== 'ACTIVE' ||
-              mutation.isPending
+              mutation.isPending ||
+              (isPrepaid && (!file || !amountPaidValid))
             }
             onClick={() => mutation.mutate()}
           >

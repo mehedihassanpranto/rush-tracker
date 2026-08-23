@@ -14,7 +14,7 @@ import { syncAndPersistAdAccountSpendCap } from '@/server/meta/spend-cap-sync.se
 import { sendTelegramMessage } from '@/server/telegram/telegram.service'
 import { uploadProof, signProofUrl } from '@/server/storage/storage.service'
 import { adAccountUsdRate } from '@/server/exchange-rates/rate.service'
-import { addUsd, formatUsd } from '@/lib/money/money'
+import { addUsd, dec, formatBdt, formatUsd, multiplyUsdByRate } from '@/lib/money/money'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import {
   limitApproveSchema,
@@ -48,41 +48,69 @@ export interface RequestableAccount {
   status: AdAccountStatus
   current_limit_usd: string
   has_pending: boolean
+  /** Resolved rate this request would bill at (account's own rate, falling
+   * back to the client's) — shown to the client as a read-only preview of
+   * what they'll owe, same resolution `createLimitRequestFn` uses. */
+  usd_rate: string
+}
+
+export interface RequestableAccountsResult {
+  /** The signed-in client's segment — determines whether the request dialog
+   * shows the amount-paid/proof fields at all (prepaid) or not (postpaid). */
+  segment: 'prepaid' | 'postpaid'
+  accounts: Array<RequestableAccount>
 }
 
 /** Active accounts the signed-in client can request a limit for (spec §21, §67). */
 export const listMyRequestableAccountsFn = createServerFn({
   method: 'GET',
-}).handler(async (): Promise<Array<RequestableAccount>> => {
+}).handler(async (): Promise<RequestableAccountsResult> => {
   const { membership } = await requireClientMembership()
   const admin = getSupabaseAdminClient()
 
-  const { data: rows, error } = await admin
-    .from('ad_account_assignments')
-    .select('account:ad_accounts(id, account_code, name, status, current_limit_usd)')
-    .eq('client_id', membership.clientId)
-    .eq('status', 'ACTIVE')
+  const [{ data: rows, error }, { data: clientRow }] = await Promise.all([
+    admin
+      .from('ad_account_assignments')
+      .select('account:ad_accounts(id, account_code, name, status, current_limit_usd)')
+      .eq('client_id', membership.clientId)
+      .eq('status', 'ACTIVE'),
+    admin.from('clients').select('segment').eq('id', membership.clientId).single(),
+  ])
   if (error) throw new Error(error.message)
+  const segment = (clientRow as { segment: 'prepaid' | 'postpaid' } | null)?.segment ?? 'postpaid'
 
   const accounts = (rows ?? [])
     .map(
       (r) =>
-        (r as unknown as { account: RequestableAccount | null }).account,
+        (r as unknown as { account: Omit<RequestableAccount, 'has_pending' | 'usd_rate'> | null })
+          .account,
     )
-    .filter((a): a is RequestableAccount => a !== null)
+    .filter((a): a is Omit<RequestableAccount, 'has_pending' | 'usd_rate'> => a !== null)
 
-  if (accounts.length === 0) return []
+  if (accounts.length === 0) return { segment, accounts: [] }
 
-  const { data: pending } = await admin
-    .from('limit_requests')
-    .select('ad_account_id')
-    .eq('client_id', membership.clientId)
-    .eq('status', 'PENDING')
+  const [{ data: pending }, rates] = await Promise.all([
+    admin
+      .from('limit_requests')
+      .select('ad_account_id')
+      .eq('client_id', membership.clientId)
+      .eq('status', 'PENDING'),
+    Promise.all(
+      accounts.map((a) => adAccountUsdRate(a.id, membership.clientId)),
+    ),
+  ])
   const pendingIds = new Set(
     (pending ?? []).map((p) => (p as { ad_account_id: string }).ad_account_id),
   )
 
-  return accounts.map((a) => ({ ...a, has_pending: pendingIds.has(a.id) }))
+  return {
+    segment,
+    accounts: accounts.map((a, i) => ({
+      ...a,
+      has_pending: pendingIds.has(a.id),
+      usd_rate: rates[i],
+    })),
+  }
 })
 
 export const createLimitRequestFn = createServerFn({ method: 'POST' })
@@ -121,6 +149,43 @@ export const createLimitRequestFn = createServerFn({ method: 'POST' })
     const opening = acc.current_limit_usd
     const rate = await adAccountUsdRate(data.ad_account_id, membership.clientId)
     const expected = addUsd(opening, data.requested_amount_usd).toString()
+    const totalCost = multiplyUsdByRate(data.requested_amount_usd, rate).toString()
+
+    // Segment is looked up server-side — never trusted from the client
+    // payload, so a postpaid client can't submit prepaid-looking fields to
+    // bypass anything.
+    const { data: clientRow } = await admin
+      .from('clients')
+      .select('name, segment')
+      .eq('id', membership.clientId)
+      .single()
+    if (!clientRow) throw new Error('Client not found')
+    const { name: clientName, segment } = clientRow as {
+      name: string
+      segment: 'prepaid' | 'postpaid'
+    }
+
+    let amountPaid = '0'
+    let dueBalance = totalCost
+    let hasProof = false
+
+    if (segment === 'prepaid') {
+      if (data.amount_paid_bdt == null || data.amount_paid_bdt <= 0) {
+        throw new Error('Enter how much you paid')
+      }
+      if (dec(data.amount_paid_bdt).gt(totalCost)) {
+        throw new Error(`Amount paid cannot exceed the total cost of ${formatBdt(totalCost)}`)
+      }
+      if (!data.file_name || !data.mime_type || !data.data_base64) {
+        throw new Error('Attach payment proof')
+      }
+      amountPaid = dec(data.amount_paid_bdt).toFixed(2)
+      dueBalance = dec(totalCost).minus(amountPaid).toFixed(2)
+      hasProof = true
+    }
+    // postpaid: amountPaid stays '0', dueBalance stays the full totalCost,
+    // and any amount_paid_bdt/proof fields the payload might still carry
+    // are simply never read below — ignored, not validated.
 
     const { data: created, error } = await admin
       .from('limit_requests')
@@ -134,6 +199,10 @@ export const createLimitRequestFn = createServerFn({ method: 'POST' })
         expected_new_limit_usd: expected,
         requested_by: user.id,
         status: 'PENDING',
+        segment,
+        total_cost_bdt: totalCost,
+        amount_paid_bdt: amountPaid,
+        due_balance_bdt: dueBalance,
       })
       .select('*')
       .single()
@@ -144,6 +213,33 @@ export const createLimitRequestFn = createServerFn({ method: 'POST' })
         throw new Error('A pending request already exists for this account')
       }
       throw new Error(error.message)
+    }
+
+    // Prepaid only: attach the client's payment proof; roll back the
+    // request if storage/attachment fails so a prepaid request can never
+    // exist without proof (same pattern as submitPaymentFn).
+    if (hasProof) {
+      try {
+        const stored = await uploadProof({
+          folder: `limit-requests/${created.id}`,
+          mimeType: data.mime_type!,
+          dataBase64: data.data_base64!,
+        })
+        const { error: attErr } = await admin.from('attachments').insert({
+          entity_type: PROOF_ENTITY,
+          entity_id: created.id,
+          storage_bucket: 'proofs',
+          storage_path: stored.storage_path,
+          original_file_name: data.file_name,
+          mime_type: data.mime_type,
+          file_size: stored.file_size,
+          uploaded_by: user.id,
+        })
+        if (attErr) throw new Error(attErr.message)
+      } catch (err) {
+        await admin.from('limit_requests').delete().eq('id', created.id)
+        throw err instanceof Error ? err : new Error('Failed to attach proof')
+      }
     }
 
     await writeAudit({
@@ -168,13 +264,8 @@ export const createLimitRequestFn = createServerFn({ method: 'POST' })
       entityId: created.id,
     })
 
-    const { data: client } = await admin
-      .from('clients')
-      .select('name')
-      .eq('id', membership.clientId)
-      .maybeSingle()
     await sendTelegramMessage(
-      `🔔 New limit request ${created.request_number}: ${(client as { name: string } | null)?.name ?? 'A client'} requested ${formatUsd(data.requested_amount_usd)} on ${acc.account_code} "${acc.name}".`,
+      `🔔 New limit request ${created.request_number}: ${clientName} requested ${formatUsd(data.requested_amount_usd)} on ${acc.account_code} "${acc.name}".`,
     )
 
     return created as LimitRequest
@@ -418,11 +509,11 @@ export const getLimitProofUrlFn = createServerFn({ method: 'POST' })
 
 export const approveLimitRequestFn = createServerFn({ method: 'POST' })
   .validator(limitApproveSchema)
-  .handler(async ({ data }): Promise<{ ledger_id: string }> => {
+  .handler(async ({ data }): Promise<{ ledger_id: string; payment_id: string | null }> => {
     const actor = await requireAdmin(PERMISSIONS.LIMIT_REQUESTS_APPROVE)
     const admin = getSupabaseAdminClient()
 
-    const { data: ledgerId, error } = await admin.rpc('approve_limit_request', {
+    const { data: result, error } = await admin.rpc('approve_limit_request', {
       p_request_id: data.id,
       p_approved_amount: data.approved_amount_usd,
       p_approved_rate: data.approved_usd_rate,
@@ -430,6 +521,42 @@ export const approveLimitRequestFn = createServerFn({ method: 'POST' })
       p_admin_note: data.admin_note ?? null,
     })
     if (error) throw new Error(friendlyRpcError(error.message))
+    const { ledger_id: ledgerId, payment_id: paymentId } = result as {
+      ledger_id: string
+      payment_id: string | null
+      payment_ledger_id: string | null
+    }
+
+    // Prepaid only (paymentId is null for postpaid — nothing to link).
+    // Link the client's already-uploaded request proof to the auto-created
+    // payment too, so it shows in Payment History with proof like any other
+    // payment — best-effort, never blocks the (already-committed) approval.
+    try {
+      const path = paymentId ? await proofPathForRequest(data.id) : null
+      if (paymentId && path) {
+        const { data: att } = await admin
+          .from('attachments')
+          .select('original_file_name, mime_type, file_size')
+          .eq('entity_type', PROOF_ENTITY)
+          .eq('entity_id', data.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        await admin.from('attachments').insert({
+          entity_type: 'PAYMENT_PROOF',
+          entity_id: paymentId,
+          storage_bucket: 'proofs',
+          storage_path: path,
+          original_file_name: (att as { original_file_name: string | null } | null)
+            ?.original_file_name,
+          mime_type: (att as { mime_type: string | null } | null)?.mime_type,
+          file_size: (att as { file_size: number | null } | null)?.file_size,
+          uploaded_by: actor.id,
+        })
+      }
+    } catch (err) {
+      console.error('[limit-request] failed to link proof to auto-payment', data.id, err)
+    }
 
     const { data: req } = await admin
       .from('limit_requests')
@@ -462,7 +589,7 @@ export const approveLimitRequestFn = createServerFn({ method: 'POST' })
         source: 'META_SPEND_CAP_AUTO_SYNC',
       })
     }
-    return { ledger_id: ledgerId as string }
+    return { ledger_id: ledgerId, payment_id: paymentId }
   })
 
 export const rejectLimitRequestFn = createServerFn({ method: 'POST' })

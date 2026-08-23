@@ -99,6 +99,7 @@ export const createClientFn = createServerFn({ method: 'POST' })
         address: data.address ?? null,
         usd_rate: data.usd_rate,
         status: data.status,
+        segment: data.segment,
       })
       .select('*')
       .single()
@@ -136,6 +137,7 @@ export const updateClientFn = createServerFn({ method: 'POST' })
         address: data.address ?? null,
         usd_rate: data.usd_rate,
         status: data.status,
+        segment: data.segment,
       })
       .eq('id', data.id)
       .select('*')

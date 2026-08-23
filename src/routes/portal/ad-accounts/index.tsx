@@ -36,6 +36,7 @@ function MyAdAccountsPage() {
   const { data: accounts, isLoading } = useQuery({
     queryKey: ['my-requestable-accounts'],
     queryFn: () => listAccounts(),
+    select: (result) => result.accounts,
   })
 
   // Best-effort — if Meta isn't configured or reachable this just shows

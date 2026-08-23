@@ -91,6 +91,8 @@ function MyLimitRequestsPage() {
               <TableHead className="text-right">Rate</TableHead>
               <TableHead className="text-right">New limit</TableHead>
               <TableHead className="text-right">Charge</TableHead>
+              <TableHead className="text-right">Paid</TableHead>
+              <TableHead className="text-right">Due</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Date</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -100,7 +102,7 @@ function MyLimitRequestsPage() {
             {isLoading &&
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={11}>
+                  <TableCell colSpan={13}>
                     <Skeleton className="h-6 w-full" />
                   </TableCell>
                 </TableRow>
@@ -108,7 +110,7 @@ function MyLimitRequestsPage() {
 
             {!isLoading && (requests?.length ?? 0) === 0 && (
               <TableRow>
-                <TableCell colSpan={11}>
+                <TableCell colSpan={13}>
                   <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
                     <Gauge className="size-8 opacity-40" />
                     No limit requests yet.
@@ -143,6 +145,16 @@ function MyLimitRequestsPage() {
                 <TableCell className="text-right">
                   {r.bdt_charge ? formatBdt(r.bdt_charge) : '—'}
                 </TableCell>
+                <TableCell className="text-right">
+                  {r.segment === 'prepaid' ? formatBdt(r.amount_paid_bdt) : '—'}
+                </TableCell>
+                <TableCell className="text-right">
+                  {Number(r.due_balance_bdt) <= 0 ? (
+                    <span className="text-emerald-600">Fully paid</span>
+                  ) : (
+                    formatBdt(r.due_balance_bdt)
+                  )}
+                </TableCell>
                 <TableCell>
                   <StatusBadge status={r.status} />
                 </TableCell>
@@ -151,7 +163,7 @@ function MyLimitRequestsPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
-                    {r.status === 'APPROVED' && (
+                    {r.segment === 'prepaid' && (
                       <Button
                         size="sm"
                         variant="ghost"

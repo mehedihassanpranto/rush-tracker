@@ -938,6 +938,74 @@ bug fixes, and anything else that isn't a whole new named feature.
   button, keep the server-side check) would have permanently blocked
   approval on every future request, since nothing left in the app could
   ever satisfy that check again — fixed before shipping, not after.
+- **Client segmentation (prepaid/postpaid) with partial prepayment for
+  limit requests (post-Phase-8 addition): done, pending owner review,
+  migration NOT YET APPLIED to the live project** — every client now has a
+  `segment` (`prepaid` | `postpaid`, new `clients.segment` column, required,
+  no DB default — the app must always supply it explicitly on insert; set
+  at creation via `ClientFormDialog`, editable later like any other client
+  field). Existing clients backfilled to `postpaid` (their real behavior to
+  date). Segment is looked up **server-side** in `createLimitRequestFn` —
+  never trusted from the client payload, so a postpaid client can't submit
+  prepaid-looking fields to bypass anything.
+  **Prepaid**: `RequestLimitDialog` shows a read-only "Total cost" preview
+  (`requested_amount_usd × rate`, `multiplyUsdByRate`, same rounding
+  `approve_limit_request` uses) plus an "Amount paid (BDT)" input
+  pre-filled with the full cost but **editable down** — partial payment is
+  allowed, unlike the discarded all-or-nothing design below. A live
+  "Fully paid" / "Due balance: ৳X" preview updates as the client types.
+  Payment proof is required to submit. Server-side: `total_cost_bdt` is
+  computed fresh (never trusts a client-submitted value), `amount_paid_bdt`
+  is validated `0 < amount_paid ≤ total_cost`, `due_balance_bdt =
+  total_cost − amount_paid` is computed server-side too.
+  **Postpaid**: unchanged from the app's original behavior — no payment or
+  proof fields shown, no validation of them even if present in the
+  payload (simply never read), full amount becomes due, settled later via
+  the existing Pay Due flow.
+  New `limit_requests` columns: `segment` (snapshotted per-request, not a
+  live join — a client's segment changing later never rewrites past
+  requests), `total_cost_bdt` (frozen at submission, distinct from the
+  existing `bdt_charge` which is computed at *approval* from the
+  admin-editable amount/rate), `amount_paid_bdt`, `due_balance_bdt`.
+  Historical rows backfilled as `postpaid` / `total_cost_bdt =
+  requested_amount_usd × default_usd_rate` / `amount_paid_bdt = 0` —
+  verified the backfill formula against all 5 real historical rows before
+  writing the migration, all computed cleanly with no nulls.
+  On approval, `approve_limit_request` now **auto-records a matching
+  APPROVED `payments` row + `PAYMENT` ledger credit for `amount_paid_bdt`**
+  (prepaid only, `if v_req.segment = 'prepaid' and
+  coalesce(v_req.amount_paid_bdt, 0) > 0`) in the same atomic transaction
+  as the existing `LIMIT_APPROVAL` debit — this can be a *partial* amount,
+  so the shortfall naturally becomes real ledger due with no separate
+  due-tracking mechanism needed (due is still purely `debit − credit`, as
+  always). Postpaid requests get no auto-payment at all — debit only,
+  exactly the original behavior. Return type changed from a bare `uuid` to
+  `jsonb` (`ledger_id`, `payment_id`, `payment_ledger_id` — the latter two
+  `null` for postpaid). `approveLimitRequestFn` (TS) links the client's
+  already-uploaded proof to the new payment too when one was created.
+  Migration `20260723000019_client_segment_prepayment.sql`.
+  UI: segment badge + Total cost/Amount paid/Due balance shown on the
+  admin approval detail page's Request card, and as new Paid/Due columns
+  on the client's own Limit Requests list — that list's "View proof"
+  button now shows whenever `segment === 'prepaid'` (proof exists from
+  submission time now, not just after approval) instead of the old
+  `status === 'APPROVED'` gate, which would have hidden it while pending.
+  **Known caveat, flagged not defended against**: `total_cost_bdt`/
+  `amount_paid_bdt` are frozen at submission; admins can still edit the
+  approved amount/rate at approval time (unchanged, existing capability) —
+  if they do, the auto-recorded payment reflects `amount_paid_bdt` as
+  entered, which could then not exactly match the admin-approved figures.
+  Both the debit and credit stay independently correct either way (no
+  ledger-integrity bug), but it's a real-world reconciliation note worth
+  knowing about.
+  **Supersedes an earlier same-day, never-committed design** ("Client
+  prepays for limit requests up front") that forced every client to
+  prepay 100% with no partial option and no postpaid segment — nothing
+  from that design was ever committed or deployed, so it was replaced
+  outright here rather than layered on top of; see the CHANGELOG for the
+  full before/after. **Owner must apply this migration via the SQL editor
+  or `supabase db push`** — no DB connection is available in this dev
+  environment to apply it directly.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

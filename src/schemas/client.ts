@@ -8,6 +8,7 @@ const optionalText = z
   .transform((v) => (v === '' ? undefined : v))
 
 export const clientStatusEnum = z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED'])
+export const clientSegmentEnum = z.enum(['prepaid', 'postpaid'])
 
 // USD→BDT rate charged per dollar for this client.
 const usdRate = z.coerce
@@ -26,6 +27,7 @@ export const clientCreateSchema = z.object({
   address: optionalText,
   usd_rate: usdRate,
   status: clientStatusEnum.default('ACTIVE'),
+  segment: clientSegmentEnum,
 })
 
 export const clientUpdateSchema = clientCreateSchema.extend({

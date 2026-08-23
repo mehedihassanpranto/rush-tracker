@@ -8,6 +8,58 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-08-23
 
+**Added client segmentation (prepaid / postpaid) with partial prepayment
+for limit requests.** Every client is now either `prepaid` or `postpaid`
+(new `clients.segment`, required, set at creation, editable by admin
+later — existing clients backfilled to `postpaid`, matching their actual
+behavior to date). Segment drives the limit-request flow:
+- **Prepaid**: the client sees the auto-computed total cost
+  (`requested_amount_usd × rate`, read-only), enters how much they're
+  paying now — pre-filled with the full amount but editable **down**
+  (partial payment allowed) — and must attach payment-proof before they
+  can submit at all. A live "Fully paid" / "Due balance: ৳X" preview
+  updates as they type.
+- **Postpaid**: unchanged from the app's original behavior — no payment or
+  proof at request time, the full amount becomes due, settled later via
+  the existing Pay Due flow.
+All of this is enforced **server-side** (`createLimitRequestFn` looks up
+the client's real segment itself, never trusts it from the payload;
+`total_cost_bdt`/`due_balance_bdt` are computed server-side, never
+accepted as client-submitted values).
+New `limit_requests` columns: `segment` (snapshotted at request time, so a
+later segment change never rewrites past requests), `total_cost_bdt`
+(frozen at submission — distinct from the existing `bdt_charge`, which is
+computed at *approval* from the admin-editable amount/rate), `amount_paid_bdt`,
+`due_balance_bdt`. Migration `20260723000019_client_segment_prepayment.sql`
+(existing historical rows backfilled from `requested_amount_usd ×
+default_usd_rate`, verified against all 5 real rows before writing).
+On approval, `approve_limit_request` now **auto-records a matching
+APPROVED payment + ledger credit for `amount_paid_bdt`** (prepaid only,
+which may be a *partial* amount — the shortfall becomes real ledger due
+automatically, no separate due-tracking mechanism needed) in the same
+atomic transaction as the existing debit; postpaid requests are
+unchanged — debit only, no auto-payment. `approve_limit_request`'s return
+type changed from a bare uuid to jsonb (`ledger_id`, `payment_id`,
+`payment_ledger_id`, the latter two nullable for postpaid). The client's
+uploaded proof gets linked to the auto-created payment too, so it shows in
+Payment History like any other payment. Segment badge + amount
+paid/due balance now shown on the admin approval detail page and the
+client's own Limit Requests list; the client's "View proof" button there
+now shows whenever `segment === 'prepaid'` (proof exists from submission
+time, not just after approval — the old condition of `status === 'APPROVED'`
+would have hidden it while pending).
+**Known caveat**: `total_cost_bdt`/`amount_paid_bdt` are frozen at
+submission; if an admin edits the approved amount/rate during review
+(still fully supported, unchanged), the auto-recorded payment reflects
+`amount_paid_bdt` as entered, which could then not exactly match the
+admin-approved figures — the ledger always stays internally consistent
+either way (debit and credit are independent, correct entries), but this
+is a real-world reconciliation note for admins to know about, not a bug.
+**Supersedes an earlier same-day, never-committed design** that forced
+*every* client to prepay 100% with no partial option and no postpaid
+segment at all — nothing from that design shipped anywhere, so it was
+replaced outright rather than layered on top of.
+
 **Removed the "Limit update proof" requirement from limit request
 approval** — this proof was never provided by the client (their submission
 form has no proof field at all); `uploadLimitProofFn` was `requireAdmin`-

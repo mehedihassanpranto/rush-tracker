@@ -215,6 +215,37 @@ function ApprovalPage() {
               label="Rate at request"
               value={`৳${detail.default_usd_rate}`}
             />
+            <Row
+              label="Segment"
+              value={
+                <span
+                  className={
+                    detail.segment === 'prepaid'
+                      ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
+                      : 'rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground'
+                  }
+                >
+                  {detail.segment === 'prepaid' ? 'Prepaid' : 'Postpaid'}
+                </span>
+              }
+            />
+            <Row label="Total cost" value={formatBdt(detail.total_cost_bdt)} />
+            {detail.segment === 'prepaid' && (
+              <Row
+                label="Amount paid"
+                value={formatBdt(detail.amount_paid_bdt)}
+              />
+            )}
+            <Row
+              label="Due balance"
+              value={
+                Number(detail.due_balance_bdt) <= 0 ? (
+                  <span className="text-emerald-600">Fully paid</span>
+                ) : (
+                  formatBdt(detail.due_balance_bdt)
+                )
+              }
+            />
           </CardContent>
         </Card>
 
