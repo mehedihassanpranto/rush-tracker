@@ -55,9 +55,10 @@ export interface RequestableAccount {
 }
 
 export interface RequestableAccountsResult {
-  /** The signed-in client's segment — determines whether the request dialog
-   * shows the amount-paid/proof fields at all (prepaid) or not (postpaid). */
-  segment: 'prepaid' | 'postpaid'
+  /** The signed-in client's segment — determines what the request dialog
+   * shows: prepaid (full amount, locked), partial (editable amount, some
+   * now/rest due), or postpaid (no payment fields at all). */
+  segment: 'prepaid' | 'partial' | 'postpaid'
   accounts: Array<RequestableAccount>
 }
 
@@ -77,7 +78,8 @@ export const listMyRequestableAccountsFn = createServerFn({
     admin.from('clients').select('segment').eq('id', membership.clientId).single(),
   ])
   if (error) throw new Error(error.message)
-  const segment = (clientRow as { segment: 'prepaid' | 'postpaid' } | null)?.segment ?? 'postpaid'
+  const segment =
+    (clientRow as { segment: 'prepaid' | 'partial' | 'postpaid' } | null)?.segment ?? 'postpaid'
 
   const accounts = (rows ?? [])
     .map(
@@ -162,7 +164,7 @@ export const createLimitRequestFn = createServerFn({ method: 'POST' })
     if (!clientRow) throw new Error('Client not found')
     const { name: clientName, segment } = clientRow as {
       name: string
-      segment: 'prepaid' | 'postpaid'
+      segment: 'prepaid' | 'partial' | 'postpaid'
     }
 
     let amountPaid = '0'
@@ -170,6 +172,15 @@ export const createLimitRequestFn = createServerFn({ method: 'POST' })
     let hasProof = false
 
     if (segment === 'prepaid') {
+      // Full amount only — not editable by the client, so amount_paid_bdt
+      // from the payload is never even read here; the server decides it.
+      if (!data.file_name || !data.mime_type || !data.data_base64) {
+        throw new Error('Attach payment proof')
+      }
+      amountPaid = totalCost
+      dueBalance = '0.00'
+      hasProof = true
+    } else if (segment === 'partial') {
       if (data.amount_paid_bdt == null || data.amount_paid_bdt <= 0) {
         throw new Error('Enter how much you paid')
       }

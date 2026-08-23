@@ -8,6 +8,27 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-08-23
 
+**Split `prepaid` into `prepaid` (full amount, locked) and `partial`
+(editable, was the original `prepaid` meaning)** — client segment is now
+three-way: `prepaid` clients must pay the full `total_cost_bdt` to submit a
+request (the "Amount paid" field is disabled, always shows the full
+amount, and the server ignores any submitted value and computes it itself);
+`partial` clients keep the exact behavior the previous entry below
+describes (editable amount, 0 < paid ≤ total, rest becomes due);
+`postpaid` is unchanged. `approve_limit_request`'s auto-credit condition
+widened from `segment = 'prepaid'` to `segment <> 'postpaid'`, since both
+prepaid and partial pay something at submission. Two migrations:
+`20260723000020_add_partial_segment.sql` (just the enum addition — kept
+separate since a newly-added enum value can't safely be used in the same
+transaction it's created in) and
+`20260723000021_prepaid_full_partial_split.sql` (remaps existing live
+`'prepaid'` rows to `'partial'` — found and correctly handled one real
+case: `CL-0001` and its already-approved `LR-000012`, ৳1,522 paid of
+৳13,000, a genuine partial payment that must not be relabeled `'prepaid'`
+under the new stricter meaning — plus the RPC update). Confirmed both
+`clients.segment` and `limit_requests.segment` were live and populated
+before writing the data migration.
+
 **Added client segmentation (prepaid / postpaid) with partial prepayment
 for limit requests.** Every client is now either `prepaid` or `postpaid`
 (new `clients.segment`, required, set at creation, editable by admin

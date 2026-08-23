@@ -222,15 +222,21 @@ function ApprovalPage() {
                   className={
                     detail.segment === 'prepaid'
                       ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
-                      : 'rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground'
+                      : detail.segment === 'partial'
+                        ? 'rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-400'
+                        : 'rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground'
                   }
                 >
-                  {detail.segment === 'prepaid' ? 'Prepaid' : 'Postpaid'}
+                  {detail.segment === 'prepaid'
+                    ? 'Prepaid'
+                    : detail.segment === 'partial'
+                      ? 'Partial'
+                      : 'Postpaid'}
                 </span>
               }
             />
             <Row label="Total cost" value={formatBdt(detail.total_cost_bdt)} />
-            {detail.segment === 'prepaid' && (
+            {detail.segment !== 'postpaid' && (
               <Row
                 label="Amount paid"
                 value={formatBdt(detail.amount_paid_bdt)}

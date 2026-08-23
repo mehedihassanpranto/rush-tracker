@@ -58,7 +58,12 @@ export function RequestLimitDialog({
     enabled: open,
   })
   const accounts = result?.accounts
-  const isPrepaid = result?.segment === 'prepaid'
+  const segment = result?.segment
+  // prepaid: full amount only, amount-paid locked. partial: editable
+  // amount-paid, some now/rest due. postpaid: no payment fields at all.
+  const isFullPrepay = segment === 'prepaid'
+  const isPartial = segment === 'partial'
+  const requiresPayment = isFullPrepay || isPartial
   const [amountPaid, setAmountPaid] = useState('')
   const [paidTouched, setPaidTouched] = useState(false)
 
@@ -94,23 +99,24 @@ export function RequestLimitDialog({
       ? multiplyUsdByRate(amountNum, selected.usd_rate).toString()
       : null
 
-  // Prepaid only: pre-fill "amount paid" with the full cost whenever it
-  // changes, but stop overwriting once the client has manually edited it
-  // (they can pay less than the full amount — the rest becomes due).
+  // Pre-fill "amount paid" with the full cost whenever it changes. For
+  // 'partial' the client can then edit it down (paidTouched stops the
+  // overwrite); for 'prepaid' the input stays disabled so it can never be
+  // touched, keeping it locked to the full amount.
   useEffect(() => {
-    if (isPrepaid && chargeBdt && !paidTouched) setAmountPaid(chargeBdt)
-  }, [isPrepaid, chargeBdt, paidTouched])
+    if (requiresPayment && chargeBdt && !paidTouched) setAmountPaid(chargeBdt)
+  }, [requiresPayment, chargeBdt, paidTouched])
 
   const amountPaidNum = Number(amountPaid)
   const amountPaidValid =
-    !isPrepaid ||
+    !requiresPayment ||
     (amountPaid !== '' &&
       Number.isFinite(amountPaidNum) &&
       amountPaidNum > 0 &&
       chargeBdt !== null &&
       amountPaidNum <= Number(chargeBdt))
   const dueBalance =
-    isPrepaid && chargeBdt && amountPaidValid
+    requiresPayment && chargeBdt && amountPaidValid
       ? dec(chargeBdt).minus(amountPaidNum).toFixed(2)
       : null
 
@@ -130,7 +136,7 @@ export function RequestLimitDialog({
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!isPrepaid) {
+      if (!requiresPayment) {
         return createRequest({
           data: { ad_account_id: accountId, requested_amount_usd: amountNum },
         })
@@ -242,7 +248,7 @@ export function RequestLimitDialog({
             </div>
           )}
 
-          {isPrepaid ? (
+          {requiresPayment ? (
             <>
               <div className="space-y-2">
                 <Label>Amount paid (BDT)</Label>
@@ -251,29 +257,38 @@ export function RequestLimitDialog({
                   min="0"
                   step="0.01"
                   value={amountPaid}
+                  disabled={isFullPrepay}
                   onChange={(e) => {
                     setPaidTouched(true)
                     setAmountPaid(e.target.value)
                   }}
                 />
-                {chargeBdt && amountPaidValid && dueBalance && (
-                  <p
-                    className={
-                      Number(dueBalance) <= 0
-                        ? 'text-xs text-emerald-600'
-                        : 'text-xs text-muted-foreground'
-                    }
-                  >
-                    {Number(dueBalance) <= 0
-                      ? 'Fully paid'
-                      : `Due balance: ${formatBdt(dueBalance)}`}
+                {isFullPrepay ? (
+                  <p className="text-xs text-muted-foreground">
+                    Full payment required — not editable.
                   </p>
-                )}
-                {amountPaid !== '' && !amountPaidValid && (
-                  <p className="text-xs text-destructive">
-                    Enter an amount greater than 0
-                    {chargeBdt ? ` and up to ${formatBdt(chargeBdt)}` : ''}.
-                  </p>
+                ) : (
+                  <>
+                    {chargeBdt && amountPaidValid && dueBalance && (
+                      <p
+                        className={
+                          Number(dueBalance) <= 0
+                            ? 'text-xs text-emerald-600'
+                            : 'text-xs text-muted-foreground'
+                        }
+                      >
+                        {Number(dueBalance) <= 0
+                          ? 'Fully paid'
+                          : `Due balance: ${formatBdt(dueBalance)}`}
+                      </p>
+                    )}
+                    {amountPaid !== '' && !amountPaidValid && (
+                      <p className="text-xs text-destructive">
+                        Enter an amount greater than 0
+                        {chargeBdt ? ` and up to ${formatBdt(chargeBdt)}` : ''}.
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -329,7 +344,7 @@ export function RequestLimitDialog({
               selected?.has_pending ||
               selected?.status !== 'ACTIVE' ||
               mutation.isPending ||
-              (isPrepaid && (!file || !amountPaidValid))
+              (requiresPayment && (!file || !amountPaidValid))
             }
             onClick={() => mutation.mutate()}
           >

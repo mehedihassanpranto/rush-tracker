@@ -146,7 +146,7 @@ function MyLimitRequestsPage() {
                   {r.bdt_charge ? formatBdt(r.bdt_charge) : '—'}
                 </TableCell>
                 <TableCell className="text-right">
-                  {r.segment === 'prepaid' ? formatBdt(r.amount_paid_bdt) : '—'}
+                  {r.segment !== 'postpaid' ? formatBdt(r.amount_paid_bdt) : '—'}
                 </TableCell>
                 <TableCell className="text-right">
                   {Number(r.due_balance_bdt) <= 0 ? (
@@ -163,7 +163,7 @@ function MyLimitRequestsPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
-                    {r.segment === 'prepaid' && (
+                    {r.segment !== 'postpaid' && (
                       <Button
                         size="sm"
                         variant="ghost"

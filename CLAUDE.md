@@ -1003,9 +1003,45 @@ bug fixes, and anything else that isn't a whole new named feature.
   prepay 100% with no partial option and no postpaid segment — nothing
   from that design was ever committed or deployed, so it was replaced
   outright here rather than layered on top of; see the CHANGELOG for the
-  full before/after. **Owner must apply this migration via the SQL editor
-  or `supabase db push`** — no DB connection is available in this dev
-  environment to apply it directly.
+  full before/after. **Confirmed applied to the live project** — a direct
+  read of `clients`/`limit_requests` showed both `segment` columns already
+  populated (`CL-0001` set to `prepaid`, everything else `postpaid`) before
+  the three-way split below was built, superseding the "not yet applied"
+  note this bullet originally had.
+- **Split `prepaid` into `prepaid` (full, locked) and `partial` (editable,
+  the original meaning) (post-Phase-8 addition): done, pending owner
+  review, migrations NOT YET APPLIED to the live project** — segment is
+  now three-way. `prepaid` clients must pay the full `total_cost_bdt` to
+  submit a request; the "Amount paid" field is disabled in
+  `RequestLimitDialog` (always shows/sends the full amount) and
+  `createLimitRequestFn` ignores whatever `amount_paid_bdt` the payload
+  carries for this segment, computing it itself as `totalCost` server-side
+  regardless. `partial` keeps the exact behavior the entry above
+  describes — editable amount, `0 < paid ≤ total`, remainder becomes due.
+  `postpaid` unchanged. `approve_limit_request`'s auto-credit condition
+  widened from `segment = 'prepaid'` to `segment <> 'postpaid'`.
+  Two migrations, deliberately split:
+  `20260723000020_add_partial_segment.sql` (bare `alter type ... add
+  value 'partial'`, nothing else in the file — a newly-added enum value
+  can't safely be used in the same transaction it's created in) and
+  `20260723000021_prepaid_full_partial_split.sql` (data migration +
+  `create or replace function`, no return-type change this time so no
+  drop needed). **Found and correctly handled real live data before
+  writing the migration**: queried `clients`/`limit_requests` directly and
+  found `CL-0001` already set to the old `prepaid` meaning, and its
+  already-approved `LR-000012` with a genuine partial payment (৳1,522 of
+  ৳13,000) — both remapped to `'partial'` in the migration so their
+  semantics don't silently change under the new stricter `prepaid`
+  definition. UI: 3rd Select option + updated helper text on
+  `ClientFormDialog`, 3-state segment badge (emerald/amber/muted) on the
+  admin approval page, portal Limit Requests list's Paid column and
+  "View proof" button both switched from `segment === 'prepaid'` to
+  `segment !== 'postpaid'` so partial clients keep showing correctly.
+  **Owner must apply both migrations via the SQL editor or `supabase db
+  push`** — no DB connection is available in this dev environment to
+  apply them directly (though I do have read-only access via the
+  service-role key, used here to confirm the real data before migrating
+  it).
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

@@ -5,7 +5,15 @@ export type { ClientStatus }
 export type AdAccountStatus = 'AVAILABLE' | 'ACTIVE' | 'INACTIVE' | 'SUSPENDED'
 export type AssignmentStatus = 'ACTIVE' | 'RELEASED'
 
-export type ClientSegment = 'prepaid' | 'postpaid'
+/**
+ * prepaid: must pay the FULL total_cost_bdt up front, not editable.
+ * partial: pays some amount up front (editable, 0 < amount <= total_cost),
+ *   the rest becomes due — this was the original, single 'prepaid' meaning
+ *   before the segment split (2026-08-23).
+ * postpaid: original app behavior — no payment at request time, full
+ *   amount becomes due, settled later via Pay Due.
+ */
+export type ClientSegment = 'prepaid' | 'partial' | 'postpaid'
 
 export interface Client {
   id: string

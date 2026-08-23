@@ -48,7 +48,7 @@ const formSchema = z.object({
     .min(1, 'Enter the USD rate')
     .refine((v) => Number(v) > 0, 'Must be greater than zero'),
   status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED']),
-  segment: z.enum(['prepaid', 'postpaid']),
+  segment: z.enum(['prepaid', 'partial', 'postpaid']),
 })
 
 type FormValues = z.infer<typeof formSchema>
@@ -256,7 +256,10 @@ export function ClientFormDialog({
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="prepaid">
-                        Prepaid (Instant Pay)
+                        Prepaid (Full Amount)
+                      </SelectItem>
+                      <SelectItem value="partial">
+                        Partial (Pay Some Now)
                       </SelectItem>
                       <SelectItem value="postpaid">
                         Postpaid (Due System)
@@ -264,9 +267,10 @@ export function ClientFormDialog({
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Prepaid clients pay up front (with proof) when requesting
-                    a limit increase. Postpaid clients request first and
-                    settle the due later.
+                    Prepaid clients must pay the full amount (with proof) to
+                    submit a request. Partial clients pay some amount now
+                    (editable, with proof) and owe the rest. Postpaid clients
+                    request first and settle the due later.
                   </p>
                   <FormMessage />
                 </FormItem>

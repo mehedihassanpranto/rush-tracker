@@ -8,7 +8,7 @@ const optionalText = z
   .transform((v) => (v === '' ? undefined : v))
 
 export const clientStatusEnum = z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED'])
-export const clientSegmentEnum = z.enum(['prepaid', 'postpaid'])
+export const clientSegmentEnum = z.enum(['prepaid', 'partial', 'postpaid'])
 
 // USD→BDT rate charged per dollar for this client.
 const usdRate = z.coerce
