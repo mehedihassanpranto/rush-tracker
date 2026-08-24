@@ -8,6 +8,41 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-08-24
 
+**Verified everything from today's session live, and found + fixed one more
+real bug while doing it** — after the owner applied both pending migrations,
+re-ran every fix end-to-end against the live app rather than trusting the
+earlier static checks:
+- **Multi-client login + notification scoping, confirmed via real writes**:
+  created a real payment request against a client the test account belongs
+  to and confirmed the resulting notification correctly got the new
+  `client_id` set (`find_auth_user_by_email`/`notifications.client_id`
+  migrations both confirmed live). Then, using the actual real
+  multi-membership account from earlier testing, created a second payment
+  request against its *other* client and confirmed — with the portal
+  actually open in a browser — that the notification **list** only shows it
+  after switching the active client to that one, while the unread **count**
+  badge stays identical (8) regardless of which client is active. All test
+  payment requests/notifications/audit rows were deleted afterward.
+- **New bug found while verifying the USD-rate fix**: the ad account Edit
+  dialog (`AccountEditDialog`) and the client Edit dialog
+  (`ClientFormDialog`) both failed to save **even with zero changes** —
+  "Invalid input: expected string, received number" on `current_limit_usd`
+  and `usd_rate` (accounts) / `usd_rate` (clients). Root cause: both
+  dialogs seed `defaultValues` straight from the numeric prop
+  (`account.usd_rate`, `client.usd_rate`, etc.), but Supabase returns
+  `numeric` columns as JS **numbers** here — contradicting this repo's own
+  documented convention ("NUMERIC columns come back from supabase-js as
+  strings," `client.fns.ts`'s header comment) — while both dialogs'
+  `z.string()`-based schemas require an actual string. This was **already
+  broken before today's rate-inheritance change** — confirmed by testing
+  with a completely untouched, freshly-opened dialog. Fixed by wrapping
+  each numeric default in `String(...)` in both dialogs. Re-verified the
+  USD-rate fix specifically via a real round-trip on a live, unassigned
+  account (ADA-0007): cleared "Per USD" to blank through the actual Edit
+  dialog UI, confirmed the DB value became `0`, then restored it to its
+  original `130` — net-zero change, but proves the whole path (UI → schema
+  → server fn → DB) now genuinely works, not just typechecks.
+
 **Fixed: a client's own USD rate was silently ignored because every ad
 account form forced an explicit, non-zero "Per USD" rate** — `rate.service.ts`'s
 `adAccountUsdRate()` has always correctly implemented "account rate wins if

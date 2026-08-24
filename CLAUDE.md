@@ -1369,6 +1369,45 @@ bug fixes, and anything else that isn't a whole new named feature.
   requests will actually bill at, so that's flagged for the owner to
   action via the now-fixed Edit dialog (clear "Per USD" to blank and
   save) rather than silently edited as part of a bug-fix pass.
+- **Live verification pass + one more real bug found (post-Phase-8
+  addition): done, pending owner review, no migration** — after the owner
+  applied both pending migrations, every fix from earlier today was
+  re-verified against the live app rather than trusted from static checks
+  alone. Multi-client login (`find_auth_user_by_email`) and notification
+  `client_id` scoping were both confirmed via **real writes**: a fresh
+  payment request against a real client correctly produced a notification
+  with `client_id` set; a second payment request against a different
+  client belonging to the same real multi-membership login (from earlier
+  switcher testing) was confirmed to appear in `/portal/notifications`
+  only once the active client was switched to it, while the header's
+  unread count badge stayed identical either way — proving the
+  count-stays-global / list-follows-active-client split actually works,
+  not just typechecks. All test payment requests, their notifications,
+  and their audit rows were deleted afterward.
+  **New bug found while verifying the USD-rate fix, unrelated to it**:
+  `AccountEditDialog` (`account-dialogs.tsx`) and `ClientFormDialog`
+  (`client-form-dialog.tsx`) both failed to save with **zero changes
+  made** — "Invalid input: expected string, received number" on
+  `current_limit_usd`/`usd_rate` (accounts) and `usd_rate` (clients).
+  Confirmed this predates today's work — reproduced by opening a
+  completely untouched dialog and clicking Save immediately. Root cause:
+  both dialogs seed `defaultValues` directly from the numeric prop
+  (`account.usd_rate`, `client.usd_rate`, etc.), but Supabase actually
+  returns these `numeric` columns as JS **numbers** — contradicting this
+  file's own documented convention ("NUMERIC columns come back from
+  supabase-js as strings," noted under the Phase 2 conventions section)
+  — while both dialogs validate with a `z.string()`-based schema that
+  rejects a raw number. Fixed by wrapping each numeric default in
+  `String(...)` in both dialogs' `useForm` initial `defaultValues` and
+  their on-open `form.reset()`. This means **editing any existing ad
+  account or client was silently broken before today**, independent of
+  the USD-rate inheritance bug — a genuinely separate, more basic defect
+  this verification pass happened to surface. Re-verified the USD-rate
+  fix itself via a full round-trip through the real Edit dialog UI on a
+  live, unassigned account (`ADA-0007`): cleared "Per USD" to blank,
+  confirmed the DB value became `0`, then restored it to its original
+  `130` — net-zero change, confirming the entire path (UI → schema →
+  server fn → DB) genuinely works now, not just passes typecheck.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

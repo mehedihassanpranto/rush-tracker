@@ -337,8 +337,8 @@ export function AccountEditDialog({
     defaultValues: {
       external_account_id: account.external_account_id ?? '',
       platform: account.platform,
-      current_limit_usd: account.current_limit_usd,
-      usd_rate: account.usd_rate,
+      current_limit_usd: String(account.current_limit_usd),
+      usd_rate: String(account.usd_rate),
     },
   })
 
@@ -347,8 +347,8 @@ export function AccountEditDialog({
       form.reset({
         external_account_id: account.external_account_id ?? '',
         platform: account.platform,
-        current_limit_usd: account.current_limit_usd,
-        usd_rate: account.usd_rate,
+        current_limit_usd: String(account.current_limit_usd),
+        usd_rate: String(account.usd_rate),
       })
   }, [open, account, form])
 

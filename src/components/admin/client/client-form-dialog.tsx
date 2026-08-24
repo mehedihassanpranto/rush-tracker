@@ -89,7 +89,7 @@ export function ClientFormDialog({
         email: client?.email ?? '',
         phone: client?.phone ?? '',
         address: client?.address ?? '',
-        usd_rate: client?.usd_rate ?? '',
+        usd_rate: client ? String(client.usd_rate) : '',
         status: client?.status ?? 'ACTIVE',
         segment: client?.segment ?? 'postpaid',
       })
