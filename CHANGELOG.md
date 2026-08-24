@@ -6,6 +6,40 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-08-24
+
+**"Total Remaining" summary card on the client detail page** — added a 6th
+card to `FinancialSummary`, positioned right after "Current Due (USD,
+approx.)", showing the sum of Meta spend headroom (`spend_cap -
+amount_spent`) across the client's own linked ad accounts, USD only (no FX
+path, same currency-native gate as the existing Remaining column/bell).
+`FinancialSummary` takes a new optional `totalRemainingUsd` prop —
+`null`/omitted hides the card entirely (no `ad_accounts.manage`, or the
+bulk Meta fetch hasn't loaded yet) rather than showing a misleading
+"$0.00"; the portal statement page's own `FinancialSummary` usage is
+unaffected since it never passes the prop. Computed client-side in
+`$clientId.tsx` by reducing over the same `balanceByAccountId` map that
+already powers the Ad Accounts tab's per-row Remaining column — no new
+query.
+
+**"Remaining" column on the clients list page** — same figure, one level up:
+per-client sum of Meta spend headroom across all their linked USD accounts,
+shown as a new column on `/admin/clients`. Reuses the existing bulk
+`listAdAccountsFn` (each row already carries `current_client.id`) joined
+client-side against the existing bulk `listMetaBusinessAdAccountsFn` fetch —
+no new server function, no per-client query. Shows `—` for a client with no
+data yet (no `ad_accounts.manage` permission, Meta not configured, or no
+linked USD accounts) rather than a misleading `$0.00`.
+
+**"Total Remaining" card on the client portal dashboard** — the same figure
+surfaced to clients themselves: `/portal` now shows a "Total Remaining"
+card right after "Current Due (USD, approx.)", summing Meta spend headroom
+across the client's own linked USD ad accounts. Reuses the existing
+`listMyAccountsMetaRemainingFn` query (already powers the per-row
+"Remaining" column on `/portal/ad-accounts`) — no new server function.
+Hidden (not a `$0.00`) while the query hasn't resolved or Meta is
+unreachable, matching the rest of this app's Meta-degradation convention.
+
 ## 2026-08-23
 
 **Split `prepaid` into `prepaid` (full amount, locked) and `partial`

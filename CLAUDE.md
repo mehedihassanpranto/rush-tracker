@@ -1042,6 +1042,53 @@ bug fixes, and anything else that isn't a whole new named feature.
   apply them directly (though I do have read-only access via the
   service-role key, used here to confirm the real data before migrating
   it).
+- **"Total Remaining" summary card on the client detail page (post-Phase-8
+  addition): done, pending owner review** — a 6th card in
+  `FinancialSummary` (`src/components/shared/financial-summary.tsx`),
+  placed right after "Current Due (USD, approx.)" per the owner's request,
+  summing Meta spend headroom (`spend_cap − amount_spent`) across the
+  client's own linked ad accounts. USD-only, no FX conversion — same
+  currency-native gate `LOW_BALANCE_THRESHOLD`/`META_DUE_THRESHOLD` already
+  use. New optional `totalRemainingUsd` prop; `null`/omitted hides the card
+  rather than showing a misleading "$0.00" (used only when
+  `ad_accounts.manage` is granted and the bulk Meta fetch has resolved) —
+  the portal statement page's own `FinancialSummary` usage doesn't pass it,
+  so it's unaffected, still 5 cards. Computed client-side in
+  `$clientId.tsx` from the same `balanceByAccountId` map the Ad Accounts
+  tab's per-row Remaining column already builds — no new query added.
+- **"Remaining" column on the clients list page (post-Phase-8 addition):
+  done, pending owner review** — the same figure one level up:
+  `/admin/clients` (`admin/clients/index.tsx`) now shows each client's
+  summed Meta spend headroom across their linked USD ad accounts. No new
+  server fn: reuses the existing bulk `listAdAccountsFn` (each
+  `AdAccountWithClient` row already carries `current_client.id`, resolved
+  server-side by `currentClientMap()`) joined client-side against the
+  existing bulk `listMetaBusinessAdAccountsFn` fetch (the same call the ad
+  accounts list page and the client detail page's Ad Accounts tab already
+  make) — grouped by `current_client.id` instead of by account. Gated on
+  `PERMISSIONS.AD_ACCOUNTS_MANAGE` (`canManageMeta`), separate from the
+  page's existing `CLIENTS_MANAGE`-based `canManage` (which only controls
+  the delete-dropdown) — matching the permission the Meta query itself
+  requires server-side. USD-only, no FX path, same as every other
+  Meta-money figure in this app. Shows `—` per client when no data is
+  available (permission missing, Meta unconfigured, or no linked USD
+  accounts) rather than a misleading `$0.00`.
+- **"Total Remaining" card on the client portal dashboard (post-Phase-8
+  addition): done, pending owner review** — the same figure surfaced to
+  clients: `/portal` (`portal/index.tsx`) now shows a "Total Remaining"
+  card immediately after "Current Due (USD, approx.)" (appended right
+  after the existing `SUMMARY_CARDS` map, whose last entry already is that
+  card, so it lands in the requested position without touching the
+  `ClientDashboardStats`-keyed array). No new server fn — reuses the
+  existing `listMyAccountsMetaRemainingFn` (`meta.fns.ts`, already gated by
+  `requireClientMembership()` and already powering `/portal/ad-accounts`'s
+  per-row "Remaining" column), summed client-side over USD-currency,
+  non-null entries only (`currency !== 'USD'` or `remaining == null` are
+  skipped — same no-FX, currency-native rule as every other Meta-money
+  aggregate in this app). The card is omitted entirely (not rendered as
+  `$0.00`) until the query resolves — degrades the same way the ad-accounts
+  page's own Remaining column already does when Meta is unreachable or
+  unconfigured.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

@@ -5,7 +5,9 @@ import { useServerFn } from '@tanstack/react-start'
 import { MoreHorizontal, Plus, Trash2, Users } from 'lucide-react'
 
 import { listClientsFn } from '@/server/clients/client.fns'
-import { formatBdt, formatUsd } from '@/lib/money/money'
+import { listAdAccountsFn } from '@/server/ad-accounts/ad-account.fns'
+import { listMetaBusinessAdAccountsFn } from '@/server/meta/meta.fns'
+import { dec, formatBdt, formatUsd } from '@/lib/money/money'
 import { hasPermission } from '@/lib/auth/types'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { PageHeader } from '@/components/shared/page-header'
@@ -37,7 +39,10 @@ export const Route = createFileRoute('/admin/clients/')({
 function ClientsPage() {
   const { user } = Route.useRouteContext()
   const canManage = hasPermission(user, PERMISSIONS.CLIENTS_MANAGE)
+  const canManageMeta = hasPermission(user, PERMISSIONS.AD_ACCOUNTS_MANAGE)
   const listClients = useServerFn(listClientsFn)
+  const listAccounts = useServerFn(listAdAccountsFn)
+  const listMetaAccounts = useServerFn(listMetaBusinessAdAccountsFn)
   const [createOpen, setCreateOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string
@@ -48,6 +53,48 @@ function ClientsPage() {
     queryKey: ['clients'],
     queryFn: () => listClients(),
   })
+
+  // Bulk ad accounts (each carries its current client) + the same bulk Meta
+  // fetch the ad accounts list page uses, joined client-side to get "sum of
+  // Meta spend headroom across this client's accounts" — no new server fn,
+  // no per-client query.
+  const { data: accounts } = useQuery({
+    queryKey: ['ad-accounts'],
+    queryFn: () => listAccounts(),
+  })
+  const { data: metaAccounts } = useQuery({
+    queryKey: ['meta-business-ad-accounts'],
+    queryFn: () => listMetaAccounts(),
+    enabled: canManageMeta,
+    staleTime: 2 * 60 * 1000,
+    retry: false,
+    throwOnError: false,
+  })
+
+  const remainingByAccountId = new Map<string, string | null>()
+  for (const m of metaAccounts ?? []) {
+    if (!m.linked_account_id || m.currency !== 'USD') continue
+    remainingByAccountId.set(
+      m.linked_account_id,
+      m.spend_cap != null
+        ? dec(m.spend_cap).minus(dec(m.amount_spent ?? 0)).toFixed(2)
+        : null,
+    )
+  }
+  const remainingByClientId = new Map<string, string>()
+  if (canManageMeta && metaAccounts !== undefined) {
+    for (const account of accounts ?? []) {
+      if (!account.current_client) continue
+      const remaining = remainingByAccountId.get(account.id)
+      if (remaining == null) continue
+      const clientId = account.current_client.id
+      const prior = remainingByClientId.get(clientId)
+      remainingByClientId.set(
+        clientId,
+        (prior ? dec(prior).plus(remaining) : dec(remaining)).toFixed(2),
+      )
+    }
+  }
 
   return (
     <div>
@@ -68,6 +115,7 @@ function ClientsPage() {
               <TableHead className="text-center">Active accounts</TableHead>
               <TableHead className="text-right">Current due (BDT)</TableHead>
               <TableHead className="text-right">Current due (USD)</TableHead>
+              <TableHead className="text-right">Remaining</TableHead>
               <TableHead>Status</TableHead>
               {canManage && <TableHead className="w-10" />}
             </TableRow>
@@ -76,7 +124,7 @@ function ClientsPage() {
             {isLoading &&
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={canManage ? 8 : 7}>
+                  <TableCell colSpan={canManage ? 9 : 8}>
                     <Skeleton className="h-6 w-full" />
                   </TableCell>
                 </TableRow>
@@ -84,7 +132,7 @@ function ClientsPage() {
 
             {!isLoading && (clients?.length ?? 0) === 0 && (
               <TableRow>
-                <TableCell colSpan={canManage ? 8 : 7}>
+                <TableCell colSpan={canManage ? 9 : 8}>
                   <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
                     <Users className="size-8 opacity-40" />
                     No clients yet. Create your first one.
@@ -118,6 +166,11 @@ function ClientsPage() {
                 </TableCell>
                 <TableCell className="text-right text-muted-foreground">
                   {formatUsd(client.current_due_usd)}
+                </TableCell>
+                <TableCell className="text-right text-muted-foreground">
+                  {remainingByClientId.has(client.id)
+                    ? formatUsd(remainingByClientId.get(client.id)!)
+                    : '—'}
                 </TableCell>
                 <TableCell>
                   <StatusBadge status={client.status} />

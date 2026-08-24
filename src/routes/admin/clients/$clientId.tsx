@@ -183,6 +183,22 @@ function ClientDetailPage() {
       currency: m.currency ?? '',
     })
   }
+  // Sum of Meta spend headroom across this client's own linked accounts,
+  // USD only (no FX path, same gate as the Remaining column/bell). `null`
+  // while Meta data hasn't loaded (or isn't permitted) so the summary card
+  // hides instead of showing a misleading "$0.00".
+  const totalRemainingUsd =
+    canManageMeta && metaAccounts !== undefined
+      ? (accounts ?? [])
+          .reduce((sum, a) => {
+            const balance = balanceByAccountId.get(a.id)
+            if (!balance || balance.remaining == null || balance.currency !== 'USD') {
+              return sum
+            }
+            return sum.plus(dec(balance.remaining))
+          }, dec(0))
+          .toFixed(2)
+      : null
   const { data: users } = useQuery({
     queryKey: ['client-users', clientId],
     queryFn: () => listUsers({ data: { client_id: clientId } }),
@@ -264,7 +280,10 @@ function ClientDetailPage() {
 
       {financials && (
         <div className="mb-6">
-          <FinancialSummary financials={financials} />
+          <FinancialSummary
+            financials={financials}
+            totalRemainingUsd={totalRemainingUsd}
+          />
         </div>
       )}
 

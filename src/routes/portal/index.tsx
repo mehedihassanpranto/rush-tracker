@@ -8,7 +8,8 @@ import {
   clientDashboardStatsFn,
 } from '@/server/dashboard/dashboard.fns'
 import type { ClientDashboardStats } from '@/server/dashboard/dashboard.fns'
-import { formatBdt, formatUsd } from '@/lib/money/money'
+import { listMyAccountsMetaRemainingFn } from '@/server/meta/meta.fns'
+import { dec, formatBdt, formatUsd } from '@/lib/money/money'
 import { Badge } from '@/components/ui/badge'
 import {
   Card,
@@ -53,6 +54,7 @@ function ClientDashboard() {
   const memberships = activeMemberships(user)
   const getStats = useServerFn(clientDashboardStatsFn)
   const getSections = useServerFn(clientDashboardSectionsFn)
+  const listRemaining = useServerFn(listMyAccountsMetaRemainingFn)
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['client-dashboard-stats'],
@@ -62,6 +64,25 @@ function ClientDashboard() {
     queryKey: ['client-dashboard-sections'],
     queryFn: () => getSections(),
   })
+  // Same query the ad-accounts page uses for its per-row "Remaining" column
+  // (best-effort — '—' rather than breaking the page if Meta is
+  // unreachable/unconfigured), summed here across all this client's own
+  // USD-linked accounts for one total-headroom figure.
+  const { data: remaining } = useQuery({
+    queryKey: ['my-accounts-meta-remaining'],
+    queryFn: () => listRemaining(),
+    retry: false,
+    throwOnError: false,
+  })
+  const totalRemainingUsd =
+    remaining !== undefined
+      ? remaining
+          .reduce((sum, r) => {
+            if (r.remaining == null || r.currency !== 'USD') return sum
+            return sum.plus(dec(r.remaining))
+          }, dec(0))
+          .toFixed(2)
+      : null
 
   return (
     <div className="space-y-6">
@@ -106,6 +127,21 @@ function ClientDashboard() {
             </Card>
           )
         })}
+        {totalRemainingUsd !== null && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Total Remaining</CardDescription>
+              <CardTitle className="text-2xl">
+                {formatUsd(totalRemainingUsd)}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground">
+                Meta spend headroom across your ad accounts
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
