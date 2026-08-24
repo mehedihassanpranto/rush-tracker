@@ -66,18 +66,27 @@ export function Header({
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background px-4 lg:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-sidebar-border bg-sidebar px-4 text-sidebar-foreground lg:px-6">
       {/* Mobile nav */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="lg:hidden">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground lg:hidden"
+          >
             <Menu className="size-5" />
             <span className="sr-only">Open navigation</span>
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="w-64 p-0">
-          <SheetHeader className="border-b px-4 py-3 text-left">
-            <SheetTitle>Rush Tracker</SheetTitle>
+        <SheetContent
+          side="left"
+          className="w-64 border-sidebar-border bg-sidebar p-0 text-sidebar-foreground"
+        >
+          <SheetHeader className="border-b border-sidebar-border px-4 py-3 text-left">
+            <SheetTitle className="text-sidebar-foreground">
+              Rush Tracker
+            </SheetTitle>
           </SheetHeader>
           <div className="py-2">
             <SidebarNav
@@ -89,8 +98,8 @@ export function Header({
       </Sheet>
 
       <div className="flex items-baseline gap-2">
-        <span className="font-semibold">Rush Tracker</span>
-        <span className="hidden text-xs text-muted-foreground sm:inline">
+        <span className="font-semibold text-sidebar-primary">Rush Tracker</span>
+        <span className="hidden text-xs text-sidebar-foreground/60 sm:inline">
           {areaLabel}
         </span>
       </div>
@@ -115,7 +124,10 @@ export function Header({
         <NotificationBell role={user.role} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="gap-2 px-2">
+            <Button
+              variant="ghost"
+              className="gap-2 px-2 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            >
               <Avatar className="size-7">
                 <AvatarFallback className="text-xs">
                   {initials(user)}

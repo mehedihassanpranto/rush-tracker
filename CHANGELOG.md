@@ -8,6 +8,47 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-08-24
 
+**Applied a real brand identity (Ink / Canvas / amber / teal) via theme
+variables** — replaced the shadcn default gray/black palette and a leftover,
+entirely-unused "ocean" template theme (`--sea-ink`, `--lagoon`, `--palm`,
+`.island-shell`, `.nav-link`, decorative `body::before/::after` gradients —
+confirmed zero usages anywhere in `src/routes`/`src/components` before
+removal) in `src/styles.css`. New brand tokens (`--brand-ink #14171C`,
+`--brand-canvas #F7F6F2`, `--brand-primary #C98A2C`, `--brand-primary-deep
+#8F5F17`, `--brand-accent #0E7C86`) feed every shadcn CSS variable —
+`--background`/`--foreground` (Canvas/Ink), `--primary` (Brand Primary,
+`--primary-foreground` set to Ink for correct contrast — computed ~6.5:1 vs
+~2.9:1 for white text on this amber), `--chart-1..5` (teal/amber/deep-amber
+set), `--ring`, and the previously-unused `--sidebar*` family (now Ink
+background / Canvas text / amber active-state, wired into `AppShell`,
+`Header`, `SidebarNav`, and the mobile nav `Sheet` for the first time — none
+of these components referenced the sidebar tokens before). Added a new
+`--primary-hover` token (Brand Deep) and switched `Button`'s default variant
+and `Badge`'s default variant off the `hover:bg-primary/90` opacity trick so
+hover states use the real Brand Deep hex, not a lightened amber. Generic
+`<a>` color now resolves to Brand Accent teal.
+**Left untouched, on purpose**: `--destructive` (unrelated to due/urgency
+status, already an appropriate red, not worth drifting from red-600) and
+every hardcoded status color (`text-red-600`/`text-emerald-600` etc. in
+`StatusBadge`, due-amount styling, low-balance bells, Meta Due alerts) —
+none of those read from theme variables at all, confirmed by inspecting
+`StatusBadge` (always `variant="outline"` with its own literal per-status
+classes) and grepping for every `--accent`/`--primary` consumer before
+changing either. The internal `text-primary` used for record-navigation
+links inside individual page tables (client/account names, etc.) was
+deliberately left alone this pass — those still render Brand Primary amber,
+not teal, since retargeting them would mean editing className strings
+across dozens of route files rather than a shared variable, which was
+explicitly out of scope for this first pass ("start with shared layout/
+theme variables, verify visually, then individual pages if needed").
+Verified visually against the live app (temporary Playwright + magic-link
+session injection, same technique as prior verification passes; the
+`playwright` npm package was installed with `--no-save` and removed again
+afterward — confirmed zero `package.json`/lockfile diff) across the admin
+dashboard, ad accounts list, a client detail page, and the client portal
+dashboard — Ink sidebar/header with amber active nav, teal links, and all
+red/emerald status coloring untouched.
+
 **"Total Remaining" summary card on the client detail page** — added a 6th
 card to `FinancialSummary`, positioned right after "Current Due (USD,
 approx.)", showing the sum of Meta spend headroom (`spend_cap -

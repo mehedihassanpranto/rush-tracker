@@ -56,7 +56,11 @@ export function NotificationBell({ role }: { role: RoleKey }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+        >
           <Bell className="size-5" />
           {unread > 0 && (
             <span className="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium leading-4 text-primary-foreground">

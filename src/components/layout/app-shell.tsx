@@ -20,10 +20,10 @@ export function AppShell({
   children: React.ReactNode
 }) {
   return (
-    <div className="min-h-svh bg-muted/30">
+    <div className="min-h-svh bg-background">
       <Header user={user} navItems={navItems} areaLabel={areaLabel} />
       <div className="flex">
-        <aside className="sticky top-14 hidden h-[calc(100svh-3.5rem)] w-60 shrink-0 border-r bg-background py-4 lg:block">
+        <aside className="sticky top-14 hidden h-[calc(100svh-3.5rem)] w-60 shrink-0 border-r border-sidebar-border bg-sidebar py-4 lg:block">
           <SidebarNav items={navItems} />
         </aside>
         <main className="min-w-0 flex-1 p-4 lg:p-6">{children}</main>

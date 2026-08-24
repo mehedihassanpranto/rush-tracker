@@ -1089,6 +1089,77 @@ bug fixes, and anything else that isn't a whole new named feature.
   `$0.00`) until the query resolves — degrades the same way the ad-accounts
   page's own Remaining column already does when Meta is unreachable or
   unconfigured.
+- **Brand identity applied via theme CSS variables (post-Phase-8 addition):
+  done, pending owner review** — replaced shadcn's default gray palette
+  with a real brand system: Ink `#14171C` (sidebar/header/dark surfaces),
+  Canvas `#F7F6F2` (page background), Brand Primary `#C98A2C` (buttons,
+  active nav, CTAs), Brand Deep `#8F5F17` (hover/pressed on primary
+  elements), Accent teal `#0E7C86` (links, chart colors). All five live as
+  named tokens (`--brand-ink`, `--brand-canvas`, `--brand-primary`,
+  `--brand-primary-deep`, `--brand-accent`) at the top of `src/styles.css`
+  and every shadcn variable derives from them — no bare hex repeated
+  in-place, and no color hardcoded into individual components.
+  `--primary-foreground` is set to Ink rather than white — computed
+  contrast against Brand Primary is ~6.5:1 with Ink text vs. ~2.9:1 with
+  white, so white would have failed WCAG AA on every primary button.
+  A new `--primary-hover`/`--color-primary-hover` token (Brand Deep) was
+  added so `Button`'s and `Badge`'s default variants use the real hex on
+  hover instead of the previous `hover:bg-primary/90` opacity trick.
+  **Also removed, in the same file**: an entirely unused leftover "ocean"
+  template theme (`--sea-ink`, `--lagoon`, `--palm`, `--sand`, `--foam`,
+  `.island-shell`, `.feature-card`, `.nav-link`, `.site-footer`,
+  `.display-title`, decorative `body::before`/`::after` radial-gradient
+  layers) — confirmed via repo-wide grep that none of those classes or
+  variables were referenced by any route or component; the `body` rule
+  itself was rewritten to actually use `--background`/`--foreground`
+  (previously it read a separate, disconnected set of ocean-template
+  variables, so changing the real shadcn tokens alone would have produced
+  no visible change at all).
+  **Sidebar/header wired to the (previously unused) `--sidebar*` token
+  family** — `AppShell`, `Header`, `SidebarNav`, and the mobile nav `Sheet`
+  didn't reference `--sidebar`/`--sidebar-foreground`/etc. before this pass
+  (they used plain `bg-background`); now they do, giving the chrome a
+  constant Ink-dark look independent of the (currently untoggleable —
+  no `ThemeProvider`/`next-themes` found anywhere in the app; the `.dark`
+  CSS block and every `dark:` utility class in components are inert dead
+  code today) light/dark mode. Active nav state uses `--sidebar-primary`
+  (Brand Primary, solid pill) rather than the generic `--accent`, since
+  repointing `--accent` itself to teal would have also turned every
+  `hover:bg-accent` surface app-wide (dropdown items, tabs, select, ghost
+  buttons) solid teal — confirmed via grep just how many places consume
+  `--accent`, and kept it a subtle neutral instead.
+  **Deliberately left untouched**: `--destructive` (a distinct concept
+  from due/urgency status, already an appropriate red) and every hardcoded
+  status color — `StatusBadge` (`src/components/shared/status-badge.tsx`)
+  was inspected directly and confirmed to always render `variant="outline"`
+  with its own literal per-status Tailwind classes (`bg-emerald-100
+  text-emerald-800`, `bg-red-100 text-red-800`, etc.), never reading any
+  theme variable — same for the `text-red-600`/`text-emerald-600 dark:...`
+  literals used for due-amount urgency, low-balance bells, and Meta Due
+  alerts throughout the admin/portal pages. None of it touches `--primary`
+  or `--accent`, so none of it was at risk from this pass, confirmed by
+  inspection rather than assumed.
+  **Explicitly out of scope for this pass**: the internal `text-primary`
+  used for record-navigation links inside individual page tables (client
+  names, ad account names, etc. across dozens of route files) still
+  renders Brand Primary amber, not Accent teal — retargeting those would
+  mean editing className strings file-by-file rather than a shared
+  variable, which the owner's instructions explicitly deferred ("start
+  with shared layout/theme variables first, verify visually, then move to
+  individual pages if anything doesn't inherit correctly").
+  **Verified visually against the live app**, not just typecheck/build:
+  temporary Playwright + magic-link session injection (same technique
+  documented in the client-portal-profile-editing entry above — the
+  `playwright` npm package installed via `npm install --no-save` and
+  removed again after, confirmed zero `package.json`/lockfile diff)
+  against a real ADMIN test account (`test@gmail.com`) and a real client
+  login (`quickranksolutions@gmail.com`, CL-0003 "DF IT Solutions").
+  Screenshotted the admin dashboard, ad accounts list, a client detail
+  page (which also exercises the new "Total Remaining" card from the
+  entry above), and the client portal dashboard — confirmed Ink sidebar/
+  header with amber active nav and CTAs, teal links, and all red/emerald
+  status coloring (due amounts, "Active" badges, low-balance bells,
+  negative Remaining figures) rendering exactly as before, untouched.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

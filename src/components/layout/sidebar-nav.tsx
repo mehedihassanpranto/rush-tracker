@@ -19,11 +19,11 @@ export function SidebarNav({
             onClick={onNavigate}
             activeOptions={{ exact: true }}
             activeProps={{
-              className: 'bg-accent text-accent-foreground',
+              className: 'bg-sidebar-primary text-sidebar-primary-foreground',
             }}
             className={cn(
               'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium',
-              'text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground',
+              'text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground',
             )}
           >
             <item.icon className="size-4 shrink-0" />
@@ -34,11 +34,11 @@ export function SidebarNav({
             key={item.label}
             title={`Coming in Phase ${item.phase}`}
             aria-disabled="true"
-            className="flex cursor-not-allowed items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground/50"
+            className="flex cursor-not-allowed items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/35"
           >
             <item.icon className="size-4 shrink-0" />
             {item.label}
-            <span className="ml-auto rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
+            <span className="ml-auto rounded bg-sidebar-accent px-1.5 py-0.5 text-[10px] font-normal text-sidebar-foreground/70">
               P{item.phase}
             </span>
           </span>
