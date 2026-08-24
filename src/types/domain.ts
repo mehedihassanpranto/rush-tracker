@@ -304,6 +304,9 @@ export interface Notification {
   message: string | null
   entity_type: string | null
   entity_id: string | null
+  /** Which client this notification is about, when known — null for
+   * admin-facing notifications (see notification.service.ts). */
+  client_id: string | null
   read_at: string | null
   created_at: string
 }

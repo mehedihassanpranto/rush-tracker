@@ -1,8 +1,13 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getRequestUrl } from '@tanstack/react-start/server'
+import { getCookies, getRequestUrl } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { getSupabaseServerClient } from '@/lib/supabase/server'
-import { homePathForUser } from '@/lib/auth/types'
+import {
+  ACTIVE_CLIENT_COOKIE,
+  activeMemberships,
+  homePathForUser,
+  resolveActiveClientId,
+} from '@/lib/auth/types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type {
   RoleKey,
@@ -124,6 +129,10 @@ async function loadSessionUser(
     )
   }
 
+  const active = activeMemberships({ memberships })
+  const cookieClientId = getCookies()[ACTIVE_CLIENT_COOKIE] ?? null
+  const activeClientId = resolveActiveClientId(active, cookieClientId)
+
   return {
     id: user.id,
     email: user.email ?? '',
@@ -132,6 +141,7 @@ async function loadSessionUser(
     status: profile.status,
     permissions,
     memberships,
+    activeClientId,
   }
 }
 

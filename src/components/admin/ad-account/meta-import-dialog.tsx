@@ -87,7 +87,7 @@ export function MetaImportDialog({
     })
   }
 
-  const rateValid = Number(rate) > 0
+  const rateValid = rate === '' || Number(rate) >= 0
   const canSubmit = selected.size > 0 && rateValid && !mutation.isPending
 
   return (
@@ -135,15 +135,21 @@ export function MetaImportDialog({
             </div>
 
             <div className="space-y-2">
-              <Label>Default rate for imported accounts (BDT per $1)</Label>
+              <Label>Rate override for imported accounts (BDT per $1, optional)</Label>
               <Input
                 type="number"
                 min="0"
                 step="0.01"
-                placeholder="130.00"
+                placeholder="Leave blank to inherit each client's own rate"
                 value={rate}
                 onChange={(e) => setRate(e.target.value)}
               />
+              <p className="text-xs text-muted-foreground">
+                Only set this if every imported account should bill at a
+                fixed rate regardless of which client it's assigned to.
+                Otherwise leave it blank — each account will use the rate of
+                whichever client currently holds it.
+              </p>
             </div>
           </>
         )}

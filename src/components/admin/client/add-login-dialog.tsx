@@ -61,8 +61,12 @@ export function AddLoginDialog({
   const mutation = useMutation({
     mutationFn: (values: FormValues) =>
       createClientUser({ data: { client_id: clientId, ...values } }),
-    onSuccess: () => {
-      toast.success('Client login created')
+    onSuccess: (result) => {
+      toast.success(
+        result.reused_existing_user
+          ? 'Existing login linked to this client'
+          : 'Client login created',
+      )
       void queryClient.invalidateQueries({ queryKey: ['client-users', clientId] })
       onOpenChange(false)
     },
@@ -122,7 +126,11 @@ export function AddLoginDialog({
                   <FormControl>
                     <Input type="text" autoComplete="off" {...field} />
                   </FormControl>
-                  <FormDescription>At least 8 characters.</FormDescription>
+                  <FormDescription>
+                    At least 8 characters. Ignored if this email is already a
+                    login for another client — it will be linked here
+                    instead, keeping its existing password.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

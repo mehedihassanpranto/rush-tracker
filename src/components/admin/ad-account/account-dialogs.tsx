@@ -53,12 +53,15 @@ const amountField = z
     message: 'Enter a non-negative amount',
   })
 
-// Must be positive: a zero rate falls back to the client's rate at approval.
+// Optional override: blank/0 means "inherit whichever client currently
+// holds this account" (adAccountUsdRate() in rate.service.ts) — only set a
+// value here to pin this specific account to its own rate regardless of
+// client.
 const rateField = z
   .string()
   .trim()
-  .refine((v) => v !== '' && Number.isFinite(Number(v)) && Number(v) > 0, {
-    message: 'Enter a rate greater than zero',
+  .refine((v) => v === '' || (Number.isFinite(Number(v)) && Number(v) >= 0), {
+    message: 'Enter a non-negative rate',
   })
 
 // ---------------------------------------------------------------------------
@@ -105,6 +108,7 @@ export function AccountCreateDialog({
         external_account_id: '',
         platform: 'META',
         current_limit_usd: '0',
+        usd_rate: '',
         status: 'AVAILABLE',
       })
       setMetaStatus(null)
@@ -246,13 +250,13 @@ export function AccountCreateDialog({
                 name="usd_rate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Per USD (BDT per $1)</FormLabel>
+                    <FormLabel>Per USD (BDT per $1, optional)</FormLabel>
                     <FormControl>
                       <Input
                         type="number"
                         min="0"
                         step="0.01"
-                        placeholder="130.00"
+                        placeholder="Leave blank to use the client's rate"
                         {...field}
                       />
                     </FormControl>
@@ -428,10 +432,14 @@ export function AccountEditDialog({
               name="usd_rate"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Per USD (BDT per $1)</FormLabel>
+                  <FormLabel>Per USD (BDT per $1, optional)</FormLabel>
                   <FormControl>
                     <Input type="number" min="0" step="0.01" {...field} />
                   </FormControl>
+                  <p className="text-xs text-muted-foreground">
+                    Clear to 0 to use whichever client currently holds this
+                    account's own rate instead of a fixed one.
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}

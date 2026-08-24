@@ -4,6 +4,7 @@ import {
   hasPermission,
   homePathForUser,
   isAdminRole,
+  resolveActiveClientId,
 } from './types'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import type { SessionMembership, SessionUser } from './types'
@@ -29,6 +30,7 @@ function user(over: Partial<SessionUser> = {}): SessionUser {
     status: 'ACTIVE',
     permissions: [],
     memberships: [],
+    activeClientId: null,
     ...over,
   }
 }
@@ -99,5 +101,31 @@ describe('activeMemberships (cross-client isolation, spec §85)', () => {
   it('returns empty when the user has no valid membership', () => {
     const u = user({ memberships: [membership({ status: 'INACTIVE' })] })
     expect(activeMemberships(u)).toHaveLength(0)
+  })
+})
+
+describe('resolveActiveClientId (multi-client login switching)', () => {
+  const active = [
+    membership({ clientId: 'c1' }),
+    membership({ clientId: 'c2' }),
+  ]
+
+  it('uses the cookie value when it names one of the active memberships', () => {
+    expect(resolveActiveClientId(active, 'c2')).toBe('c2')
+  })
+
+  it('falls back to the first active membership when no cookie is set', () => {
+    expect(resolveActiveClientId(active, null)).toBe('c1')
+    expect(resolveActiveClientId(active, undefined)).toBe('c1')
+  })
+
+  it('falls back to the first active membership when the cookie names a client the user no longer belongs to', () => {
+    // e.g. the membership was deactivated after the cookie was set —
+    // must not throw or silently show no client at all.
+    expect(resolveActiveClientId(active, 'stale-client-id')).toBe('c1')
+  })
+
+  it('returns null when the user has no active memberships at all', () => {
+    expect(resolveActiveClientId([], 'c1')).toBeNull()
   })
 })

@@ -1160,6 +1160,215 @@ bug fixes, and anything else that isn't a whole new named feature.
   header with amber active nav and CTAs, teal links, and all red/emerald
   status coloring (due amounts, "Active" badges, low-balance bells,
   negative Remaining figures) rendering exactly as before, untouched.
+- **Brand-colored table row hover (post-Phase-8 addition): done, pending
+  owner review** — a direct follow-up to the brand-identity pass above.
+  `TableRow` (`src/components/ui/table.tsx`), the one shared primitive
+  behind every table in the app, now hovers with `bg-accent/50` (soft
+  amber) plus a `border-l-2 border-l-link` teal accent stripe, replacing
+  the generic `hover:bg-muted/50`/`data-[state=selected]:bg-muted`. Touched
+  once, in the shared component, so every list page inherited it —
+  consistent with the "shared layout/theme first" scoping the owner set for
+  the branding pass itself. Also registered a new `--color-link` token in
+  `@theme inline` (`src/styles.css`) — Accent teal previously only existed
+  as the bare `a { color: var(--link) }` rule, with no Tailwind utility
+  (`text-link`/`border-link`/etc.) able to reach it; this is what the hover
+  stripe uses. Verified visually: a Playwright screenshot with a row
+  hovered on the live ad accounts list confirmed the tint/stripe render
+  correctly and the in-row red/emerald status colors are unaffected.
+- **Fixed: a login email couldn't be added to more than one client
+  (post-Phase-8 addition): done, pending owner review, migration confirmed
+  applied to the live project** — both `createClientUserFn` (admin "Add
+  login") and `addTeamMemberFn` (client-portal self-service "Add
+  teammate") unconditionally called `admin.auth.admin.createUser(...)`,
+  which fails with "A user with this email address has already been
+  registered" the instant that email exists anywhere in `auth.users` —
+  even though `client_memberships` was already schema-designed for one
+  login belonging to several clients (`unique(user_id, client_id)`, not
+  `user_id` alone — confirmed by reading the original Phase 1 migration).
+  The "Edit login profile + membership status" entry above already noted
+  this was "theoretically possible, not yet a real case"; it became a real
+  case. New shared `provisionClientLogin()`
+  (`src/server/clients/client-login.server.ts`), used by both fns: looks
+  the email up first via a new `find_auth_user_by_email` RPC (migration
+  `20260723000022_find_auth_user_by_email.sql`, `security definer` +
+  `grant execute ... to service_role` only, same pattern as every other
+  privileged RPC — `auth.users` isn't reachable via PostgREST otherwise).
+  If the email belongs to an existing **CLIENT**-role login, it's reused —
+  a new `client_memberships` row is inserted, or an existing INACTIVE one
+  is reactivated (rather than hitting the unique-constraint violation) —
+  instead of erroring. If it belongs to ADMIN/SUPER_ADMIN staff, the
+  request is refused with a clear message rather than silently linked:
+  that account could never actually log into the portal anyway
+  (`requireClientMembership()` rejects any non-CLIENT role), so reusing it
+  would produce a membership row that's permanently useless. UI: both "Add
+  login" dialogs (`add-login-dialog.tsx`, `add-team-member-dialog.tsx`) now
+  toast "Existing login linked..." vs "...created" depending on which
+  branch ran (both server fns' return type gained `reused_existing_user`
+  for this), and the password field's helper text explains it's ignored
+  when reusing an account.
+  **Update, later same day: confirmed applied and working live** — the
+  owner applied the migration and used "Add login" to link a real login
+  (`mehedi.h.pranto@gmail.com`) to a second client ("Ahad Bhai", CL-0004);
+  verified directly against the `audit_logs` row it produced
+  (`CLIENT_USER_CREATED`, `metadata`-adjacent `new_values.
+  reused_existing_user: true`). This immediately surfaced the next real
+  gap — see the entry directly below.
+- **Fixed: a login belonging to multiple clients only ever saw the first
+  one's data (post-Phase-8 addition): done, pending owner review, no
+  migration** — every portal server fn calls `requireClientMembership()`
+  with no argument, and that guard used to hardcode `active[0]` as the
+  default — whichever client happened to sort first in the session's
+  membership query. So the multi-client-login fix immediately above
+  successfully linked a second client but the portal had no way to ever
+  show it: the dashboard, ad accounts, due, statement, everything always
+  showed the first client, with the second one's badge appearing at the
+  top of `/portal` purely as inert decoration (confirmed by inspection —
+  no `onClick`, no `Link`, not wired to anything).
+  Fixed with a small, low-blast-radius mechanism rather than threading a
+  `clientId` through all ~20 `requireClientMembership()` call sites
+  app-wide: a new `rt_active_client` cookie
+  (`ACTIVE_CLIENT_COOKIE`, `src/lib/auth/types.ts`) holds which client is
+  "current" for that login. New pure `resolveActiveClientId(active,
+  cookieClientId)` (same file, unit tested in `types.test.ts`) picks the
+  cookie's value **only if** it names one of the caller's own active
+  memberships, otherwise falls back to the first one — never throws on a
+  stale or foreign cookie value (e.g. a membership deactivated after the
+  cookie was set). `loadSessionUser()` (`auth.fns.ts`) resolves this once
+  per session load via `getCookies()` and puts it on the new
+  `SessionUser.activeClientId` field. `requireClientMembership()`
+  (`guards.server.ts`) now uses `user.activeClientId` for its no-argument
+  default instead of the hardcoded `active[0]` — **every existing portal
+  server fn needed zero changes**, since grepping confirmed none of the
+  ~20 call sites across dashboard/limit-requests/payments/ledger/team/etc.
+  ever passed an explicit `clientId` to begin with; they all rode the
+  guard's default, so fixing the default fixed all of them at once. The
+  explicit-`clientId` code path (cross-client isolation — the one that
+  hard-`FORBIDDEN`s when the caller isn't actually a member of the
+  requested client) is untouched.
+  New `setActiveClientFn` (`src/server/auth/portal-session.fns.ts` — a new
+  file, not added to `auth.fns.ts`, to avoid a circular import since
+  `guards.server.ts` already imports `getCurrentUserFn` from `auth.fns.ts`)
+  is the one new endpoint: re-validates the requested client server-side
+  via `requireClientMembership(data.client_id)` — never trusts that a
+  submitted `client_id` is actually one of the caller's own memberships —
+  then writes the cookie.
+  UI: `/portal`'s badge row (`portal/index.tsx`) is now a real switcher
+  when `activeMemberships(user).length > 1` — click a client to switch,
+  the current one shown highlighted/disabled, others clickable. On success
+  it does a **hard navigation** (`window.location.assign('/portal')`), not
+  `router.invalidate()` — every portal query's cache key is client-
+  agnostic (e.g. `['client-dashboard-stats']`, no `clientId` in it), so
+  only a full reload guarantees nothing from the previous client's data
+  survives in the TanStack Query cache; a soft client-side nav would risk
+  showing stale cached numbers from the client just switched away from.
+  Also extended `portal/route.tsx`'s `areaLabel` to show the active
+  client's name (`"{name} · Client Portal"`) on **every** portal page, not
+  just the dashboard's switcher, so it's always visible whose data is on
+  screen — this was the single-membership case's implicit context that
+  multi-membership logins were missing entirely.
+  **Verified live end-to-end** against the exact real account that
+  surfaced the bug (`mehedi.h.pranto@gmail.com`, member of both "xRush
+  Digital" CL-0001 and "Ahad Bhai" CL-0004) via the same temporary
+  Playwright + magic-link session technique used elsewhere this session —
+  before/after screenshots confirm genuinely different data on each side
+  (different due amount — ৳11,478 vs ৳0 —, different linked ad account,
+  different totals), not merely a relabeled header over an unchanged
+  query result.
+  **Known, deliberately out-of-scope gap, flagged not fixed**:
+  `notifications` has no `client_id` column at all (confirmed directly —
+  it's purely `user_id`-scoped per its own migration), so a multi-client
+  login's notifications are shared across every client they belong to
+  regardless of which one is "active" right now. This is a real design
+  question (scope notifications per-client vs. keep them global across a
+  person's whole login) that wasn't part of what was reported, so it was
+  left alone rather than guessed at. **Closed the same day** — see the
+  entry immediately below.
+- **Notifications scoped to the active client (post-Phase-8 addition):
+  done, pending owner review, migration NOT YET APPLIED to the live
+  project** — closes the gap flagged directly above. New nullable
+  `notifications.client_id` (migration
+  `20260723000023_notifications_client_scope.sql`), populated only by
+  `notifyClientMembers(clientId, ...)` (`notification.service.ts`) —
+  the sole notification path that's inherently about one specific client
+  (limit-request/payment approvals and rejections, adjustments,
+  assignments). `notifyAdmins()` and every other admin-facing call leaves
+  `client_id: null`, and admin notification reads are never filtered by
+  it at all.
+  **Two behaviors deliberately split, not both scoped the same way**:
+  `unreadNotificationCountFn` (the header bell badge, `notification.fns.ts`)
+  stays **global** — counts across every client a login belongs to,
+  regardless of which is active. Scoping the count to the active client
+  was considered and rejected: it would let a notification about a
+  non-active client go completely unnoticed, with no signal to ever
+  switch and check. `listMyNotificationsFn` (the list, both the header
+  dropdown and `/portal/notifications`) and `markAllNotificationsReadFn`
+  **do** filter to `client_id is null or client_id = <active client>` via
+  `user.activeClientId` (from the client-switcher fix above) when
+  `user.role === 'CLIENT'` — matching the scoping every other portal page
+  now has. `markAllNotificationsReadFn` needed the same filter as the
+  list for a reason beyond consistency: without it, "mark all read" on a
+  page showing only the active client's notifications would silently
+  clear unread ones from a client the user isn't even looking at.
+  `markNotificationReadFn` (single-notification, by id) was left
+  unscoped — it already matches by `id + user_id`, a specific row the
+  caller already knows about, so there's no meaningful cross-client
+  concern there.
+  UI: `/portal/notifications`'s description swaps to "Updates for
+  {client name} — switch clients from the dashboard to see another
+  client's notifications" when a login has more than one active
+  membership, so the filtering isn't silently invisible.
+  **Migration NOT YET APPLIED to the live project** — no DB connection
+  available in this dev environment to apply it directly. Unlike some
+  other pending migrations in this doc, this one is **not safe to defer**:
+  once this code ships, `listMyNotificationsFn`'s `.or('client_id.is.null,
+  client_id.eq.<uuid>')` clause references a column that doesn't exist
+  yet, so every CLIENT-role user's notification bell/list/page would
+  start erroring immediately, not just silently miss the new scoping.
+  Apply via the SQL editor or `supabase db push` before deploying this.
+- **Fixed: a client's own USD rate was silently ignored — every ad account
+  form forced a positive rate, making "inherit from client" unreachable
+  (post-Phase-8 addition): done, pending owner review, no migration** —
+  `adAccountUsdRate()` (`rate.service.ts`) has always correctly
+  implemented the account-overrides-client fallback (account rate wins
+  when set; falls back to `clientUsdRate()` when the account's rate is 0)
+  — this was never broken. The bug was one layer up: every UI path that
+  writes an ad account's `usd_rate` required it to be `> 0` — the account
+  create/edit dialogs (`account-dialogs.tsx`) and their schemas
+  (`schemas/ad-account.ts`), and the Meta bulk-import dialog's "default
+  rate for imported accounts" field (`meta-import-dialog.tsx`,
+  `schemas/meta.ts`) — so `0` (the documented "unset/inherit" sentinel)
+  was never actually reachable from the UI. In practice this forced every
+  admin to type *some* rate for every account (or once per import batch,
+  applied to every account in it), permanently pinning that account away
+  from ever following its client's own rate again.
+  **Confirmed live, not just theorized**: queried every ad account
+  currently assigned to a client — every single one has an explicit
+  non-zero `usd_rate` (mostly `130`, matching the bulk-import dialog's old
+  `130.00` placeholder — strong evidence most of these came from one
+  import batch rather than individual entry), so a client's own configured
+  rate has effectively never governed billing for any account created
+  after per-account rates shipped. Two live accounts show the exact
+  reported symptom: `ADA-0014` ("Foysal bhai" — client rate ৳129, account
+  pinned at ৳130) and `ADA-0018` ("xRush Agency" — client rate ৳1, account
+  pinned at ৳130).
+  Fix: relaxed all four `usd_rate` validators (the two in
+  `schemas/ad-account.ts` covering create+edit, the client-side duplicate
+  in `account-dialogs.tsx`, and `schemas/meta.ts`'s bulk-import one) from
+  `.gt(0, ...)` to `.min(0, ...)` / an equivalent non-negative check — 0/
+  blank is now accepted and means what `rate.service.ts` already
+  documented. Updated the labels/placeholders/helper text on all three
+  dialogs to explain the inherit behavior explicitly (e.g. the import
+  dialog's field relabeled "Rate override for imported accounts,
+  optional," placeholder changed from `"130.00"` to "Leave blank to
+  inherit each client's own rate"). Also fixed a small unrelated bug found
+  while in this file: `AccountCreateDialog`'s on-open `form.reset()` was
+  missing the `usd_rate` key, so a previously-typed value in that field
+  could linger across dialog opens within the same session.
+  **Left the two live mismatched accounts untouched, deliberately** —
+  clearing an account's rate override changes what its future limit
+  requests will actually bill at, so that's flagged for the owner to
+  action via the now-fixed Edit dialog (clear "Per USD" to blank and
+  save) rather than silently edited as part of a bug-fix pass.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

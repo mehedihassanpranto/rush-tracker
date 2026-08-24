@@ -51,8 +51,12 @@ export function AddTeamMemberDialog({
 
   const mutation = useMutation({
     mutationFn: (values: AddTeamMemberInput) => addTeamMember({ data: values }),
-    onSuccess: () => {
-      toast.success('Teammate added')
+    onSuccess: (result) => {
+      toast.success(
+        result.reused_existing_user
+          ? 'Existing login linked to your team'
+          : 'Teammate added',
+      )
       void queryClient.invalidateQueries({ queryKey: ['my-team'] })
       onOpenChange(false)
     },
@@ -112,7 +116,11 @@ export function AddTeamMemberDialog({
                   <FormControl>
                     <Input type="text" autoComplete="off" {...field} />
                   </FormControl>
-                  <FormDescription>At least 8 characters.</FormDescription>
+                  <FormDescription>
+                    At least 8 characters. Ignored if this email already has
+                    a login elsewhere — it will be linked to your team
+                    instead, keeping its existing password.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

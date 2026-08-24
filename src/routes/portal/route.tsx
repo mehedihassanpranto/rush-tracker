@@ -35,13 +35,23 @@ export const Route = createFileRoute('/portal')({
 
 function PortalLayout() {
   const { user } = Route.useRouteContext()
+  const active = activeMemberships(user)
 
-  if (activeMemberships(user).length === 0) {
+  if (active.length === 0) {
     return <NoMembership />
   }
 
+  // With more than one active membership, name the current one in the
+  // header on every portal page — not just the dashboard's switcher —
+  // so it's always clear whose data is on screen.
+  const activeClient = active.find((m) => m.clientId === user.activeClientId)
+  const areaLabel =
+    active.length > 1 && activeClient
+      ? `${activeClient.clientName} · Client Portal`
+      : 'Client Portal'
+
   return (
-    <AppShell user={user} navItems={CLIENT_NAV} areaLabel="Client Portal">
+    <AppShell user={user} navItems={CLIENT_NAV} areaLabel={areaLabel}>
       <Outlet />
     </AppShell>
   )

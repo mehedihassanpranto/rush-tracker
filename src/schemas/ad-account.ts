@@ -20,11 +20,18 @@ const usdAmount = z.coerce
   .min(0, 'Cannot be negative')
   .max(1_000_000_000, 'Amount is too large')
 
-// USD→BDT rate charged per dollar on the account. Must be positive: a zero
-// rate would silently fall back to the client's rate at approval time.
+// USD→BDT rate charged per dollar on the account. Optional override: 0
+// (leave blank) means "inherit whichever client currently holds this
+// account's own rate" — adAccountUsdRate() in rate.service.ts already
+// implements this fallback; a positive value pins this specific account to
+// its own rate regardless of which client holds it (e.g. for continuity
+// across a transfer). Previously required > 0 here, which made the
+// inherit-from-client state unreachable from the UI — every account ended
+// up with an explicit rate typed in, permanently shadowing its client's
+// own rate.
 const usdRate = z.coerce
   .number({ message: 'Enter a valid rate' })
-  .gt(0, 'Must be greater than zero')
+  .min(0, 'Cannot be negative')
   .max(100_000, 'Rate is too large')
 
 export const adAccountCreateSchema = z.object({

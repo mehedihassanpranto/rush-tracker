@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
+import { provisionClientLogin } from '@/server/clients/client-login.server'
 import { requireClientMembership } from '@/server/auth/guards.server'
 import { writeAudit } from '@/server/audit/audit.service'
 import { addTeamMemberSchema, teamMemberStatusSchema } from '@/schemas/team'
@@ -53,48 +54,32 @@ export const listMyTeamFn = createServerFn({ method: 'GET' }).handler(
   },
 )
 
-/** Add a teammate — creates a new CLIENT-role login scoped to the caller's
- * own client. Any active member of a client can add another (no owner/admin
- * tier exists among client users). */
+/** Add a teammate — creates (or, if the email already has a CLIENT login
+ * for a different client, reuses) a CLIENT-role login scoped to the
+ * caller's own client. Any active member of a client can add another (no
+ * owner/admin tier exists among client users). See client-login.server.ts
+ * for the reuse logic — same mechanism as the admin's "Add login". */
 export const addTeamMemberFn = createServerFn({ method: 'POST' })
   .validator(addTeamMemberSchema)
-  .handler(async ({ data }): Promise<{ user_id: string }> => {
+  .handler(async ({ data }): Promise<{ user_id: string; reused_existing_user: boolean }> => {
     const { user: actor, membership } = await requireClientMembership()
-    const admin = getSupabaseAdminClient()
 
-    const { data: created, error } = await admin.auth.admin.createUser({
+    const { user_id: userId, reused_existing_user } = await provisionClientLogin({
       email: data.email,
+      full_name: data.full_name,
       password: data.password,
-      email_confirm: true,
-      app_metadata: { app_role: 'CLIENT' },
-      user_metadata: { full_name: data.full_name },
+      client_id: membership.clientId,
     })
-    if (error) throw new Error(error.message)
-    const userId = created.user.id
-
-    await admin
-      .from('user_profiles')
-      .update({ full_name: data.full_name })
-      .eq('user_id', userId)
-
-    const { error: memErr } = await admin
-      .from('client_memberships')
-      .insert({
-        user_id: userId,
-        client_id: membership.clientId,
-        status: 'ACTIVE',
-      })
-    if (memErr) throw new Error(memErr.message)
 
     await writeAudit({
       actorUserId: actor.id,
       action: 'TEAM_MEMBER_ADDED',
       entityType: 'CLIENT',
       entityId: membership.clientId,
-      newValues: { user_id: userId, email: data.email },
+      newValues: { user_id: userId, email: data.email, reused_existing_user },
       metadata: { source: 'CLIENT_SELF_SERVICE' },
     })
-    return { user_id: userId }
+    return { user_id: userId, reused_existing_user }
   })
 
 /** Activate/deactivate a teammate's portal access — restricted to

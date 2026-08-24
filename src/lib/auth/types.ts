@@ -15,6 +15,11 @@ export interface SessionMembership {
   status: MembershipStatus
 }
 
+/** Cookie holding which of a CLIENT user's active memberships the portal
+ * currently treats as "current" — read/written server-side only (see
+ * auth.fns.ts's loadSessionUser and auth/portal-session.fns.ts). */
+export const ACTIVE_CLIENT_COOKIE = 'rt_active_client'
+
 /**
  * The authenticated user as exposed to routes/components. Built server-side
  * in auth.fns.ts — the browser never computes roles or permissions.
@@ -27,6 +32,11 @@ export interface SessionUser {
   status: UserStatus
   permissions: Array<PermissionKey | (string & {})>
   memberships: Array<SessionMembership>
+  /** Which client's data the portal currently shows — one of `memberships`'
+   * active entries, resolved from ACTIVE_CLIENT_COOKIE with a fallback to
+   * the first active membership. Always null for non-CLIENT users or a
+   * CLIENT with no active membership. */
+  activeClientId: string | null
 }
 
 export function homePathForUser(user: Pick<SessionUser, 'role'>): string {
@@ -51,4 +61,18 @@ export function activeMemberships(
   return user.memberships.filter(
     (m) => m.status === 'ACTIVE' && m.clientStatus === 'ACTIVE',
   )
+}
+
+/** Pure resolution used by both session-loading (auth.fns.ts) and the
+ * client-membership guard: an explicit cookie value wins if it names one of
+ * the user's own active memberships, otherwise the first active one. */
+export function resolveActiveClientId(
+  active: Array<SessionMembership>,
+  cookieClientId: string | null | undefined,
+): string | null {
+  if (active.length === 0) return null
+  if (cookieClientId && active.some((m) => m.clientId === cookieClientId)) {
+    return cookieClientId
+  }
+  return active[0].clientId
 }

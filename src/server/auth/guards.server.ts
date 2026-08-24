@@ -54,7 +54,11 @@ export async function requireAdmin(
 /**
  * CLIENT user with at least one ACTIVE membership of an ACTIVE client.
  * When `clientId` is given, the user must be an active member of that exact
- * client — this is the cross-client isolation check.
+ * client — this is the cross-client isolation check (fails hard if not).
+ * When omitted, resolves to the user's "current" client — one of possibly
+ * several a login can belong to — via `user.activeClientId` (the
+ * ACTIVE_CLIENT_COOKIE-backed selection computed at session load), falling
+ * back to the first active membership if that's unset/stale.
  */
 export async function requireClientMembership(clientId?: string): Promise<{
   user: SessionUser
@@ -69,12 +73,15 @@ export async function requireClientMembership(clientId?: string): Promise<{
   if (active.length === 0) {
     throw new AuthError('FORBIDDEN', 'No active client membership')
   }
-  const membership = clientId
-    ? active.find((m) => m.clientId === clientId)
-    : active[0]
-  if (!membership) {
-    throw new AuthError('FORBIDDEN', 'Not a member of this client')
+  if (clientId) {
+    const membership = active.find((m) => m.clientId === clientId)
+    if (!membership) {
+      throw new AuthError('FORBIDDEN', 'Not a member of this client')
+    }
+    return { user, memberships: active, membership }
   }
+  const membership =
+    active.find((m) => m.clientId === user.activeClientId) ?? active[0]
   return { user, memberships: active, membership }
 }
 

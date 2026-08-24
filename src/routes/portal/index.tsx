@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
+import { toast } from 'sonner'
 
 import { activeMemberships } from '@/lib/auth/types'
 import {
@@ -9,7 +10,9 @@ import {
 } from '@/server/dashboard/dashboard.fns'
 import type { ClientDashboardStats } from '@/server/dashboard/dashboard.fns'
 import { listMyAccountsMetaRemainingFn } from '@/server/meta/meta.fns'
+import { setActiveClientFn } from '@/server/auth/portal-session.fns'
 import { dec, formatBdt, formatUsd } from '@/lib/money/money'
+import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import {
   Card,
@@ -55,6 +58,21 @@ function ClientDashboard() {
   const getStats = useServerFn(clientDashboardStatsFn)
   const getSections = useServerFn(clientDashboardSectionsFn)
   const listRemaining = useServerFn(listMyAccountsMetaRemainingFn)
+  const switchClient = useServerFn(setActiveClientFn)
+
+  // A hard navigation, not router.invalidate() — every query on every
+  // portal page keys off the server-side active-client cookie, not a
+  // clientId in the query key, so a full reload is what guarantees nothing
+  // stale from the previous client survives in the TanStack Query cache.
+  const switchMutation = useMutation({
+    mutationFn: (clientId: string) =>
+      switchClient({ data: { client_id: clientId } }),
+    onSuccess: () => {
+      window.location.assign('/portal')
+    },
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : 'Failed to switch client'),
+  })
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['client-dashboard-stats'],
@@ -88,14 +106,45 @@ function ClientDashboard() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          {memberships.map((m) => (
-            <span key={m.clientId} className="flex items-center gap-2">
-              {m.clientName}
-              <Badge variant="secondary">{m.clientCode}</Badge>
-            </span>
-          ))}
-        </div>
+        {memberships.length > 1 ? (
+          <>
+            <p className="mt-1 text-xs text-muted-foreground">
+              You have access to {memberships.length} clients — click one to
+              switch.
+            </p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
+              {memberships.map((m) => {
+                const isActive = m.clientId === user.activeClientId
+                return (
+                  <button
+                    key={m.clientId}
+                    type="button"
+                    disabled={isActive || switchMutation.isPending}
+                    onClick={() => switchMutation.mutate(m.clientId)}
+                    className={cn(
+                      'flex items-center gap-2 rounded-full border px-2.5 py-1 transition-colors',
+                      isActive
+                        ? 'border-primary bg-primary/10 font-medium text-foreground'
+                        : 'border-transparent text-muted-foreground hover:border-border hover:bg-accent disabled:opacity-50',
+                    )}
+                  >
+                    {m.clientName}
+                    <Badge variant="secondary">{m.clientCode}</Badge>
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            {memberships.map((m) => (
+              <span key={m.clientId} className="flex items-center gap-2">
+                {m.clientName}
+                <Badge variant="secondary">{m.clientCode}</Badge>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

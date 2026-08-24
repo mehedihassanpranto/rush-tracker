@@ -7,9 +7,14 @@ export const fetchMetaAdAccountSchema = z.object({
 // USD→BDT rate applied to every account in the batch — same bounds as
 // ad-account.ts's per-account usd_rate (kept in sync manually; admins can
 // edit individual rates after import via the existing Edit dialog).
+// Optional: 0/blank means every imported account inherits whichever
+// client it's later assigned to, rather than being pinned to a fixed rate
+// typed in at import time (see the matching comment in ad-account.ts —
+// this bulk path used to force the same unreachable-fallback bug onto
+// every account in a batch at once).
 const usdRate = z.coerce
   .number({ message: 'Enter a valid rate' })
-  .gt(0, 'Must be greater than zero')
+  .min(0, 'Cannot be negative')
   .max(100_000, 'Rate is too large')
 
 export const importMetaAdAccountsSchema = z.object({

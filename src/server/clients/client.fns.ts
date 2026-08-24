@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
+import { provisionClientLogin } from '@/server/clients/client-login.server'
 import { requireAdmin } from '@/server/auth/guards.server'
 import { writeAudit } from '@/server/audit/audit.service'
 import { bdtToUsd } from '@/server/exchange-rates/rate.service'
@@ -309,45 +310,33 @@ export const listClientUsersFn = createServerFn({ method: 'GET' })
   })
 
 /**
- * Provision a new CLIENT login and link it to this client (spec §12, §57).
- * The login is created with app_role=CLIENT in app_metadata (server-only),
- * email pre-confirmed, and an ACTIVE membership row.
+ * Provision a CLIENT login and link it to this client (spec §12, §57). If
+ * the email already belongs to a CLIENT-role login for a different client,
+ * that existing account is reused (client_memberships is a
+ * unique(user_id, client_id) pair, not user_id alone — one login can
+ * legitimately belong to several clients) instead of failing with "already
+ * registered". See client-login.server.ts.
  */
 export const createClientUserFn = createServerFn({ method: 'POST' })
   .validator(clientUserCreateSchema)
-  .handler(async ({ data }): Promise<{ user_id: string }> => {
+  .handler(async ({ data }): Promise<{ user_id: string; reused_existing_user: boolean }> => {
     const actor = await requireAdmin(PERMISSIONS.CLIENTS_MANAGE)
-    const admin = getSupabaseAdminClient()
 
-    const { data: created, error } = await admin.auth.admin.createUser({
+    const { user_id: userId, reused_existing_user } = await provisionClientLogin({
       email: data.email,
+      full_name: data.full_name,
       password: data.password,
-      email_confirm: true,
-      app_metadata: { app_role: 'CLIENT' },
-      user_metadata: { full_name: data.full_name },
+      client_id: data.client_id,
     })
-    if (error) throw new Error(error.message)
-    const userId = created.user.id
-
-    // The on_auth_user_created trigger creates the profile; ensure the name.
-    await admin
-      .from('user_profiles')
-      .update({ full_name: data.full_name })
-      .eq('user_id', userId)
-
-    const { error: memErr } = await admin
-      .from('client_memberships')
-      .insert({ user_id: userId, client_id: data.client_id, status: 'ACTIVE' })
-    if (memErr) throw new Error(memErr.message)
 
     await writeAudit({
       actorUserId: actor.id,
       action: 'CLIENT_USER_CREATED',
       entityType: 'CLIENT',
       entityId: data.client_id,
-      newValues: { user_id: userId, email: data.email },
+      newValues: { user_id: userId, email: data.email, reused_existing_user },
     })
-    return { user_id: userId }
+    return { user_id: userId, reused_existing_user }
   })
 
 /** Edit a client login's name/email (admin, from the client detail page's

@@ -8,6 +8,7 @@ import {
   markAllNotificationsReadFn,
   markNotificationReadFn,
 } from '@/server/notifications/notification.fns'
+import { activeMemberships } from '@/lib/auth/types'
 import { relativeTime } from '@/components/dashboard/section'
 import { PageHeader } from '@/components/shared/page-header'
 import { Button } from '@/components/ui/button'
@@ -19,6 +20,10 @@ export const Route = createFileRoute('/portal/notifications/')({
 })
 
 function NotificationsPage() {
+  const { user } = Route.useRouteContext()
+  const memberships = activeMemberships(user)
+  const activeClient = memberships.find((m) => m.clientId === user.activeClientId)
+
   const queryClient = useQueryClient()
   const getList = useServerFn(listMyNotificationsFn)
   const markRead = useServerFn(markNotificationReadFn)
@@ -37,7 +42,14 @@ function NotificationsPage() {
 
   return (
     <div>
-      <PageHeader title="Notifications" description="Updates on your requests, payments and accounts.">
+      <PageHeader
+        title="Notifications"
+        description={
+          memberships.length > 1 && activeClient
+            ? `Updates for ${activeClient.clientName} — switch clients from the dashboard to see another client's notifications.`
+            : "Updates on your requests, payments and accounts."
+        }
+      >
         {hasUnread && (
           <Button
             variant="outline"

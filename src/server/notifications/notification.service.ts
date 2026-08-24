@@ -14,6 +14,13 @@ export interface NotifyInput {
   message?: string | null
   entityType?: string | null
   entityId?: string | null
+  /** Which client this notification is about, when known — only
+   * notifyClientMembers() ever sets this. Lets a login belonging to
+   * several clients filter its notification list to the one it's
+   * currently viewing (see requireClientMembership()'s active-client
+   * cookie); left null for admin-facing notifications, which are never
+   * filtered. */
+  clientId?: string | null
 }
 
 /** Insert one notification row per recipient user. */
@@ -29,6 +36,7 @@ export async function notify(input: NotifyInput): Promise<void> {
       message: input.message ?? null,
       entity_type: input.entityType ?? null,
       entity_id: input.entityId ?? null,
+      client_id: input.clientId ?? null,
     }))
     await admin.from('notifications').insert(rows)
   } catch (err) {
@@ -72,7 +80,11 @@ export async function notifyAdmins(
 /** Notify every active member of a client (e.g. an approval/rejection). */
 export async function notifyClientMembers(
   clientId: string,
-  input: Omit<NotifyInput, 'userIds'>,
+  input: Omit<NotifyInput, 'userIds' | 'clientId'>,
 ): Promise<void> {
-  await notify({ ...input, userIds: await clientMemberUserIds(clientId) })
+  await notify({
+    ...input,
+    userIds: await clientMemberUserIds(clientId),
+    clientId,
+  })
 }
