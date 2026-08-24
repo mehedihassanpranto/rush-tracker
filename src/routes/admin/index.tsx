@@ -80,7 +80,7 @@ function AdminDashboard() {
             <Card key={card.label}>
               <CardHeader className="pb-2">
                 <CardDescription>{card.label}</CardDescription>
-                <CardTitle className="text-2xl">
+                <CardTitle className="num text-2xl">
                   {isLoading ? <Skeleton className="h-8 w-16" /> : display}
                 </CardTitle>
               </CardHeader>
@@ -111,7 +111,7 @@ function AdminDashboard() {
                   <span className="text-muted-foreground">
                     {r.client?.name ?? '—'}
                   </span>
-                  <span className="font-medium">
+                  <span className="num font-medium">
                     {formatUsd(r.requested_amount_usd)}
                   </span>
                 </li>
@@ -140,7 +140,7 @@ function AdminDashboard() {
                   <span className="text-muted-foreground">
                     {p.client?.name ?? '—'}
                   </span>
-                  <span className="font-medium">{formatBdt(p.amount_bdt)}</span>
+                  <span className="num font-medium">{formatBdt(p.amount_bdt)}</span>
                 </li>
               ))}
             </ul>
@@ -164,7 +164,7 @@ function AdminDashboard() {
                   >
                     {c.name}
                   </Link>
-                  <span className="font-medium">{formatBdt(c.current_due)}</span>
+                  <span className="num font-medium">{formatBdt(c.current_due)}</span>
                 </li>
               ))}
             </ul>
@@ -181,7 +181,7 @@ function AdminDashboard() {
                   <span className="text-muted-foreground">
                     {r.client?.name ?? '—'}
                   </span>
-                  <span className="font-medium">
+                  <span className="num font-medium">
                     {formatBdt(r.bdt_charge ?? '0')}
                   </span>
                 </li>
@@ -200,7 +200,7 @@ function AdminDashboard() {
                   <span className="text-muted-foreground">
                     {p.client?.name ?? '—'}
                   </span>
-                  <span className="font-medium">{formatBdt(p.amount_bdt)}</span>
+                  <span className="num font-medium">{formatBdt(p.amount_bdt)}</span>
                 </li>
               ))}
             </ul>

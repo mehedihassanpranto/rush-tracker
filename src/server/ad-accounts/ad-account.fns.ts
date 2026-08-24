@@ -19,7 +19,7 @@ import type {
 
 type ActiveAssignmentRow = {
   ad_account_id: string
-  client: Pick<AdAccountClient, 'id' | 'client_code' | 'name'> | null
+  client: Pick<AdAccountClient, 'id' | 'client_code' | 'name' | 'usd_rate'> | null
 }
 
 async function currentClientMap(
@@ -30,7 +30,7 @@ async function currentClientMap(
   const admin = getSupabaseAdminClient()
   const { data } = await admin
     .from('ad_account_assignments')
-    .select('ad_account_id, client:clients(id, client_code, name)')
+    .select('ad_account_id, client:clients(id, client_code, name, usd_rate)')
     .eq('status', 'ACTIVE')
     .in('ad_account_id', accountIds)
 

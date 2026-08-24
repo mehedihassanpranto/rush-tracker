@@ -1408,6 +1408,82 @@ bug fixes, and anything else that isn't a whole new named feature.
   confirmed the DB value became `0`, then restored it to its original
   `130` — net-zero change, confirming the entire path (UI → schema →
   server fn → DB) genuinely works now, not just passes typecheck.
+- **"Financial ledger" visual design system (post-Phase-8 addition): done,
+  pending owner review, no migration** — a styling-only pass replacing the
+  earlier amber/teal brand palette (see the "Brand identity" entries
+  above) with a finance-grade look, per explicit owner spec. IBM Plex Sans
+  (UI) / IBM Plex Mono (every numeric value — spend, balances,
+  percentages, counts, via a new `.num` class /
+  `src/components/shared/num.tsx`), a single blue accent (`#2f6fed` light /
+  `#5a93ff` dark) reserved for interactive actions only (buttons, links,
+  active nav — never informational cards), and explicit
+  `--success`/`--warning`/`--danger` tokens reserved for budget/payment
+  health only. All wired through the *existing* shadcn variable names in
+  `src/styles.css`'s `@theme inline` block (this project's Tailwind v4
+  CSS-first equivalent of `tailwind.config.js` — there is no such file to
+  edit) rather than a parallel set of variables. New "status rail"
+  signature element (`src/components/shared/status-rail.tsx`): a 3px,
+  never-rounded colored left border on ad account/client/payment rows,
+  reusing each page's already-computed Meta-remaining/payment-status data
+  (USD-only, same gate as the rest of the Meta integration) — no color
+  shown when health is unknown (unlinked account, non-USD, Meta
+  unreachable) rather than a false "on-track." Real, working dark mode
+  added for the first time: the app already had a `.dark` block and
+  `dark:` utility classes throughout that were inert dead code (no toggle
+  existed) — switched `@custom-variant dark` from a `.dark` class selector
+  to `[data-theme="dark"]`, so every existing `dark:` usage lit up app-wide
+  with zero per-component changes. New `src/lib/theme/theme.ts` +
+  `<ThemeToggle>` (header, next to the notification bell): persists to
+  `localStorage`, defaults to system preference, blocking init `<script>`
+  in `__root.tsx` avoids a flash of the wrong theme. Verified live
+  (temporary Playwright, same pattern as earlier sessions, removed after):
+  login page + dashboard/ad accounts/clients/payments admin pages, both
+  themes. Deliberately scoped to exactly what the owner's spec named —
+  KPI cards, the three list tables, and the ad account detail page's
+  Usage/Meta/Assignment-History surfaces — not swept across every money
+  figure in the app (ledger, reports, portal pages, etc. still use plain
+  text); `.num`/`railClassName()` are now available for those if wanted
+  later.
+- **CSS cascade-layer bug fixed: active sidebar nav text was invisible
+  (post-Phase-8 addition): done, pending owner review, no migration** — a
+  bare `a { color: var(--link) }` in `styles.css` sat outside every
+  Tailwind `@layer`, so it always beat any `text-*` utility (Tailwind
+  wraps its own utilities in `@layer utilities`) regardless of class
+  order — this silently overrode the intended text color on every
+  `<Link>`/`<a>` app-wide, not just the sidebar. Harmless-looking before
+  the financial-ledger rebrand (`--link` and `--primary` were different
+  hues); once that rebrand gave them the same blue, the active nav pill's
+  text became literally invisible (blue on blue). Fixed by moving the rule
+  into `@layer base` so Tailwind's utility layer wins as intended. Also
+  added `suppressHydrationWarning` to `<html>` for the theme-init script's
+  expected pre-hydration `data-theme` mismatch. Verified live in both
+  themes; zero console errors.
+- **Ad account "Per USD" now shows the effective (resolved) rate, not just
+  the account's raw column (post-Phase-8 addition): done, pending owner
+  review, no migration** — the ad accounts list, the client detail page's
+  Ad Accounts tab, and the ad account detail page's Account details card
+  all previously showed `ad_accounts.usd_rate` directly, never falling
+  back to the client's own rate the way real billing
+  (`adAccountUsdRate()`, `rate.service.ts`) already does — so every
+  account looked pinned at whatever it was bulk-imported at, regardless of
+  which client actually held it. `AdAccountClient` (`types/domain.ts`)
+  gained `usd_rate`; `currentClientMap()` (`ad-account.fns.ts`) and
+  `listClientAccountsFn` (`assignment.fns.ts`) now select it so all three
+  surfaces can resolve the same account-overrides-client fallback
+  client-side without new queries. Inherited (vs. account's own override)
+  is shown italicized. Live data confirmed the underlying cause the
+  earlier USD-rate-inheritance entry above already flagged: literally
+  every one of the 33 ad accounts still carried an explicit non-zero
+  `usd_rate` from the old bulk import, so the display fix alone didn't
+  change anything visible for most rows. Owner confirmed clearing the two
+  currently-assigned accounts whose stale ৳130 override didn't match
+  their real client's rate — `ADA-0018` (client xRush Agency, real rate
+  ৳1) and `ADA-0014` (client Foysal bhai, real rate ৳129) — done through
+  the real Edit dialog (`updateAdAccountFn`, proper audit trail), not a
+  raw DB write. Verified live: both now `usd_rate: 0` (inherit), correct
+  `AD_ACCOUNT_UPDATED` audit rows, list shows ৳1/৳129 in italics. The
+  other 31 accounts' ৳130 was left as-is — their clients are genuinely
+  configured at ৳130 too.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

@@ -124,13 +124,13 @@ export function MetaSpendCapDialog({
             <div className="grid grid-cols-2 gap-4 rounded-md border p-3 text-sm">
               <div>
                 <div className="text-muted-foreground">Current spend cap</div>
-                <div className="font-medium">
+                <div className="num font-medium">
                   {formatCurrencyAmount(meta.spend_cap, meta.currency)}
                 </div>
               </div>
               <div>
                 <div className="text-muted-foreground">Already spent</div>
-                <div className="font-medium">
+                <div className="num font-medium">
                   {formatCurrencyAmount(meta.amount_spent, meta.currency)}
                 </div>
               </div>
@@ -153,7 +153,7 @@ export function MetaSpendCapDialog({
                 <div className="text-muted-foreground">
                   Estimated new spend cap
                 </div>
-                <div className="text-lg font-medium">
+                <div className="num text-lg font-medium">
                   {formatCurrencyAmount(newCap.toFixed(2), meta.currency)}
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">

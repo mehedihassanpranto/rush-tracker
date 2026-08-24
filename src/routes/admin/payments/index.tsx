@@ -8,6 +8,7 @@ import { listPaymentsFn } from '@/server/payments/payment.fns'
 import { formatBdt } from '@/lib/money/money'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
+import { railClassName, type RailHealth } from '@/components/shared/status-rail'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -26,6 +27,16 @@ const FILTERS: Array<Filter> = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED', 
 export const Route = createFileRoute('/admin/payments/')({
   component: PaymentsPage,
 })
+
+// Payment health for the status rail: APPROVED is settled (on-track),
+// PENDING is awaiting review (near-cap), REJECTED/CANCELLED never landed
+// (over-cap) — a payment-side reading of the same three-tier signal the ad
+// account/client rails use for budget headroom.
+function paymentHealth(status: string): RailHealth {
+  if (status === 'APPROVED') return 'on-track'
+  if (status === 'PENDING') return 'near-cap'
+  return 'over-cap'
+}
 
 function fmtDate(value: string): string {
   return new Date(value).toLocaleDateString(undefined, {
@@ -98,8 +109,8 @@ function PaymentsPage() {
             )}
 
             {payments?.map((p) => (
-              <TableRow key={p.id}>
-                <TableCell className="font-mono text-xs">
+              <TableRow key={p.id} className={railClassName(paymentHealth(p.status))}>
+                <TableCell className="num text-xs">
                   <Link
                     to="/admin/payments/$paymentId"
                     params={{ paymentId: p.id }}
@@ -109,7 +120,7 @@ function PaymentsPage() {
                   </Link>
                 </TableCell>
                 <TableCell>{p.client?.name ?? '—'}</TableCell>
-                <TableCell className="text-right font-medium">
+                <TableCell className="num text-right font-medium">
                   {formatBdt(p.amount_bdt)}
                 </TableCell>
                 <TableCell className="text-muted-foreground">

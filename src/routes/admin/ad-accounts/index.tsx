@@ -13,6 +13,7 @@ import { hasPermission } from '@/lib/auth/types'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
+import { railClassName, type RailHealth } from '@/components/shared/status-rail'
 import { AccountCreateDialog } from '@/components/admin/ad-account/account-dialogs'
 import { MetaImportDialog } from '@/components/admin/ad-account/meta-import-dialog'
 import { Button } from '@/components/ui/button'
@@ -155,6 +156,29 @@ function AdAccountsPage() {
     })
   }
 
+  // Mirrors adAccountUsdRate() (rate.service.ts): the account's own rate
+  // wins when set (>0); a zero/unset account rate means "inherit" and falls
+  // back to whichever client currently holds it. The list was previously
+  // showing the account's raw stored rate only, which looked identical
+  // across every client whenever accounts still carried an old bulk-import
+  // override — this shows what will actually be billed.
+  function effectiveUsdRate(account: NonNullable<typeof accounts>[number]): string | null {
+    if (Number(account.usd_rate) > 0) return account.usd_rate
+    if (account.current_client && Number(account.current_client.usd_rate) > 0)
+      return account.current_client.usd_rate
+    return null
+  }
+
+  function accountHealth(
+    balance: ReturnType<typeof balanceByAccountId.get>,
+  ): RailHealth | null {
+    if (!balance || balance.currency !== 'USD') return null
+    if (balance.metaDueHigh || (balance.remaining != null && Number(balance.remaining) <= 0))
+      return 'over-cap'
+    if (balance.low) return 'near-cap'
+    return 'on-track'
+  }
+
   return (
     <div>
       <PageHeader
@@ -219,8 +243,11 @@ function AdAccountsPage() {
             {accounts?.map((account) => {
               const balance = balanceByAccountId.get(account.id)
               return (
-              <TableRow key={account.id}>
-                <TableCell className="font-mono text-xs">
+              <TableRow
+                key={account.id}
+                className={railClassName(accountHealth(balance))}
+              >
+                <TableCell className="num text-xs">
                   {account.account_code}
                 </TableCell>
                 <TableCell>
@@ -236,7 +263,7 @@ function AdAccountsPage() {
                       <span
                         title={`Low remaining Meta balance: ${balance.remaining} ${balance.currency}`}
                       >
-                        <Bell className="size-3.5 shrink-0 text-red-600 dark:text-red-400" />
+                        <Bell className="size-3.5 shrink-0 text-danger" />
                       </span>
                     )}
                     {balance?.metaDueHigh && (
@@ -244,8 +271,8 @@ function AdAccountsPage() {
                         className="flex shrink-0 -space-x-1.5"
                         title={`High balance owed to Meta: ${balance.metaDue} ${balance.currency}`}
                       >
-                        <Bell className="size-3.5 text-red-600 dark:text-red-400" />
-                        <Bell className="size-3.5 text-red-600 dark:text-red-400" />
+                        <Bell className="size-3.5 text-danger" />
+                        <Bell className="size-3.5 text-danger" />
                       </span>
                     )}
                   </div>
@@ -258,24 +285,33 @@ function AdAccountsPage() {
                     ? account.current_client.name
                     : '—'}
                 </TableCell>
-                <TableCell className="text-right text-muted-foreground">
+                <TableCell className="num text-right text-muted-foreground">
                   {account.current_client
                     ? formatBdt(account.current_client.current_due)
                     : '—'}
                 </TableCell>
-                <TableCell className="text-right text-muted-foreground">
-                  {Number(account.usd_rate) > 0 ? `৳${account.usd_rate}` : '—'}
+                <TableCell className="num text-right text-muted-foreground">
+                  {(() => {
+                    const rate = effectiveUsdRate(account)
+                    if (rate == null) return '—'
+                    // Italicized when it's not the account's own override —
+                    // i.e. it's inherited from whichever client holds it —
+                    // so an admin can tell at a glance why two accounts
+                    // under different clients show different figures.
+                    const inherited = !(Number(account.usd_rate) > 0)
+                    return <span className={inherited ? 'italic' : ''}>৳{rate}</span>
+                  })()}
                 </TableCell>
-                <TableCell className="text-right font-medium">
+                <TableCell className="num text-right font-medium">
                   {formatUsd(account.current_limit_usd)}
                 </TableCell>
                 <TableCell
-                  className={`text-right ${balance?.low ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}
+                  className={`num text-right ${balance?.low ? 'font-medium text-danger' : 'text-muted-foreground'}`}
                 >
                   {balance ? formatCurrencyAmount(balance.remaining, balance.currency) : '—'}
                 </TableCell>
                 <TableCell
-                  className={`text-right ${balance?.metaDueHigh ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}
+                  className={`num text-right ${balance?.metaDueHigh ? 'font-medium text-danger' : 'text-muted-foreground'}`}
                 >
                   {balance ? formatCurrencyAmount(balance.metaDue, balance.currency) : '—'}
                 </TableCell>

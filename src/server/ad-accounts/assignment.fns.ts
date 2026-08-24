@@ -51,7 +51,9 @@ export const listClientAccountsFn = createServerFn({ method: 'GET' })
     const admin = getSupabaseAdminClient()
     const { data: rows, error } = await admin
       .from('ad_account_assignments')
-      .select('account:ad_accounts(*), client:clients(id, client_code, name)')
+      .select(
+        'account:ad_accounts(*), client:clients(id, client_code, name, usd_rate)',
+      )
       .eq('client_id', data.client_id)
       .eq('status', 'ACTIVE')
     if (error) throw new Error(error.message)
@@ -69,7 +71,7 @@ export const listClientAccountsFn = createServerFn({ method: 'GET' })
 
     const parsed = (rows ?? []) as unknown as Array<{
       account: AdAccount | null
-      client: Pick<AdAccountClient, 'id' | 'client_code' | 'name'> | null
+      client: Pick<AdAccountClient, 'id' | 'client_code' | 'name' | 'usd_rate'> | null
     }>
     return parsed.flatMap((r) =>
       r.account

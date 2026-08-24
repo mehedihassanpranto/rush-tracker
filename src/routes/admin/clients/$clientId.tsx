@@ -401,7 +401,19 @@ function ClientDetailPage() {
                         : '—'}
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">
-                      {Number(a.usd_rate) > 0 ? `৳${a.usd_rate}` : '—'}
+                      {(() => {
+                        // Mirrors adAccountUsdRate() (rate.service.ts): the
+                        // account's own rate wins when set; a zero/unset
+                        // rate falls back to this client's own rate.
+                        const ownRate = Number(a.usd_rate) > 0
+                        const rate = ownRate
+                          ? a.usd_rate
+                          : Number(client?.usd_rate) > 0
+                            ? client?.usd_rate
+                            : null
+                        if (rate == null) return '—'
+                        return <span className={ownRate ? '' : 'italic'}>৳{rate}</span>
+                      })()}
                     </TableCell>
                     <TableCell className="text-right font-medium">
                       {formatUsd(a.current_limit_usd)}

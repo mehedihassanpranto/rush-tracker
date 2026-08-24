@@ -12,6 +12,8 @@ import { hasPermission } from '@/lib/auth/types'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
+import { railClassName, type RailHealth } from '@/components/shared/status-rail'
+import { LOW_BALANCE_THRESHOLD } from '@/lib/meta/thresholds'
 import { ClientFormDialog } from '@/components/admin/client/client-form-dialog'
 import { DeleteClientDialog } from '@/components/admin/client/delete-client-dialog'
 import { Button } from '@/components/ui/button'
@@ -96,6 +98,20 @@ function ClientsPage() {
     }
   }
 
+  // Client-level equivalent of the ad accounts list's rail: sum of Meta
+  // spend headroom across the client's own linked USD accounts (the same
+  // figure the "Remaining" column below shows). Unknown when Meta data
+  // hasn't resolved yet (no bulk fetch permission, or it's still loading).
+  function clientHealth(clientId: string): RailHealth | null {
+    if (!canManageMeta || metaAccounts === undefined) return null
+    const remaining = remainingByClientId.get(clientId)
+    if (remaining == null) return null
+    const value = Number(remaining)
+    if (value <= 0) return 'over-cap'
+    if (value <= LOW_BALANCE_THRESHOLD) return 'near-cap'
+    return 'on-track'
+  }
+
   return (
     <div>
       <PageHeader title="Clients" description="Client organizations you manage.">
@@ -142,8 +158,11 @@ function ClientsPage() {
             )}
 
             {clients?.map((client) => (
-              <TableRow key={client.id}>
-                <TableCell className="font-mono text-xs">
+              <TableRow
+                key={client.id}
+                className={railClassName(clientHealth(client.id))}
+              >
+                <TableCell className="num text-xs">
                   {client.client_code}
                 </TableCell>
                 <TableCell>
@@ -158,16 +177,16 @@ function ClientsPage() {
                 <TableCell className="text-muted-foreground">
                   {client.company_name ?? '—'}
                 </TableCell>
-                <TableCell className="text-center">
+                <TableCell className="num text-center">
                   {client.active_accounts}
                 </TableCell>
-                <TableCell className="text-right font-medium">
+                <TableCell className="num text-right font-medium">
                   {formatBdt(client.current_due)}
                 </TableCell>
-                <TableCell className="text-right text-muted-foreground">
+                <TableCell className="num text-right text-muted-foreground">
                   {formatUsd(client.current_due_usd)}
                 </TableCell>
-                <TableCell className="text-right text-muted-foreground">
+                <TableCell className="num text-right text-muted-foreground">
                   {remainingByClientId.has(client.id)
                     ? formatUsd(remainingByClientId.get(client.id)!)
                     : '—'}

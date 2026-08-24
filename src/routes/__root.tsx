@@ -10,6 +10,7 @@ import { TanStackDevtools } from '@tanstack/react-devtools'
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 import { Toaster } from '@/components/ui/sonner'
 import { installStaleChunkReload } from '@/lib/app/stale-chunk-reload'
+import { THEME_INIT_SCRIPT } from '@/lib/theme/theme'
 import { getCurrentUserFn } from '@/server/auth/auth.fns'
 
 import appCss from '../styles.css?url'
@@ -56,8 +57,13 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   useEffect(installStaleChunkReload, [])
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Sets data-theme before first paint — avoids a flash of the wrong
+            theme when a stored/system preference is dark. suppressHydrationWarning
+            above is needed because this script sets the attribute before React
+            hydrates, so the server-rendered markup never has it. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <HeadContent />
       </head>
       <body>

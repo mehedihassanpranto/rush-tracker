@@ -1,107 +1,140 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 
 @import 'tw-animate-css';
 
-@custom-variant dark (&:is(.dark *));
+/* Dark mode is driven by an explicit [data-theme="dark"] attribute on <html>
+ * (see theme-init script in __root.tsx + src/lib/theme/theme.ts), not a
+ * media query or a `.dark` class — this makes every `dark:` utility class
+ * already used throughout the app (status badges, due-amount coloring, low-
+ * balance bells, etc.) respond to the toggle with zero per-component changes. */
+@custom-variant dark (&:is([data-theme='dark'] *));
 
 /*
- * Rush Tracker brand palette. Single source of truth for the five brand
- * hexes — every shadcn token below is defined in terms of these, never a
- * bare hex repeated in place. Status colors (red-600/emerald-600 for
- * due/urgency, low-balance bells, Meta Due alerts) live outside this system
- * entirely as literal Tailwind utility classes in the components that use
- * them — this palette is additive and must never redefine those.
+ * Rush Tracker "financial ledger" design system. Single source of truth for
+ * the palette — every shadcn/status token below is defined in terms of
+ * these, never a bare hex repeated in place. Semantic status colors
+ * (success/warning/danger) are reserved for budget/payment health signals
+ * only (status rail, due-amount urgency, low-balance/Meta-due alerts) —
+ * never reused as a decorative accent.
  */
 :root {
-  --brand-ink: #14171c;
-  --brand-canvas: #f7f6f2;
-  --brand-primary: #c98a2c;
-  --brand-primary-deep: #8f5f17;
-  --brand-accent: #0e7c86;
-  --brand-accent-deep: #0b5f66;
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --brand-ink: #10151f;
+  --brand-canvas: #f5f6f8;
+  --brand-accent: #2f6fed;
+  --brand-accent-deep: #1e54c8;
+
+  --surface: #ffffff;
+  --surface-alt: #edeff3;
+  --border-strong: #c7ccd6;
+  --text-secondary: #5b6472;
+  --text-muted: #8a93a3;
+
+  --success: #1fa971;
+  --success-bg: #e4f7ee;
+  --warning: #e0a526;
+  --warning-bg: #fdf3dd;
+  --danger: #e0453c;
+  --danger-bg: #fce9e8;
 }
 
 :root {
   --background: var(--brand-canvas);
   --foreground: var(--brand-ink);
-  --card: #ffffff;
+  --card: var(--surface);
   --card-foreground: var(--brand-ink);
-  --popover: #ffffff;
+  --popover: var(--surface);
   --popover-foreground: var(--brand-ink);
-  --primary: var(--brand-primary);
-  --primary-foreground: var(--brand-ink);
-  --primary-hover: var(--brand-primary-deep);
-  --secondary: #ede9e0;
+  --primary: var(--brand-accent);
+  --primary-foreground: #ffffff;
+  --primary-hover: var(--brand-accent-deep);
+  --secondary: var(--surface-alt);
   --secondary-foreground: var(--brand-ink);
-  --muted: #f1efe8;
-  --muted-foreground: #6e6a63;
-  --accent: #f1e6d2;
+  --muted: var(--surface-alt);
+  --muted-foreground: var(--text-secondary);
+  --accent: var(--surface-alt);
   --accent-foreground: var(--brand-ink);
   --link: var(--brand-accent);
   --link-hover: var(--brand-accent-deep);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.577 0.245 27.325);
-  --border: #e2ded2;
-  --input: #e2ded2;
-  --ring: var(--brand-primary);
+  --destructive: var(--danger);
+  --destructive-foreground: #ffffff;
+  --border: #e1e4ea;
+  --input: #e1e4ea;
+  --ring: var(--brand-accent);
   --chart-1: var(--brand-accent);
-  --chart-2: var(--brand-primary);
-  --chart-3: var(--brand-primary-deep);
-  --chart-4: #4fa8b0;
-  --chart-5: #d9b36c;
+  --chart-2: var(--success);
+  --chart-3: var(--warning);
+  --chart-4: var(--danger);
+  --chart-5: var(--brand-accent-deep);
   --radius: 0.625rem;
   --sidebar: var(--brand-ink);
   --sidebar-foreground: var(--brand-canvas);
-  --sidebar-primary: var(--brand-primary);
-  --sidebar-primary-foreground: var(--brand-ink);
-  --sidebar-accent: #1f242b;
+  --sidebar-primary: var(--brand-accent);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1b2330;
   --sidebar-accent-foreground: var(--brand-canvas);
-  --sidebar-border: #262b33;
-  --sidebar-ring: var(--brand-primary);
+  --sidebar-border: #26303f;
+  --sidebar-ring: var(--brand-accent);
 }
 
-.dark {
-  --background: var(--brand-ink);
-  --foreground: var(--brand-canvas);
-  --card: #1b1f26;
-  --card-foreground: var(--brand-canvas);
-  --popover: #1b1f26;
-  --popover-foreground: var(--brand-canvas);
-  --primary: var(--brand-primary);
-  --primary-foreground: var(--brand-ink);
-  --primary-hover: var(--brand-primary-deep);
-  --secondary: #232830;
-  --secondary-foreground: var(--brand-canvas);
-  --muted: #232830;
-  --muted-foreground: #a6abb3;
-  --accent: #2a2f38;
-  --accent-foreground: var(--brand-canvas);
-  --link: #4fb0b8;
-  --link-hover: var(--brand-accent);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: #2a2f38;
-  --input: #2a2f38;
-  --ring: var(--brand-primary);
-  --chart-1: var(--brand-accent);
-  --chart-2: var(--brand-primary);
-  --chart-3: var(--brand-primary-deep);
-  --chart-4: #4fa8b0;
-  --chart-5: #d9b36c;
-  --sidebar: var(--brand-ink);
-  --sidebar-foreground: var(--brand-canvas);
-  --sidebar-primary: var(--brand-primary);
-  --sidebar-primary-foreground: var(--brand-ink);
-  --sidebar-accent: #1f242b;
-  --sidebar-accent-foreground: var(--brand-canvas);
-  --sidebar-border: #262b33;
-  --sidebar-ring: var(--brand-primary);
+[data-theme='dark'] {
+  --surface: #131a24;
+  --surface-alt: #1b2330;
+  --border-strong: #34404f;
+  --text-secondary: #9aa4b5;
+  --text-muted: #6b7484;
+
+  --success: #34c98a;
+  --success-bg: #0f2b22;
+  --warning: #f0b93e;
+  --warning-bg: #332508;
+  --danger: #ff6259;
+  --danger-bg: #33130f;
+
+  --background: #0b0f16;
+  --foreground: #edf0f5;
+  --card: var(--surface);
+  --card-foreground: #edf0f5;
+  --popover: var(--surface);
+  --popover-foreground: #edf0f5;
+  --primary: #5a93ff;
+  --primary-foreground: #061224;
+  --primary-hover: #7ba9ff;
+  --secondary: var(--surface-alt);
+  --secondary-foreground: #edf0f5;
+  --muted: var(--surface-alt);
+  --muted-foreground: var(--text-secondary);
+  --accent: var(--surface-alt);
+  --accent-foreground: #edf0f5;
+  --link: #5a93ff;
+  --link-hover: #7ba9ff;
+  --destructive: var(--danger);
+  --destructive-foreground: #ffffff;
+  --border: #26303f;
+  --input: #26303f;
+  --ring: #5a93ff;
+  --chart-1: #5a93ff;
+  --chart-2: var(--success);
+  --chart-3: var(--warning);
+  --chart-4: var(--danger);
+  --chart-5: #7ba9ff;
+  --sidebar: #131a24;
+  --sidebar-foreground: #edf0f5;
+  --sidebar-primary: #5a93ff;
+  --sidebar-primary-foreground: #061224;
+  --sidebar-accent: #1b2330;
+  --sidebar-accent-foreground: #edf0f5;
+  --sidebar-border: #26303f;
+  --sidebar-ring: #5a93ff;
 }
 
 @theme inline {
-  --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -140,6 +173,19 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Financial-ledger design system tokens — surfaces, text tiers, status. */
+  --color-surface: var(--surface);
+  --color-surface-alt: var(--surface-alt);
+  --color-border-strong: var(--border-strong);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
 }
 
 html,
@@ -157,15 +203,55 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  color: var(--link);
-  text-decoration-color: color-mix(in oklab, var(--link) 40%, transparent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
+/* Default link color/underline — kept inside @layer base (not a bare rule)
+ * so it only wins when nothing more specific applies. A bare `a { color }`
+ * sits outside every Tailwind layer, and unlayered rules always beat
+ * layered ones regardless of specificity or class order — that silently
+ * overrode every text-* utility on every <Link>/<a> in the app (still
+ * readable before today only by coincidence, since --link and --primary
+ * were different hues; once a palette gives them the same color, as this
+ * one does, the bug becomes literal invisible text — e.g. the active
+ * sidebar nav pill, whose --sidebar-primary-foreground never actually
+ * rendered). */
+@layer base {
+  a {
+    color: var(--link);
+    text-decoration-color: color-mix(in oklab, var(--link) 40%, transparent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+
+  a:hover {
+    color: var(--link-hover);
+  }
 }
 
-a:hover {
-  color: var(--link-hover);
+/* Every dollar amount, percentage, and count in the UI renders in this —
+ * tabular-nums so figures align in columns, monospace so they read as
+ * "data" distinct from surrounding prose (spec: finance-grade, not generic
+ * SaaS). Apply via className="num" or the <Num> component. */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Signature "status rail": a 3px left border encoding budget/payment health
+ * at a glance, on ad-account/client/invoice rows and cards. Deliberately
+ * unlayered (beats Tailwind's @layer utilities regardless of class order)
+ * and never rounded, even inside a rounded card/table. */
+.status-rail {
+  border-left-width: 3px;
+  border-left-style: solid;
+  border-radius: 0;
+}
+.status-rail-on-track {
+  border-left-color: var(--success);
+}
+.status-rail-near-cap {
+  border-left-color: var(--warning);
+}
+.status-rail-over-cap {
+  border-left-color: var(--danger);
 }
 
 @layer base {

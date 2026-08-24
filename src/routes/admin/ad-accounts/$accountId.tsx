@@ -323,7 +323,7 @@ function AccountDetailPage() {
       </PageHeader>
 
       <div className="mb-4 flex items-center gap-3">
-        <span className="font-mono text-xs text-muted-foreground">
+        <span className="num text-xs text-muted-foreground">
           {account.account_code}
         </span>
         <StatusBadge status={account.status} />
@@ -398,7 +398,7 @@ function AccountDetailPage() {
                   <InfoRow
                     label="Current balance"
                     value={
-                      <span className="font-medium">
+                      <span className="num font-medium">
                         {formatBdt(currentClient.current_due)} due
                       </span>
                     }
@@ -407,7 +407,7 @@ function AccountDetailPage() {
                 <InfoRow
                   label="Current limit"
                   value={
-                    <span className="font-medium">
+                    <span className="num font-medium">
                       {formatUsd(account.current_limit_usd)}
                     </span>
                   }
@@ -415,9 +415,23 @@ function AccountDetailPage() {
                 <InfoRow
                   label="Per USD"
                   value={
-                    Number(account.usd_rate) > 0
-                      ? `৳${account.usd_rate} per $1`
-                      : null
+                    // Mirrors adAccountUsdRate() (rate.service.ts): the
+                    // account's own rate wins when set; a zero/unset rate
+                    // falls back to whichever client currently holds it.
+                    (() => {
+                      const ownRate = Number(account.usd_rate) > 0
+                      const rate = ownRate
+                        ? account.usd_rate
+                        : currentClient && Number(currentClient.usd_rate) > 0
+                          ? currentClient.usd_rate
+                          : null
+                      if (rate == null) return null
+                      return (
+                        <span className={`num ${ownRate ? '' : 'italic'}`}>
+                          ৳{rate} per $1{ownRate ? '' : ' (from client)'}
+                        </span>
+                      )
+                    })()
                   }
                 />
                 <InfoRow
@@ -455,7 +469,7 @@ function AccountDetailPage() {
                     <InfoRow
                       label="Amount spent"
                       value={
-                        <span className="font-medium">
+                        <span className="num font-medium">
                           {formatCurrencyAmount(metaLive.amount_spent, metaLive.currency)}
                         </span>
                       }
@@ -479,8 +493,8 @@ function AccountDetailPage() {
                               <span
                                 className={
                                   low
-                                    ? 'font-medium text-red-600 dark:text-red-400'
-                                    : 'font-medium'
+                                    ? 'num font-medium text-danger'
+                                    : 'num font-medium'
                                 }
                               >
                                 {formatCurrencyAmount(remaining.toFixed(2), metaLive.currency)}
@@ -490,11 +504,18 @@ function AccountDetailPage() {
                         )
                       }
                     />
-                    <InfoRow label="Spend cap" value={formatCurrencyAmount(metaLive.spend_cap, metaLive.currency)} />
+                    <InfoRow
+                      label="Spend cap"
+                      value={
+                        <span className="num">
+                          {formatCurrencyAmount(metaLive.spend_cap, metaLive.currency)}
+                        </span>
+                      }
+                    />
                     <InfoRow
                       label="Balance owed to Meta"
                       value={
-                        <span className="font-medium">
+                        <span className="num font-medium">
                           {formatCurrencyAmount(metaLive.meta_balance, metaLive.currency)}
                         </span>
                       }
@@ -534,15 +555,15 @@ function AccountDetailPage() {
                 {history?.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell>{row.client?.name ?? '—'}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="num text-right">
                       {formatUsd(row.opening_limit_usd)}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="num text-right">
                       {row.closing_limit_usd
                         ? formatUsd(row.closing_limit_usd)
                         : '—'}
                     </TableCell>
-                    <TableCell className="text-right font-medium">
+                    <TableCell className="num text-right font-medium">
                       {row.closing_limit_usd
                         ? formatUsd(
                             dec(row.closing_limit_usd)
@@ -569,7 +590,7 @@ function AccountDetailPage() {
               <CardTitle className="text-base">Total USD used</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-semibold">
+              <p className="num text-2xl font-semibold">
                 {formatUsd(totalUsage.toFixed(2))}
               </p>
               <p className="text-sm text-muted-foreground">
@@ -605,16 +626,16 @@ function AccountDetailPage() {
                   <TableRow key={row.id}>
                     <TableCell>{row.client?.name ?? '—'}</TableCell>
                     <TableCell>{fmtDate(row.approved_at)}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="num text-right">
                       {formatUsd(row.opening_balance_usd)}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="num text-right">
                       {formatUsd(row.requested_amount_usd)}
                     </TableCell>
-                    <TableCell className="text-right font-medium">
+                    <TableCell className="num text-right font-medium">
                       {formatUsd(row.approved_amount_usd ?? 0)}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="num text-right">
                       {row.approved_new_limit_usd
                         ? formatUsd(row.approved_new_limit_usd)
                         : '—'}

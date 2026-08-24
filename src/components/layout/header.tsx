@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NotificationBell } from './notification-bell'
+import { ThemeToggle } from './theme-toggle'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -121,6 +122,7 @@ export function Header({
       )}
 
       <div className="ml-auto flex items-center gap-1">
+        <ThemeToggle className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground" />
         <NotificationBell role={user.role} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

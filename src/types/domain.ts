@@ -79,7 +79,10 @@ export interface Assignment {
 /** The current-assignment client fields carried alongside an ad account.
  * current_due is ledger-derived (spec §35), never a stored Client column —
  * merged in from all_client_dues(), not Pick<Client, ...>. */
-export type AdAccountClient = Pick<Client, 'id' | 'client_code' | 'name'> & {
+export type AdAccountClient = Pick<
+  Client,
+  'id' | 'client_code' | 'name' | 'usd_rate'
+> & {
   current_due: string
 }
 

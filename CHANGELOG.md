@@ -6,7 +6,114 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-08-25
+
+**Fixed: active sidebar nav text (and any Link with its own text-color
+class) was invisible** — `a { color: var(--link) }` in `styles.css` sat
+outside every Tailwind `@layer`, so per CSS cascade-layer rules it always
+beat any `text-*` utility (Tailwind wraps its own utilities in
+`@layer utilities`) regardless of class order — silently overriding the
+color on every `<Link>`/`<a>` app-wide the whole time. Invisible in
+practice under yesterday's palette only by coincidence (`--link` and
+`--primary` were different hues); once yesterday's rebrand gave them the
+same blue, the active nav pill rendered blue text on a blue background.
+Fixed by moving the rule into `@layer base`, so Tailwind's utility layer
+correctly wins when a link has its own color class. Also added
+`suppressHydrationWarning` to `<html>` — a leftover dev-console warning
+from the theme-init script setting `data-theme` before React hydrates
+(expected/correct behavior, just needed the standard React opt-out).
+Verified live: active nav pill text now renders white (light)/near-black
+(dark) as designed; a table `Link`'s `text-primary` renders the intended
+blue in both themes; zero console errors.
+
+**Fixed: ad accounts list always showed ৳130 for "Per USD" regardless of
+client** — two related issues:
+- **Display bug**: the list (and the client detail page's Ad Accounts tab,
+  and the ad account detail page's Account details card) showed the
+  account's raw stored `usd_rate` only, never falling back to the client's
+  own rate the way actual billing does (`adAccountUsdRate()`,
+  `rate.service.ts`: account rate wins when set; 0/unset inherits the
+  client's rate). `AdAccountClient` (`types/domain.ts`) gained `usd_rate`;
+  `currentClientMap()` (`ad-account.fns.ts`) and `listClientAccountsFn`
+  (`assignment.fns.ts`) now select it. All three surfaces now show the
+  resolved effective rate, italicized when it's inherited rather than the
+  account's own override, so admins can tell at a glance why two accounts
+  under different clients show different figures.
+- **Data**: live query confirmed literally every one of the 33 ad accounts
+  carried an explicit non-zero `usd_rate` (mostly ৳130, one ৳132) from an
+  old bulk-import batch — so the display fix alone changed nothing
+  visible. Two currently-assigned accounts were billing at the stale ৳130
+  instead of their real client's configured rate: `ADA-0018` "xRush Agency
+  - Azalyn" (client xRush Agency, real rate ৳1) and `ADA-0014` "xRush ADA:
+  Zini" (client Foysal bhai, real rate ৳129). Owner confirmed clearing
+  both. Done through the real Edit dialog (not a raw DB write) so it went
+  through the normal `updateAdAccountFn` path and audit trail — verified
+  live: both `usd_rate` now `0` (inherit), correct `AD_ACCOUNT_UPDATED`
+  audit rows (`130 → 0`), and the list now shows ৳1 / ৳129 in italics for
+  those two rows. The other 31 accounts' ৳130 was left untouched — their
+  clients are genuinely configured at ৳130 too, so no mismatch exists.
+
 ## 2026-08-24
+
+**"Financial ledger" visual design system** — a styling-only pass (no
+business logic, data fetching, or component structure touched) replacing
+the earlier amber/teal brand palette with a finance-grade look: cool
+grays, a single blue accent reserved for actual interactive actions, and
+explicit success/warning/danger tokens for budget/payment health signals.
+- **Fonts**: IBM Plex Sans (UI text) + IBM Plex Mono (every numeric value —
+  spend, balances, percentages, counts), loaded via the existing Google
+  Fonts `@import` in `src/styles.css`. New `.num` utility class
+  (`font-family: var(--font-mono); font-variant-numeric: tabular-nums`) and
+  a `<Num>` component (`src/components/shared/num.tsx`) — applied to every
+  location the spec named: dashboard KPI cards + section-list amounts, the
+  ad accounts/clients/payments list money columns, the ad account detail
+  page's Account details card, Meta live data card (Amount spent/
+  Remaining/Spend cap/Balance owed to Meta), Assignment History (Opening/
+  Closing/Spent Amount), the Usage tab (Total USD used + table), and the
+  Edit Meta spend cap dialog's cap/spent/estimated-new-cap figures.
+- **Palette**: rewired onto the *existing* shadcn variable names (no
+  parallel `--bg`/`--surface` tokens alongside `--background`/`--card` —
+  wired through `@theme inline`, this project's Tailwind v4 CSS-first
+  equivalent of a `tailwind.config` `theme.extend.colors` block, since
+  there's no `tailwind.config.js` to edit). `--primary`/`--link`/
+  `--sidebar-primary` now share one accent blue (`#2f6fed` light /
+  `#5a93ff` dark), reserved for buttons/links/active nav only — never used
+  to tint informational cards. New `--success`/`--warning`/`--danger` (+
+  `-bg` variants) tokens, reserved for budget/payment health only. New
+  `--surface`/`--surface-alt`/`--border-strong`/`--text-secondary`/
+  `--text-muted` tiers for finer-grained neutral surfaces than the old
+  single `--muted`. `--radius` unchanged (already 10px). Existing
+  hardcoded status colors (StatusBadge, due-amount urgency, low-balance
+  bells) were left as-is except where they directly overlap the new status
+  rail's own domain (see below) — a full sweep of every hardcoded
+  `red-600`/`emerald-600` in the app was out of scope for this pass.
+- **Status rail**: a 3px, never-rounded colored left border encoding
+  budget/payment health at a glance (`src/components/shared/status-rail.tsx`
+  — `railClassName()` for table rows, `<StatusRail>` for card use; CSS in
+  `styles.css`, deliberately unlayered so it always wins over Tailwind's
+  layered `border-l-*` utilities regardless of class order). Applied to:
+  ad accounts list (on-track/near-cap/over-cap from the same Meta
+  remaining/Meta-due figures already computed for the bell icons and
+  Remaining/Meta Due columns, USD-only), clients list (sum of the client's
+  own linked accounts' remaining, same thresholds), payments list
+  (APPROVED → on-track, PENDING → near-cap, REJECTED/CANCELLED →
+  over-cap). Rows with no Meta data (unlinked, non-USD, or the bulk fetch
+  hasn't resolved) show no rail color rather than a false "on-track."
+- **Dark mode, newly real**: the app had a `.dark` CSS block and `dark:`
+  utility classes sprinkled throughout (status badges, due-amount coloring,
+  low-balance bells) that were inert dead code — no toggle mechanism
+  existed. Switched the `@custom-variant dark` selector from `.dark` to
+  `[data-theme="dark"]`, so every existing `dark:` class across the app
+  lit up with zero per-component changes. New `src/lib/theme/theme.ts` +
+  `<ThemeToggle>` in the header (next to the notification bell): persists
+  the choice in `localStorage` (`rt-theme`), defaults to system preference
+  when unset, and a blocking inline `<script>` in `__root.tsx` sets
+  `data-theme` before first paint (no flash of the wrong theme).
+  Verified live (temporary Playwright install, same pattern as earlier
+  sessions, removed after): login page and the dashboard/ad accounts/
+  clients/payments admin pages in both themes — status rails, tabular-nums
+  figures, and the sidebar/header chrome all render correctly light and
+  dark.
 
 **Verified everything from today's session live, and found + fixed one more
 real bug while doing it** — after the owner applied both pending migrations,
