@@ -70,6 +70,13 @@
   --chart-3: var(--warning);
   --chart-4: var(--danger);
   --chart-5: var(--brand-accent-deep);
+  /* Dedicated donut-fill pair (Paid / Current Due) — validated with
+   * scripts/validate_palette.js (dataviz skill) against this surface;
+   * --success/--warning double as the light-mode values but need
+   * different, darker hexes in dark mode to pass the lightness-band
+   * check as large chart fills (see the [data-theme='dark'] override). */
+  --chart-paid: var(--success);
+  --chart-due: var(--warning);
   --radius: 0.625rem;
   --sidebar: var(--brand-ink);
   --sidebar-foreground: var(--brand-canvas);
@@ -122,6 +129,13 @@
   --chart-3: var(--warning);
   --chart-4: var(--danger);
   --chart-5: #7ba9ff;
+  /* Distinct from --success/--warning here — those fail the validator's
+   * lightness band as large chart fills against this dark surface (too
+   * light); these are deepened/desaturated variants that pass, with a
+   * CVD separation in the 6-8 "floor" band that's legal only alongside
+   * the direct labels/legend this donut always shows. */
+  --chart-paid: #2f9968;
+  --chart-due: #b07f2a;
   --sidebar: #131a24;
   --sidebar-foreground: #edf0f5;
   --sidebar-primary: #5a93ff;

@@ -13,11 +13,12 @@ import {
   paymentCollectionReportFn,
   usdRateUsageReportFn,
 } from '@/server/reports/report.fns'
-import { formatBdt, formatUsd } from '@/lib/money/money'
+import { dec, formatBdt, formatUsd } from '@/lib/money/money'
 import { downloadCsv } from '@/lib/csv/csv'
 import type { CsvColumn } from '@/lib/csv/csv'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
+import { DueBreakdownDonut } from '@/components/reports/due-breakdown-donut'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -354,13 +355,31 @@ function ClientDueReport() {
     queryKey: ['reports', 'client-due'],
     queryFn: () => fn(),
   })
+
+  const totals = (data ?? []).reduce(
+    (acc, r) => ({
+      billed: acc.billed.plus(dec(r.total_billed)),
+      paid: acc.paid.plus(dec(r.total_paid)),
+      due: acc.due.plus(dec(r.current_due)),
+    }),
+    { billed: dec(0), paid: dec(0), due: dec(0) },
+  )
+
   return (
-    <ReportView
-      rows={data}
-      isLoading={isLoading}
-      filename="client-due-report.csv"
-      rowKey={(r) => r.client_id}
-      columns={[
+    <>
+      {!isLoading && (data?.length ?? 0) > 0 && (
+        <DueBreakdownDonut
+          totalBilled={totals.billed.toFixed(2)}
+          totalPaid={totals.paid.toFixed(2)}
+          totalDue={totals.due.toFixed(2)}
+        />
+      )}
+      <ReportView
+        rows={data}
+        isLoading={isLoading}
+        filename="client-due-report.csv"
+        rowKey={(r) => r.client_id}
+        columns={[
         { header: 'Code', cell: (r) => r.client_code, csv: (r) => r.client_code },
         { header: 'Client', cell: (r) => r.name, csv: (r) => r.name },
         {
@@ -388,8 +407,9 @@ function ClientDueReport() {
           ),
           csv: (r) => r.current_due,
         },
-      ]}
-    />
+        ]}
+      />
+    </>
   )
 }
 

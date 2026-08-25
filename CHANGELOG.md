@@ -8,6 +8,26 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-08-25
 
+**Billed vs. Paid & Due donut chart on the Client Due Report** — requested
+as "a pie chart for billed, paid and current due." Built as a 2-segment
+donut (Paid, Current Due) with Billed as the center total, not a literal
+3-slice pie: Billed = Paid + Current Due (ledger-derived, spec §35), so a
+3-way split would double-count the total and mislead. New
+`src/components/reports/due-breakdown-donut.tsx` — pure SVG (no chart
+library added), totals summed client-side from the report's own rows via
+decimal.js. Center label swaps to the hovered/focused segment's value and
+percent (same treatment for mouse and keyboard, no floating tooltip to
+position/clip); legend rows mirror the same interaction; every value is
+also visible at rest in the legend (never color-alone) and in the
+existing per-client table right below. Colors are a dedicated
+`--chart-paid`/`--chart-due` pair (`styles.css`) — light mode reuses
+`--success`/`--warning`, but dark mode needed distinct, deliberately
+deepened hexes (`#2f9968`/`#b07f2a`) since the existing dark
+`--success`/`--warning` are too light to pass as large chart fills;
+colorblind-safety validated both modes with the dataviz skill's
+`validate_palette.js` before shipping. Verified live in both themes
+(zero console errors) via the standard temporary-Playwright pattern.
+
 **Fixed: active sidebar nav text (and any Link with its own text-color
 class) was invisible** — `a { color: var(--link) }` in `styles.css` sat
 outside every Tailwind `@layer`, so per CSS cascade-layer rules it always

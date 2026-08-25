@@ -1484,6 +1484,28 @@ bug fixes, and anything else that isn't a whole new named feature.
   `AD_ACCOUNT_UPDATED` audit rows, list shows ৳1/৳129 in italics. The
   other 31 accounts' ৳130 was left as-is — their clients are genuinely
   configured at ৳130 too.
+- **Billed vs. Paid & Due donut chart on the Client Due Report
+  (post-Phase-8 addition): done, pending owner review, no migration** —
+  requested as "a pie chart for billed, paid and current due." Built as a
+  2-segment donut (Paid, Current Due) with Billed shown as the center
+  total, not a literal 3-slice pie — Billed = Paid + Current Due
+  (ledger-derived, spec §35), so plotting all three as independent slices
+  would double-count the whole. `src/components/reports/
+  due-breakdown-donut.tsx`, pure SVG (no new chart-library dependency),
+  totals summed client-side from the report's own rows via decimal.js.
+  Hover/focus on a segment or its legend row swaps the center label to
+  that segment's value + percent (same behavior for mouse and keyboard,
+  avoids floating-tooltip positioning entirely); every value is also
+  visible at rest in the legend and in the per-client table right below,
+  never color-alone. New `--chart-paid`/`--chart-due` tokens
+  (`styles.css`) — light mode reuses `--success`/`--warning`, but dark
+  mode needed distinct, deliberately deepened hexes (`#2f9968`/`#b07f2a`)
+  since the existing dark `--success`/`--warning` fail the lightness-band
+  check as large chart fills; colorblind-safety validated both modes with
+  the dataviz skill's `validate_palette.js` before shipping (light mode
+  passes outright; dark mode's CVD separation lands in the 6–8 "floor"
+  band, legal only alongside the always-visible labels this chart already
+  has). Verified live in both themes, zero console errors.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT
