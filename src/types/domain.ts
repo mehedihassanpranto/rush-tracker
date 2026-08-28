@@ -270,7 +270,7 @@ export interface Payment {
 }
 
 export interface PaymentWithClient extends Payment {
-  client: Pick<Client, 'id' | 'client_code' | 'name'> | null
+  client: Pick<Client, 'id' | 'client_code' | 'name' | 'segment'> | null
 }
 
 export interface PaymentRequest {

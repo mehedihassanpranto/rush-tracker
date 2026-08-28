@@ -25,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -54,11 +55,24 @@ function PaymentDetailPage() {
   const [rejectOpen, setRejectOpen] = useState(false)
   const [reason, setReason] = useState('')
   const [proofOpen, setProofOpen] = useState(false)
+  const [editingAmount, setEditingAmount] = useState(false)
+  const [amountDraft, setAmountDraft] = useState('')
 
   const { data: payment, isLoading } = useQuery({
     queryKey: ['payment', paymentId],
     queryFn: () => getDetail({ data: { id: paymentId } }),
   })
+
+  // Edit-before-approve only makes sense for postpaid/partial clients —
+  // a prepaid client's payment is auto-recorded by approve_limit_request
+  // to exactly match the frozen amount_paid_bdt on that request, so editing
+  // it here would silently desync the two.
+  const canEditAmount = payment?.client?.segment != null && payment.client.segment !== 'prepaid'
+  const parsedAmount = Number(amountDraft)
+  const amountValid =
+    amountDraft.trim() !== '' && Number.isFinite(parsedAmount) && parsedAmount > 0
+  const approveAmount =
+    editingAmount && amountValid ? amountDraft : undefined
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['payment', paymentId] })
@@ -68,7 +82,13 @@ function PaymentDetailPage() {
 
   const approveMutation = useMutation({
     mutationFn: () =>
-      approve({ data: { id: paymentId, admin_note: note || undefined } }),
+      approve({
+        data: {
+          id: paymentId,
+          admin_note: note || undefined,
+          amount_bdt: approveAmount,
+        },
+      }),
     onSuccess: () => {
       toast.success('Payment approved')
       invalidate()
@@ -160,6 +180,59 @@ function PaymentDetailPage() {
               <CardTitle className="text-base">Verify</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {canEditAmount && (
+                <div className="space-y-2">
+                  <Label>Amount to credit</Label>
+                  {editingAmount ? (
+                    <>
+                      <Input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        autoFocus
+                        value={amountDraft}
+                        onChange={(e) => setAmountDraft(e.target.value)}
+                      />
+                      <div className="flex items-center justify-between">
+                        {!amountValid && (
+                          <span className="text-xs text-danger">
+                            Enter an amount greater than zero.
+                          </span>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="ml-auto"
+                          onClick={() => setEditingAmount(false)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">
+                        {formatBdt(payment.amount_bdt)}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setAmountDraft(String(payment.amount_bdt))
+                          setEditingAmount(true)
+                        }}
+                      >
+                        Edit amount
+                      </Button>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Correct this before approving if the proof shows a
+                    different figure than what was submitted — only the
+                    corrected amount is credited to the ledger.
+                  </p>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Admin note (optional)</Label>
                 <Textarea
@@ -173,7 +246,9 @@ function PaymentDetailPage() {
                   Reject
                 </Button>
                 <Button
-                  disabled={approveMutation.isPending}
+                  disabled={
+                    approveMutation.isPending || (editingAmount && !amountValid)
+                  }
                   onClick={() => approveMutation.mutate()}
                 >
                   {approveMutation.isPending && (
@@ -183,7 +258,8 @@ function PaymentDetailPage() {
                 </Button>
               </div>
               <p className="text-right text-xs text-muted-foreground">
-                Approving credits {formatBdt(payment.amount_bdt)} to the
+                Approving credits{' '}
+                {formatBdt(approveAmount ?? payment.amount_bdt)} to the
                 client&apos;s ledger.
               </p>
             </CardContent>

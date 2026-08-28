@@ -244,7 +244,7 @@ export const listPaymentsFn = createServerFn({ method: 'GET' })
     let query = admin
       .from('payments')
       .select(
-        'id, payment_number, client_id, payment_request_id, amount_bdt, payment_method, transaction_reference, status, submitted_at, reviewed_at, admin_note, rejection_reason, created_at, client:clients(id, client_code, name)',
+        'id, payment_number, client_id, payment_request_id, amount_bdt, payment_method, transaction_reference, status, submitted_at, reviewed_at, admin_note, rejection_reason, created_at, client:clients(id, client_code, name, segment)',
       )
       .order('created_at', { ascending: false })
     if (data.status !== 'ALL') query = query.eq('status', data.status)
@@ -265,7 +265,7 @@ export const getPaymentDetailFn = createServerFn({ method: 'GET' })
     const { data: pay, error } = await admin
       .from('payments')
       .select(
-        'id, payment_number, client_id, payment_request_id, amount_bdt, payment_method, transaction_reference, status, submitted_at, reviewed_at, admin_note, rejection_reason, created_at, client:clients(id, client_code, name)',
+        'id, payment_number, client_id, payment_request_id, amount_bdt, payment_method, transaction_reference, status, submitted_at, reviewed_at, admin_note, rejection_reason, created_at, client:clients(id, client_code, name, segment)',
       )
       .eq('id', data.id)
       .single()
@@ -297,9 +297,15 @@ export const approvePaymentFn = createServerFn({ method: 'POST' })
         .eq('status', 'PENDING')
     }
 
+    // p_amount_bdt is only included when actually overriding the amount —
+    // keeps a plain approval working against approve_payment(uuid, uuid)
+    // (the pre-migration signature) if the amount-override migration
+    // (20260723000024) hasn't been applied to this project yet, rather than
+    // breaking every approval on a missing-parameter error.
     const { data: ledgerId, error } = await admin.rpc('approve_payment', {
       p_payment_id: data.id,
       p_actor: actor.id,
+      ...(data.amount_bdt != null ? { p_amount_bdt: data.amount_bdt } : {}),
     })
     if (error) throw new Error(friendlyRpcError(error.message))
 

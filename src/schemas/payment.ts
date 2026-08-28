@@ -35,6 +35,10 @@ export const paymentIdSchema = z.object({ id: z.uuid() })
 export const paymentApproveSchema = z.object({
   id: z.uuid(),
   admin_note: z.string().trim().max(1000).optional(),
+  // Optional correction to the submitted amount, applied atomically inside
+  // approve_payment before the ledger credit is written. Omit to approve the
+  // amount as submitted.
+  amount_bdt: bdtAmount.optional(),
 })
 
 export const paymentRejectSchema = z.object({

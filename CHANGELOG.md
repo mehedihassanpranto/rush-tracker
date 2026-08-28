@@ -8,6 +8,45 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-08-25
 
+**Edit amount before approving a payment (postpaid/partial clients) — migration
+NOT YET APPLIED to the live project.** Requested so an admin can correct a
+payment's amount before crediting the ledger (e.g. the proof shows a
+different figure than what the client typed on submission). `approve_payment`
+extended with an optional `p_amount_bdt` parameter — when provided it updates
+`payments.amount_bdt` and the amount is used for the ledger credit, all
+inside the same row-locked transaction as before (no separate write that
+could race). Migration `20260723000024_approve_payment_amount_override.sql`
+drops and recreates the function (Postgres requires this for a signature
+change, same pattern as the earlier `approve_limit_request` change).
+**The TS call only sends `p_amount_bdt` when an admin actually edits the
+amount** — a plain approval still calls with just the original 2 named
+params, so normal approvals keep working against the pre-migration function
+signature; only the new edit feature needs the migration applied to
+function (attempting an edit before the migration lands will fail with a
+clear DB error, not a broken approval flow generally).
+UI: `/admin/payments/$paymentId`'s Verify card gets an "Amount to credit"
+row with an Edit button when the payment's client is `postpaid` or
+`partial` — not shown for `prepaid` clients, since a prepaid client's
+payment is auto-recorded by `approve_limit_request` to exactly match the
+frozen `amount_paid_bdt` on that limit request, and editing it here would
+silently desync the two. Editing shows an inline number input (validated
+>0) and the bottom "Approving credits ৳X" line updates live to the edited
+figure before submit.
+**Real bug found and fixed during verification**: `setAmountDraft(payment.amount_bdt)`
+crashed with `amountDraft.trim is not a function` the moment "Edit amount"
+was clicked — Supabase returns `numeric` columns as JS numbers at runtime
+despite the TS type saying `string` (the same class of bug found and fixed
+earlier this session for `usd_rate`/`current_limit_usd`). Fixed by wrapping
+in `String(...)`. Verified live against a real pending payment
+(`PAY-000010`, DF IT Solutions, ৳39,000): Edit button appears, input
+pre-fills correctly, `0` correctly disables Approve with a visible error,
+a valid edited amount re-enables it and updates the confirmation text —
+deliberately stopped short of clicking Approve itself, since that would
+irreversibly credit a real client's ledger and wasn't asked for.
+**Owner must apply the migration via the SQL editor or `supabase db push`**
+before using the edit-amount feature — no DB connection is available in
+this dev environment to apply it directly.
+
 **Billed vs. Paid & Due donut chart on the Client Due Report** — requested
 as "a pie chart for billed, paid and current due." Built as a 2-segment
 donut (Paid, Current Due) with Billed as the center total, not a literal

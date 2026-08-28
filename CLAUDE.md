@@ -1506,6 +1506,42 @@ bug fixes, and anything else that isn't a whole new named feature.
   passes outright; dark mode's CVD separation lands in the 6–8 "floor"
   band, legal only alongside the always-visible labels this chart already
   has). Verified live in both themes, zero console errors.
+- **Edit amount before approving a payment (postpaid/partial clients)
+  (post-Phase-8 addition): done, pending owner review, migration NOT YET
+  APPLIED to the live project** — lets an admin correct a payment's amount
+  before it's credited, e.g. when the proof shows a different figure than
+  what the client typed on submission. `approve_payment` (the app's
+  designated admin-override point — already documented as staying
+  override-capable by design, unlike the client-side submission race fix)
+  gained an optional `p_amount_bdt` parameter: when provided it updates
+  `payments.amount_bdt` and that figure drives the ledger credit, still
+  inside the same row-locked transaction. Migration
+  `20260723000024_approve_payment_amount_override.sql` drops + recreates
+  the function (Postgres requires this for a signature change — same
+  pattern as the earlier `approve_limit_request` change).
+  `approvePaymentFn` only sends `p_amount_bdt` when an admin actually
+  edits the amount, so a plain approval still matches the pre-migration
+  2-parameter signature — normal approvals keep working even before the
+  migration lands; only the new edit itself needs it.
+  UI: `/admin/payments/$paymentId`'s Verify card — "Amount to credit" with
+  an Edit button, shown only when the payment's client is `postpaid` or
+  `partial`, not `prepaid` (a prepaid client's payment is auto-recorded by
+  `approve_limit_request` to exactly match that request's frozen
+  `amount_paid_bdt`; editing it here would silently desync the two).
+  **Real bug found and fixed during verification**: seeding the edit
+  field via `setAmountDraft(payment.amount_bdt)` crashed with
+  `amountDraft.trim is not a function` — Supabase returns `numeric`
+  columns as JS numbers at runtime despite the TS type saying `string`,
+  the same class of bug already found and fixed once this session
+  (`usd_rate`/`current_limit_usd`). Fixed with `String(...)`. Verified
+  live against a real pending payment (`PAY-000010`, DF IT Solutions,
+  ৳39,000): Edit button appears, input pre-fills, `0` correctly disables
+  Approve with a visible error, a valid edit re-enables it and updates the
+  confirmation text — deliberately did not click Approve itself, since
+  that would irreversibly credit a real client's ledger. **Owner must
+  apply the migration via the SQL editor or `supabase db push`** before
+  using this — no DB connection is available in this dev environment to
+  apply it directly.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT
