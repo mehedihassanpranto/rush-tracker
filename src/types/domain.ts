@@ -47,6 +47,12 @@ export interface AdAccount {
    * client's rate for limit requests; '0' means unset and falls back to it.
    */
   usd_rate: string
+  /** Admin-entered billing threshold (USD) — Meta's own "you'll pay when
+   * your balance reaches $X" auto-charge trigger, shown on the account's
+   * Billing page. Not reachable via the Meta API (confirmed against the
+   * live Graph API), so this is a manually-maintained reference value only
+   * — never compared against or synced with any Meta-fetched figure. */
+  threshold_usd: string
   /** True when current_limit_usd hasn't been confirmed pushed to Meta's
    * spend_cap after an approval — see spend-cap-sync.server.ts. Never true
    * for unlinked or non-USD accounts (never auto-synced, not a failure). */

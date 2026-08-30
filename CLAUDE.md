@@ -1542,6 +1542,45 @@ bug fixes, and anything else that isn't a whole new named feature.
   apply the migration via the SQL editor or `supabase db push`** before
   using this — no DB connection is available in this dev environment to
   apply it directly.
+- **Ad account "Threshold" field, manual/admin-only (post-Phase-8
+  addition): done, pending owner review, migration NOT YET APPLIED to the
+  live project** — mirrors Meta's own "you'll pay when your balance
+  reaches $X" auto-charge trigger, shown on the ad account detail page's
+  billing screenshot the owner provided. **Confirmed live against the real
+  Graph API before building anything**: fetched a real linked account with
+  an expanded field list and separately probed every plausible field name
+  (`billing_threshold`, `bill_amount`, `threshold`, `payment_threshold`,
+  `min_billing_threshold`, `next_bill_date`, `next_bill_amount`,
+  `current_bill_amount`) — all rejected as nonexistent fields by the API
+  itself, confirming this value is genuinely not exposed anywhere in the
+  Marketing API (it only lives in Meta's own billing-settings UI). So it's
+  a plain admin-entered reference value, same treatment as
+  `current_limit_usd` — no live-data relationship to anything Meta-fetched,
+  never synced or compared against a Meta figure.
+  New `ad_accounts.threshold_usd` column (migration
+  `20260723000025_ad_account_threshold.sql`, `numeric(18,2) not null
+  default 0 check (>= 0)`, same shape/precision as `current_limit_usd`).
+  Added to `adAccountCreateSchema`/`adAccountUpdateSchema` (reusing the
+  existing `usdAmount` validator — it's already generic) and to both the
+  create/update payloads in `ad-account.fns.ts` — both gated by the
+  existing `requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)`, no new
+  permission introduced since this is just one more field on the same
+  admin-only account form. Editable only through the existing admin
+  Create/Edit dialogs (`account-dialogs.tsx`) — followed the same
+  `String(...)`-wrapped `defaultValues`/`form.reset()` pattern already
+  used for `current_limit_usd`/`usd_rate` there (see the "a client's own
+  USD rate was silently ignored" and "Edit amount before approving a
+  payment" entries above for why that wrapping matters). Shown as a new
+  **"Threshold"** column on `/admin/ad-accounts`, placed immediately after
+  "Meta Due" per the request (`formatUsd`, `—` when unset/0 — a stored
+  value, so no currency-native `formatCurrencyAmount` needed, unlike
+  Remaining/Meta Due which read live Meta data), and as a new "Threshold"
+  row on the ad account detail page's Account details card (after
+  "Current limit"). **Owner must apply the migration via the SQL editor or
+  `supabase db push`** — no DB connection is available in this dev
+  environment to apply it directly (though read-only access via the
+  service-role key confirmed `app_settings` has no config override and
+  supplied real ad account ids for the live Graph API probe above).
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

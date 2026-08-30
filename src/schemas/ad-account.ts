@@ -44,6 +44,10 @@ export const adAccountCreateSchema = z.object({
   platform: z.string().trim().min(1).max(50).default('META'),
   current_limit_usd: usdAmount.default(0),
   usd_rate: usdRate,
+  // Meta's own "you'll pay when your balance reaches $X" auto-charge
+  // threshold — not fetchable from Meta's API (confirmed), so this is a
+  // plain admin-entered reference value with the same shape as an amount.
+  threshold_usd: usdAmount.default(0),
   status: z.enum(['AVAILABLE', 'INACTIVE', 'SUSPENDED']).default('AVAILABLE'),
 })
 
@@ -53,6 +57,7 @@ export const adAccountUpdateSchema = z.object({
   platform: z.string().trim().min(1).max(50),
   current_limit_usd: usdAmount,
   usd_rate: usdRate,
+  threshold_usd: usdAmount,
 })
 
 export const adAccountRenameSchema = z.object({

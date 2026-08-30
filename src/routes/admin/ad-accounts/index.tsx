@@ -216,6 +216,7 @@ function AdAccountsPage() {
               <TableHead className="text-right">Current limit</TableHead>
               <TableHead className="text-right">Remaining</TableHead>
               <TableHead className="text-right">Meta Due</TableHead>
+              <TableHead className="text-right">Threshold</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
@@ -223,7 +224,7 @@ function AdAccountsPage() {
             {isLoading &&
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={10}>
+                  <TableCell colSpan={11}>
                     <Skeleton className="h-6 w-full" />
                   </TableCell>
                 </TableRow>
@@ -231,7 +232,7 @@ function AdAccountsPage() {
 
             {!isLoading && (accounts?.length ?? 0) === 0 && (
               <TableRow>
-                <TableCell colSpan={10}>
+                <TableCell colSpan={11}>
                   <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
                     <Megaphone className="size-8 opacity-40" />
                     No ad accounts yet.
@@ -314,6 +315,11 @@ function AdAccountsPage() {
                   className={`num text-right ${balance?.metaDueHigh ? 'font-medium text-danger' : 'text-muted-foreground'}`}
                 >
                   {balance ? formatCurrencyAmount(balance.metaDue, balance.currency) : '—'}
+                </TableCell>
+                <TableCell className="num text-right text-muted-foreground">
+                  {Number(account.threshold_usd) > 0
+                    ? formatUsd(account.threshold_usd)
+                    : '—'}
                 </TableCell>
                 <TableCell>
                   <StatusBadge status={account.status} />

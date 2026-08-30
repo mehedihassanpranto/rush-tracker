@@ -141,6 +141,7 @@ export const createAdAccountFn = createServerFn({ method: 'POST' })
         platform: data.platform,
         current_limit_usd: data.current_limit_usd,
         usd_rate: data.usd_rate,
+        threshold_usd: data.threshold_usd,
         status: data.status,
       })
       .select('*')
@@ -176,6 +177,7 @@ export const updateAdAccountFn = createServerFn({ method: 'POST' })
         platform: data.platform,
         current_limit_usd: data.current_limit_usd,
         usd_rate: data.usd_rate,
+        threshold_usd: data.threshold_usd,
       })
       .eq('id', data.id)
       .select('*')

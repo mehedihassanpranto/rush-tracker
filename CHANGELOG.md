@@ -6,6 +6,38 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-08-30
+
+**Ad account "Threshold" field (manual, admin-only) — migration NOT YET
+APPLIED to the live project.** Requested to mirror Meta's own "you'll pay
+when your balance reaches $X" auto-charge trigger (Ads Manager Billing
+page) on the ad accounts list. Investigated first, not assumed: confirmed
+live against the real Graph API (fetched a real linked account with an
+expanded field list, then probed candidate field names — `billing_threshold`,
+`bill_amount`, `threshold`, `payment_threshold`, `min_billing_threshold`,
+`next_bill_date`, `next_bill_amount`, `current_bill_amount` — all rejected
+as nonexistent fields) that this value is not exposed anywhere in the
+Marketing API; it only lives in Meta's own billing-settings UI. So it's a
+plain admin-entered reference value, same pattern as `current_limit_usd` —
+no live-data relationship to anything Meta-fetched, never synced.
+New `ad_accounts.threshold_usd` column (migration
+`20260723000025_ad_account_threshold.sql`, `numeric(18,2) not null default
+0 check (>= 0)`, same shape as `current_limit_usd`). Editable only through
+the existing admin Create/Edit ad account dialogs (`account-dialogs.tsx`),
+gated by the same `ad_accounts.manage` permission as every other account
+field — no separate permission introduced, since this is just one more
+field on the same admin-only form. Shown as a new **"Threshold"** column on
+`/admin/ad-accounts`, placed immediately after "Meta Due" per the request
+(`—` when unset/0), and as a new "Threshold" row on the ad account detail
+page's Account details card (after "Current limit"). `npm test`/typecheck
+both pass unchanged (49 tests). **Owner must apply the migration via the
+SQL editor or `supabase db push`** — no DB connection is available in this
+dev environment to apply it directly (though read-only access via the
+service-role key was used to confirm `app_settings` has no override rows
+and to pull real ad account ids for the live Graph API probe above).
+
+---
+
 ## 2026-08-25
 
 **Edit amount before approving a payment (postpaid/partial clients) — migration

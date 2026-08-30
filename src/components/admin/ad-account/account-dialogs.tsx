@@ -73,6 +73,7 @@ const createSchema = z.object({
   platform: z.string().trim().min(1, 'Required'),
   current_limit_usd: amountField,
   usd_rate: rateField,
+  threshold_usd: amountField,
   status: z.enum(['AVAILABLE', 'INACTIVE', 'SUSPENDED']),
 })
 type CreateValues = z.infer<typeof createSchema>
@@ -97,6 +98,7 @@ export function AccountCreateDialog({
       platform: 'META',
       current_limit_usd: '0',
       usd_rate: '',
+      threshold_usd: '0',
       status: 'AVAILABLE',
     },
   })
@@ -109,6 +111,7 @@ export function AccountCreateDialog({
         platform: 'META',
         current_limit_usd: '0',
         usd_rate: '',
+        threshold_usd: '0',
         status: 'AVAILABLE',
       })
       setMetaStatus(null)
@@ -142,6 +145,7 @@ export function AccountCreateDialog({
           ...values,
           current_limit_usd: Number(values.current_limit_usd),
           usd_rate: Number(values.usd_rate),
+          threshold_usd: Number(values.threshold_usd),
         },
       }),
     onSuccess: (acc) => {
@@ -268,6 +272,24 @@ export function AccountCreateDialog({
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
+                name="threshold_usd"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Threshold (USD)</FormLabel>
+                    <FormControl>
+                      <Input type="number" min="0" step="0.01" {...field} />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      Meta's own "pay when balance reaches" auto-charge amount,
+                      from its Billing page — not fetchable from Meta, enter it
+                      manually.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
                 name="status"
                 render={({ field }) => (
                   <FormItem>
@@ -317,6 +339,7 @@ const editSchema = z.object({
   platform: z.string().trim().min(1, 'Required'),
   current_limit_usd: amountField,
   usd_rate: rateField,
+  threshold_usd: amountField,
 })
 type EditValues = z.infer<typeof editSchema>
 
@@ -339,6 +362,7 @@ export function AccountEditDialog({
       platform: account.platform,
       current_limit_usd: String(account.current_limit_usd),
       usd_rate: String(account.usd_rate),
+      threshold_usd: String(account.threshold_usd),
     },
   })
 
@@ -349,6 +373,7 @@ export function AccountEditDialog({
         platform: account.platform,
         current_limit_usd: String(account.current_limit_usd),
         usd_rate: String(account.usd_rate),
+        threshold_usd: String(account.threshold_usd),
       })
   }, [open, account, form])
 
@@ -360,6 +385,7 @@ export function AccountEditDialog({
           ...values,
           current_limit_usd: Number(values.current_limit_usd),
           usd_rate: Number(values.usd_rate),
+          threshold_usd: Number(values.threshold_usd),
         },
       }),
     onSuccess: () => {
@@ -439,6 +465,24 @@ export function AccountEditDialog({
                   <p className="text-xs text-muted-foreground">
                     Clear to 0 to use whichever client currently holds this
                     account's own rate instead of a fixed one.
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="threshold_usd"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Threshold (USD)</FormLabel>
+                  <FormControl>
+                    <Input type="number" min="0" step="0.01" {...field} />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground">
+                    Meta's own "pay when balance reaches" auto-charge amount,
+                    from its Billing page — not fetchable from Meta, enter it
+                    manually.
                   </p>
                   <FormMessage />
                 </FormItem>

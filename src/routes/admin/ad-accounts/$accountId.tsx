@@ -413,6 +413,16 @@ function AccountDetailPage() {
                   }
                 />
                 <InfoRow
+                  label="Threshold"
+                  value={
+                    Number(account.threshold_usd) > 0 ? (
+                      <span className="num font-medium">
+                        {formatUsd(account.threshold_usd)}
+                      </span>
+                    ) : null
+                  }
+                />
+                <InfoRow
                   label="Per USD"
                   value={
                     // Mirrors adAccountUsdRate() (rate.service.ts): the
