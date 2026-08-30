@@ -386,9 +386,9 @@ export const listLimitRequestsFn = createServerFn({ method: 'GET' })
 /**
  * Usage history for one ad account (spec §28's additive model, surfaced as
  * a running trail): every APPROVED limit request against this account,
- * chronological, across every client that has ever held it — each row is
- * already a complete opening-balance -> +approved -> new-limit record, so
- * no separate tracking table is needed.
+ * most-recent-approval-first, across every client that has ever held it —
+ * each row is already a complete opening-balance -> +approved -> new-limit
+ * record, so no separate tracking table is needed.
  */
 export const listAdAccountUsageFn = createServerFn({ method: 'GET' })
   .validator(z.object({ ad_account_id: z.uuid() }))
@@ -402,7 +402,7 @@ export const listAdAccountUsageFn = createServerFn({ method: 'GET' })
       )
       .eq('ad_account_id', data.ad_account_id)
       .eq('status', 'APPROVED')
-      .order('approved_at', { ascending: true })
+      .order('approved_at', { ascending: false })
     if (error) throw new Error(error.message)
     return rows as unknown as Array<LimitRequestWithRefs>
   })

@@ -506,7 +506,12 @@ bug fixes, and anything else that isn't a whole new named feature.
   as a running history — it was only ever used internally for stale-baseline
   validation (§30). New `listAdAccountUsageFn`
   (`limit-request.fns.ts`, `LIMIT_REQUESTS_VIEW`) returns every **APPROVED**
-  request for one `ad_account_id`, chronological, across every client that
+  request for one `ad_account_id`, most-recent-approval-first (changed
+  2026-08-30 from ascending on owner request — plain `.order('approved_at',
+  { ascending: false })`, no other code depended on the row order since
+  `totalUsage` is an order-independent client-side sum and each row's
+  opening/approved/new-limit figures are already complete per-row values,
+  not computed from array position), across every client that
   has ever held the account (same all-time scope as Assignment History) —
   PENDING/REJECTED/CANCELLED requests are excluded since they never became
   real usage. Tab shows a "Total USD used" summary card (client-side sum via
@@ -589,11 +594,14 @@ bug fixes, and anything else that isn't a whole new named feature.
   done, pending owner review** — inserted between Adjustments and Logins
   (`... | Adjustments | Limit Requests | Logins | Employees`). New
   `listClientLimitRequestsFn` (`limit-request.fns.ts`,
-  `LIMIT_REQUESTS_VIEW`) mirrors the ad account Usage tab's fn but flipped:
-  every **APPROVED** request for one `client_id` across every ad account
-  they've ever held, most-recent-approval-first (Usage sorts ascending
-  since it's a running trail to the current limit; this is a plain activity
-  feed, matching the Adjustments tab's newest-first convention). Columns:
+  `LIMIT_REQUESTS_VIEW`) mirrors the ad account Usage tab's fn, scoped to a
+  client instead of an account: every **APPROVED** request for one
+  `client_id` across every ad account they've ever held,
+  most-recent-approval-first — a plain activity feed, matching the
+  Adjustments tab's newest-first convention (Usage originally sorted
+  ascending as a running trail to the current limit; both now sort the
+  same way, descending, after the Usage tab's order was flipped
+  2026-08-30 on owner request — see that entry above). Columns:
   Account (links to the ad account detail page) / USD (`approved_amount_usd`)
   / Date. Date is a custom format the owner specified literally —
   `08:00pm, 7 april 2026` (zero-padded 12h time + lowercase am/pm, then day

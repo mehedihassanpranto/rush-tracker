@@ -8,6 +8,15 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-08-30
 
+**Ad account detail page's Usage tab now sorts newest-first.**
+`listAdAccountUsageFn` (`limit-request.fns.ts`) was ascending
+(`approved_at`); changed to descending on owner request. Safe reorder —
+`totalUsage` is an order-independent client-side sum and every row's
+opening/approved/new-limit figures are already complete per-row values,
+not computed from adjacent rows — so nothing else needed to change.
+Client detail page's Limit Requests tab already sorted this way; both now
+match.
+
 **Ad account "Threshold" field (manual, admin-only) — migration NOT YET
 APPLIED to the live project.** Requested to mirror Meta's own "you'll pay
 when your balance reaches $X" auto-charge trigger (Ads Manager Billing
