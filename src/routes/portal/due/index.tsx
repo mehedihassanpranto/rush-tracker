@@ -151,13 +151,14 @@ function DuePage() {
               <TableHead>Method</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Date</TableHead>
+              <TableHead>Notes</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {(payments?.length ?? 0) === 0 && (
               <TableRow>
-                <TableCell colSpan={6}>
+                <TableCell colSpan={7}>
                   <div className="py-8 text-center text-sm text-muted-foreground">
                     No payments yet.
                   </div>
@@ -180,6 +181,9 @@ function DuePage() {
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-muted-foreground">
                   {fmtDateTime(p.created_at)}
+                </TableCell>
+                <TableCell className="max-w-xs truncate text-muted-foreground">
+                  {p.admin_note ?? p.rejection_reason ?? '—'}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">

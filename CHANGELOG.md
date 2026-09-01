@@ -150,6 +150,19 @@ after the date with a comma. Checked the admin payment detail page too —
 it doesn't show a date at all, so nothing to change there. `npm run
 typecheck` and `npm run build` both pass.
 
+**"Notes" column added to both payment lists — no server change needed.**
+Owner asked for admin_note to show in both the admin Payments list and
+the portal Due & Payments list. Both `listPaymentsFn` (admin) and
+`listMyPaymentsFn` (client, `payment.fns.ts`) already select `admin_note`/
+`rejection_reason` — this was purely a missing display column, not a new
+data exposure (the client-facing fn was already returning it to the
+browser, just never rendered). New "Notes" column on both tables shows
+`admin_note`, falling back to `rejection_reason` when a payment was
+rejected with no separate note (matching the existing "the client will
+see this reason" intent of the reject dialog) — truncated with
+`max-w-xs truncate` like the Adjustments page's Reason column. `npm run
+typecheck` and `npm run build` both pass.
+
 ---
 
 ## 2026-08-30

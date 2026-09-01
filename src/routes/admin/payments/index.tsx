@@ -92,13 +92,14 @@ function PaymentsPage() {
               <TableHead>Method</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Date</TableHead>
+              <TableHead>Notes</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading &&
               Array.from({ length: 4 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={7}>
                     <Skeleton className="h-6 w-full" />
                   </TableCell>
                 </TableRow>
@@ -106,7 +107,7 @@ function PaymentsPage() {
 
             {!isLoading && (payments?.length ?? 0) === 0 && (
               <TableRow>
-                <TableCell colSpan={6}>
+                <TableCell colSpan={7}>
                   <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
                     <Wallet className="size-8 opacity-40" />
                     No {filter === 'ALL' ? '' : filter.toLowerCase()} payments.
@@ -138,6 +139,9 @@ function PaymentsPage() {
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-muted-foreground">
                   {fmtDateTime(p.created_at)}
+                </TableCell>
+                <TableCell className="max-w-xs truncate text-muted-foreground">
+                  {p.admin_note ?? p.rejection_reason ?? '—'}
                 </TableCell>
               </TableRow>
             ))}

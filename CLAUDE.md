@@ -1801,6 +1801,15 @@ bug fixes, and anything else that isn't a whole new named feature.
   locale-default AM/PM styling. The admin payment detail page
   (`$paymentId.tsx`) doesn't render a date at all, so it was left
   untouched. `npm run typecheck` and `npm run build` both pass.
+- **"Notes" column on both payment lists (post-Phase-8 addition): done,
+  pending owner review, no migration** — `listPaymentsFn` (admin) and
+  `listMyPaymentsFn` (client) already selected `admin_note`/
+  `rejection_reason` (used on the admin detail page and in the reject
+  dialog respectively); neither list table rendered them. New "Notes"
+  column on `/admin/payments` and `/portal/due`'s payment history table:
+  `admin_note ?? rejection_reason ?? '—'`. No new data exposure — the
+  client-facing fn was already shipping this field to the browser bundle,
+  just not displayed. `npm run typecheck` and `npm run build` both pass.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT
