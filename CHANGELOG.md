@@ -6,6 +6,152 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-09-01
+
+**New "Finance" section — USD buy/sell margin tracking (forex spread
+revenue).** Built in two explicit steps at the owner's request. Step 1
+(schema only): inspected the existing ledger/payments/employees/clients
+tables first and flagged two real gaps before writing anything — no "buy
+rate" exists anywhere in the prior schema (only the *sell* rate is
+tracked, on `ledger_entries.usd_rate`), and the new `client_usd_rates`
+history table is a separate thing from the existing live `clients.usd_rate`
+scalar that real billing actually uses (nothing wires them together
+automatically). Migration `20260723000026_finance_usd_margin.sql` adds
+`client_usd_rates` and `usd_margin_entries` (the latter's `margin_bdt` is
+DB-generated, `usd_amount * (sell_rate - buy_rate)`, never computed
+client-side), both SELECT-only RLS, gated by two new sensitive permissions
+(`finance.view`/`finance.manage`, SUPER_ADMIN-only by default). Applied by
+the owner via the SQL editor; confirmed live afterward (both tables exist,
+both permissions seeded, neither granted to ADMIN's role_permissions).
+
+Step 2 (backend + UI, this pass): `src/server/finance/finance.fns.ts`
+(list/create for both tables, audited), new `/admin/finance` page (nav
+item added) with Margin Entries / Sell Rates tabs, create dialogs for
+each, and a total-margin summary card. Insert-only from the UI (no
+edit/delete), matching this app's broader financial-record convention.
+`createClientUsdRateFn` auto-closes a client's prior open-ended rate the
+day before a new one starts. Deliberately did not build a picker for
+`usd_margin_entries.ledger_entry_id` (left optional/unset from this UI).
+Does not touch `ledger_entries`, `payments`, `limit_requests`, or any Meta
+spend-cap logic — purely additive. `npm run typecheck` and `npm run build`
+both pass.
+
+**Finance refined: added a real USD purchase ledger (cost-basis side) —
+migration NOT YET APPLIED to the live project.** Owner asked to "recheck
+and refine" the Finance idea into a "properly accounts solution." The
+real gap in the first pass: `usd_margin_entries.buy_rate` was typed in
+blind, with no record of what USD was actually bought for — a manual log,
+not books of record. Asked the owner to choose the scope rather than
+guessing given it conflicted with the original "don't touch existing
+ledger" instruction; they chose the additive option (a purchase ledger)
+over auto-generating margin entries from `approve_limit_request` (which
+would have required touching that flow) or a reports-only pass.
+New table `usd_purchases` (migration
+`20260723000027_finance_usd_purchases.sql`, does not alter the already-
+applied `20260723000026` tables): `purchase_date`, `usd_amount`,
+`buy_rate`, `cost_bdt` (DB-generated), `source`, `note`,
+`created_by → employees`. New `usd_inventory_summary()` SQL function
+(same read-only-aggregate pattern as `client_financials()`) returns total
+purchased, total sold (via `usd_margin_entries`), available balance, and
+weighted-average cost across every purchase. Same SELECT-only RLS
+convention, reuses the existing `finance.view`/`finance.manage`
+permissions — no new permission needed.
+Backend: `listUsdPurchasesFn`, `createUsdPurchaseFn`,
+`getUsdInventorySummaryFn` in `finance.fns.ts`, audited as
+`USD_PURCHASE_RECORDED`. UI: new "USD Purchases" tab on `/admin/finance`
+with its own create dialog, plus two new stat cards ("Available USD
+inventory", "Weighted-avg. cost") next to the existing margin total. The
+margin-entry dialog now prefills `buy_rate` from the live weighted-average
+cost (still editable — a specific sale can genuinely use a specific
+batch) and shows a soft warning (not a hard block) when the USD amount
+being sold exceeds what's actually available from recorded purchases —
+deliberately not DB-enforced, since real purchase timing can lag a sale;
+flagged as revisitable if the owner wants it strict. `npm run typecheck`
+and `npm run build` both pass.
+
+**`usd_purchases.purchase_date` now carries time-of-day, not just a date —
+migration NOT YET APPLIED to the live project.** Owner asked to add time
+to the date field on the purchase ledger. Checked first whether
+`20260723000027` had already been applied (it had — table existed live,
+empty), so this is a follow-up `alter column ... type timestamptz`
+(`20260723000028_usd_purchases_datetime.sql`), not an edit to the
+already-run file. Scoped to this one column only, matching the request —
+`usd_margin_entries.transaction_date` and `client_usd_rates.effective_from/
+effective_to` stay date-only. `CreatePurchaseDialog` now uses a
+`datetime-local` input (converted to a real ISO timestamp on submit via
+`new Date(...).toISOString()`, defaulted to the current local date/time);
+the Purchases tab shows the recorded time alongside the date. `npm run
+typecheck` and `npm run build` both pass.
+
+**Finance rebuilt from scratch — the rate/inventory model was the wrong
+concept.** Owner said the sell-rate history + USD purchase/inventory
+design didn't match what they needed and asked to remake the whole board
+around a simpler model: one entry per USD transaction — USD amount,
+buying amount (total BDT paid), selling amount (total BDT received) —
+margin is just selling minus buying, no rates. Also needed to see margin
+totals grouped by 15 days / weekly / monthly / 6 months / yearly.
+Checked live first: `client_usd_rates` and `usd_margin_entries` each held
+exactly one row, matching the owner's own test values from trying out the
+old design (not real data) — confirmed before dropping anything.
+Migration `20260723000029_finance_rebuild.sql` drops `client_usd_rates`,
+`usd_purchases`, and `usd_inventory_summary()` outright (not needed under
+the new model), and drops + recreates `usd_margin_entries` with the new
+shape: `transaction_date`, `usd_amount`, `buying_amount_bdt`,
+`selling_amount_bdt`, `margin_bdt` (DB-generated, `selling - buying`).
+No client link, no rates, no purchase ledger — exactly the 3 inputs
+requested plus a date. `finance.view`/`finance.manage` permissions are
+unchanged. Deleted the now-unneeded `create-client-rate-dialog.tsx` and
+`create-purchase-dialog.tsx`; `finance.fns.ts` trimmed to just
+`listUsdMarginEntriesFn`/`createUsdMarginEntryFn`; `create-margin-entry-
+dialog.tsx` rewritten to the 3-field form with a live margin preview.
+`/admin/finance` rebuilt as a single page (no more tabs — one entity now):
+a total-margin card, a "Margin by period" table with a granularity
+selector (15 Days / Weekly / Monthly / 6 Months / Yearly — client-side
+grouping over the fetched list via decimal.js, no new query per
+granularity), and the raw entry list below it. Bucket definitions are a
+judgment call, flagged for the owner to correct if not what they meant:
+15-day buckets are semi-monthly (1st–15th, 16th–end of month, common
+payroll/billing convention) rather than a rolling 15-day window; weekly
+buckets start Monday; 6-month buckets are calendar halves (Jan–Jun,
+Jul–Dec). `npm run typecheck` and `npm run build` both pass. **Owner must
+apply this migration** — no DB connection available in this dev
+environment.
+
+**Margin entry: added buying/selling rate inputs, amounts now
+DB-computed — migration NOT YET APPLIED to the live project.** Owner
+asked to put a rate field before each amount field, with the amount
+auto-filled rather than typed. Checked live first (confirmed
+`20260723000029` was already applied and the table still empty), so this
+is another safe drop-and-recreate rather than an in-place edit.
+`usd_margin_entries` gains `buying_rate`/`selling_rate` (real input
+columns); `buying_amount_bdt`/`selling_amount_bdt` are now DB-generated
+(`usd_amount * rate`, rounded) instead of typed directly.
+`margin_bdt` is expressed straight from `usd_amount`/`buying_rate`/
+`selling_rate` rather than from the two amount columns — Postgres doesn't
+allow a generated column to reference another generated column.
+`CreateMarginEntryDialog` now has Buying rate / Buying amount (disabled,
+live-computed) and Selling rate / Selling amount (disabled, live-computed)
+pairs, plus the existing margin preview — all computed client-side with
+decimal.js and re-verified by the database's own generated columns on
+save. `npm run typecheck` and `npm run build` both pass. **Owner must
+apply this migration** — no DB connection available in this dev
+environment.
+
+**Payment dates now show time, on both admin and portal — no migration
+needed.** Owner asked for exact time (e.g. "04:30 pm") on the admin
+Payments list and the client portal's Due & Payments page. The underlying
+column (`payments.created_at`) was already `timestamptz` — this was a
+display-only gap, not a schema one. `admin/payments/index.tsx` and
+`portal/due/index.tsx` both had a local date-only `fmtDate()`; replaced
+with `fmtDateTime()` in each (same custom 12-hour formatter already used
+elsewhere in this app for `fmtApprovalDateTime()` on the client detail
+page's Limit Requests tab — zero-padded hour, lowercase am/pm), appended
+after the date with a comma. Checked the admin payment detail page too —
+it doesn't show a date at all, so nothing to change there. `npm run
+typecheck` and `npm run build` both pass.
+
+---
+
 ## 2026-08-30
 
 **Ad account detail page's Usage tab now sorts newest-first.**

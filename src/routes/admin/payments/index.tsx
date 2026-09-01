@@ -38,12 +38,19 @@ function paymentHealth(status: string): RailHealth {
   return 'over-cap'
 }
 
-function fmtDate(value: string): string {
-  return new Date(value).toLocaleDateString(undefined, {
+function fmtDateTime(value: string): string {
+  const d = new Date(value)
+  const datePart = d.toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
   })
+  let hours = d.getHours()
+  const ampm = hours >= 12 ? 'pm' : 'am'
+  hours = hours % 12 || 12
+  const hh = String(hours).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return `${datePart}, ${hh}:${mm} ${ampm}`
 }
 
 function PaymentsPage() {
@@ -130,7 +137,7 @@ function PaymentsPage() {
                   <StatusBadge status={p.status} />
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-muted-foreground">
-                  {fmtDate(p.created_at)}
+                  {fmtDateTime(p.created_at)}
                 </TableCell>
               </TableRow>
             ))}

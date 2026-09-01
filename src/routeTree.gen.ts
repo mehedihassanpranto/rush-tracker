@@ -25,6 +25,7 @@ import { Route as AdminAuditIndexRouteImport } from './routes/admin/audit/index'
 import { Route as AdminClientsIndexRouteImport } from './routes/admin/clients/index'
 import { Route as AdminClientsClientIdRouteImport } from './routes/admin/clients/$clientId'
 import { Route as AdminEmployeesIndexRouteImport } from './routes/admin/employees/index'
+import { Route as AdminFinanceIndexRouteImport } from './routes/admin/finance/index'
 import { Route as AdminLedgerIndexRouteImport } from './routes/admin/ledger/index'
 import { Route as AdminLimitRequestsIndexRouteImport } from './routes/admin/limit-requests/index'
 import { Route as AdminLimitRequestsRequestIdRouteImport } from './routes/admin/limit-requests/$requestId'
@@ -123,6 +124,11 @@ const AdminClientsClientIdRoute = AdminClientsClientIdRouteImport.update({
 const AdminEmployeesIndexRoute = AdminEmployeesIndexRouteImport.update({
   id: '/employees/',
   path: '/employees/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminFinanceIndexRoute = AdminFinanceIndexRouteImport.update({
+  id: '/finance/',
+  path: '/finance/',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminLedgerIndexRoute = AdminLedgerIndexRouteImport.update({
@@ -245,6 +251,7 @@ export interface FileRoutesByFullPath {
   '/admin/audit/': typeof AdminAuditIndexRoute
   '/admin/clients/': typeof AdminClientsIndexRoute
   '/admin/employees/': typeof AdminEmployeesIndexRoute
+  '/admin/finance/': typeof AdminFinanceIndexRoute
   '/admin/ledger/': typeof AdminLedgerIndexRoute
   '/admin/limit-requests/': typeof AdminLimitRequestsIndexRoute
   '/admin/payment-requests/': typeof AdminPaymentRequestsIndexRoute
@@ -279,6 +286,7 @@ export interface FileRoutesByTo {
   '/admin/audit': typeof AdminAuditIndexRoute
   '/admin/clients': typeof AdminClientsIndexRoute
   '/admin/employees': typeof AdminEmployeesIndexRoute
+  '/admin/finance': typeof AdminFinanceIndexRoute
   '/admin/ledger': typeof AdminLedgerIndexRoute
   '/admin/limit-requests': typeof AdminLimitRequestsIndexRoute
   '/admin/payment-requests': typeof AdminPaymentRequestsIndexRoute
@@ -317,6 +325,7 @@ export interface FileRoutesById {
   '/admin/audit/': typeof AdminAuditIndexRoute
   '/admin/clients/': typeof AdminClientsIndexRoute
   '/admin/employees/': typeof AdminEmployeesIndexRoute
+  '/admin/finance/': typeof AdminFinanceIndexRoute
   '/admin/ledger/': typeof AdminLedgerIndexRoute
   '/admin/limit-requests/': typeof AdminLimitRequestsIndexRoute
   '/admin/payment-requests/': typeof AdminPaymentRequestsIndexRoute
@@ -355,6 +364,7 @@ export interface FileRouteTypes {
     | '/admin/audit/'
     | '/admin/clients/'
     | '/admin/employees/'
+    | '/admin/finance/'
     | '/admin/ledger/'
     | '/admin/limit-requests/'
     | '/admin/payment-requests/'
@@ -389,6 +399,7 @@ export interface FileRouteTypes {
     | '/admin/audit'
     | '/admin/clients'
     | '/admin/employees'
+    | '/admin/finance'
     | '/admin/ledger'
     | '/admin/limit-requests'
     | '/admin/payment-requests'
@@ -426,6 +437,7 @@ export interface FileRouteTypes {
     | '/admin/audit/'
     | '/admin/clients/'
     | '/admin/employees/'
+    | '/admin/finance/'
     | '/admin/ledger/'
     | '/admin/limit-requests/'
     | '/admin/payment-requests/'
@@ -565,6 +577,13 @@ declare module '@tanstack/react-router' {
       path: '/employees'
       fullPath: '/admin/employees/'
       preLoaderRoute: typeof AdminEmployeesIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/finance/': {
+      id: '/admin/finance/'
+      path: '/finance'
+      fullPath: '/admin/finance/'
+      preLoaderRoute: typeof AdminFinanceIndexRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/ledger/': {
@@ -728,6 +747,7 @@ interface AdminRouteRouteChildren {
   AdminAuditIndexRoute: typeof AdminAuditIndexRoute
   AdminClientsIndexRoute: typeof AdminClientsIndexRoute
   AdminEmployeesIndexRoute: typeof AdminEmployeesIndexRoute
+  AdminFinanceIndexRoute: typeof AdminFinanceIndexRoute
   AdminLedgerIndexRoute: typeof AdminLedgerIndexRoute
   AdminLimitRequestsIndexRoute: typeof AdminLimitRequestsIndexRoute
   AdminPaymentRequestsIndexRoute: typeof AdminPaymentRequestsIndexRoute
@@ -749,6 +769,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminAuditIndexRoute: AdminAuditIndexRoute,
   AdminClientsIndexRoute: AdminClientsIndexRoute,
   AdminEmployeesIndexRoute: AdminEmployeesIndexRoute,
+  AdminFinanceIndexRoute: AdminFinanceIndexRoute,
   AdminLedgerIndexRoute: AdminLedgerIndexRoute,
   AdminLimitRequestsIndexRoute: AdminLimitRequestsIndexRoute,
   AdminPaymentRequestsIndexRoute: AdminPaymentRequestsIndexRoute,

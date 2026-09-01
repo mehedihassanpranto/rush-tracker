@@ -352,3 +352,23 @@ export interface ClientEmployeeRow {
   assigned_at: string
 }
 
+// ---------------------------------------------------------------------------
+// Finance — USD buy/sell margin tracking (forex spread revenue, post-Phase-8).
+// A separate bookkeeping layer alongside the real ledger, not a replacement
+// for it. One row per transaction: rates are entered, amounts and margin
+// are DB-computed from them (usd_amount * rate).
+// See supabase/migrations/20260723000030_finance_rates.sql.
+// ---------------------------------------------------------------------------
+
+export interface UsdMarginEntry {
+  id: string
+  transaction_date: string
+  usd_amount: string
+  buying_rate: string
+  buying_amount_bdt: string
+  selling_rate: string
+  selling_amount_bdt: string
+  margin_bdt: string
+  created_at: string
+}
+

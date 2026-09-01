@@ -38,6 +38,9 @@ export const PERMISSIONS = {
   EMPLOYEES_MANAGE: 'employees.manage',
 
   INTEGRATIONS_MANAGE: 'integrations.manage',
+
+  FINANCE_VIEW: 'finance.view',
+  FINANCE_MANAGE: 'finance.manage',
 } as const
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
@@ -51,6 +54,8 @@ export const SENSITIVE_PERMISSIONS: Array<PermissionKey> = [
   PERMISSIONS.EXCHANGE_RATE_MANAGE,
   PERMISSIONS.USERS_MANAGE,
   PERMISSIONS.INTEGRATIONS_MANAGE,
+  PERMISSIONS.FINANCE_VIEW,
+  PERMISSIONS.FINANCE_MANAGE,
 ]
 
 /** Human-readable labels for the user-management UI. */
@@ -78,4 +83,6 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
   'employees.view': 'View employees',
   'employees.manage': 'Manage employees',
   'integrations.manage': 'Manage integration credentials',
+  'finance.view': 'View USD buy/sell margin data',
+  'finance.manage': 'Record USD rates and margin entries',
 }
