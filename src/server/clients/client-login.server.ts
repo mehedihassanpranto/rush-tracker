@@ -5,6 +5,13 @@ interface ProvisionClientLoginInput {
   full_name: string
   password: string
   client_id: string
+  /** The organization this login/membership belongs to — the caller's own
+   * (an admin provisioning a login, or a client self-adding a teammate).
+   * A CLIENT login must stay within one organization: reusing an existing
+   * login across organizations would conflate two different subscribing
+   * agencies' customers under one identity, so cross-org reuse is refused
+   * below rather than silently allowed. */
+  organization_id: string
 }
 
 interface ProvisionClientLoginResult {
@@ -50,6 +57,18 @@ export async function provisionClientLogin(
     }
     const userId = existing.user_id
 
+    const { data: existingProfile, error: profileLookupErr } = await admin
+      .from('user_profiles')
+      .select('organization_id')
+      .eq('user_id', userId)
+      .single()
+    if (profileLookupErr) throw new Error(profileLookupErr.message)
+    if (existingProfile.organization_id !== input.organization_id) {
+      throw new Error(
+        'This email is already registered under a different organization and cannot be reused here.',
+      )
+    }
+
     const { data: existingMembership, error: memLookupErr } = await admin
       .from('client_memberships')
       .select('id, status')
@@ -71,9 +90,12 @@ export async function provisionClientLogin(
         .eq('id', existingMembership.id)
       if (reactivateErr) throw new Error(reactivateErr.message)
     } else {
-      const { error: memErr } = await admin
-        .from('client_memberships')
-        .insert({ user_id: userId, client_id: input.client_id, status: 'ACTIVE' })
+      const { error: memErr } = await admin.from('client_memberships').insert({
+        user_id: userId,
+        client_id: input.client_id,
+        status: 'ACTIVE',
+        organization_id: input.organization_id,
+      })
       if (memErr) throw new Error(memErr.message)
     }
 
@@ -90,15 +112,20 @@ export async function provisionClientLogin(
   if (error) throw new Error(error.message)
   const userId = created.user.id
 
-  // The on_auth_user_created trigger creates the profile; ensure the name.
+  // The on_auth_user_created trigger creates the profile with organization_id
+  // defaulted to org zero (it has no way to know the real target org) —
+  // correct it here along with the name.
   await admin
     .from('user_profiles')
-    .update({ full_name: input.full_name })
+    .update({ full_name: input.full_name, organization_id: input.organization_id })
     .eq('user_id', userId)
 
-  const { error: memErr } = await admin
-    .from('client_memberships')
-    .insert({ user_id: userId, client_id: input.client_id, status: 'ACTIVE' })
+  const { error: memErr } = await admin.from('client_memberships').insert({
+    user_id: userId,
+    client_id: input.client_id,
+    status: 'ACTIVE',
+    organization_id: input.organization_id,
+  })
   if (memErr) throw new Error(memErr.message)
 
   return { user_id: userId, reused_existing_user: false }

@@ -28,6 +28,15 @@ export const createPaymentRequestFn = createServerFn({ method: 'POST' })
     const actor = await requireAdmin(PERMISSIONS.PAYMENT_REQUESTS_CREATE)
     const admin = getSupabaseAdminClient()
 
+    // Never trust that data.client_id belongs to the caller's own org.
+    const { data: client } = await admin
+      .from('clients')
+      .select('id')
+      .eq('id', data.client_id)
+      .eq('organization_id', actor.organizationId)
+      .maybeSingle()
+    if (!client) throw new Error('Client not found')
+
     const { data: created, error } = await admin
       .from('payment_requests')
       .insert({
@@ -37,6 +46,7 @@ export const createPaymentRequestFn = createServerFn({ method: 'POST' })
         due_date: data.due_date ?? null,
         created_by: actor.id,
         status: 'REQUESTED',
+        organization_id: actor.organizationId,
       })
       .select('*')
       .single()
@@ -44,6 +54,7 @@ export const createPaymentRequestFn = createServerFn({ method: 'POST' })
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'PAYMENT_REQUEST_CREATED',
       entityType: 'PAYMENT_REQUEST',
       entityId: created.id,
@@ -68,13 +79,14 @@ export const createPaymentRequestFn = createServerFn({ method: 'POST' })
 export const listPaymentRequestsFn = createServerFn({ method: 'GET' })
   .validator(z.object({ client_id: z.uuid().optional() }))
   .handler(async ({ data }): Promise<Array<PaymentRequestWithClient>> => {
-    await requireAdmin(PERMISSIONS.PAYMENTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.PAYMENTS_VIEW)
     const admin = getSupabaseAdminClient()
     let query = admin
       .from('payment_requests')
       .select(
         'id, request_number, client_id, requested_amount_bdt, status, message, due_date, created_at, client:clients(id, client_code, name)',
       )
+      .eq('organization_id', actor.organizationId)
       .order('created_at', { ascending: false })
       .limit(200)
     if (data.client_id) query = query.eq('client_id', data.client_id)
@@ -93,6 +105,7 @@ export const cancelPaymentRequestFn = createServerFn({ method: 'POST' })
       .update({ status: 'CANCELLED' })
       .eq('id', data.id)
       .in('status', ['REQUESTED', 'PAYMENT_SUBMITTED', 'PARTIALLY_PAID'])
+      .eq('organization_id', actor.organizationId)
       .select('id')
     if (error) throw new Error(error.message)
     if (!updated || updated.length === 0) {
@@ -100,6 +113,7 @@ export const cancelPaymentRequestFn = createServerFn({ method: 'POST' })
     }
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'PAYMENT_REQUEST_CANCELLED',
       entityType: 'PAYMENT_REQUEST',
       entityId: data.id,

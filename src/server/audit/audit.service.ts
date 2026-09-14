@@ -11,6 +11,11 @@ export interface AuditEntry {
   oldValues?: Record<string, unknown> | null
   newValues?: Record<string, unknown> | null
   metadata?: Record<string, unknown> | null
+  /** The organization this audit entry belongs to — required, since
+   * audit_logs.organization_id is NOT NULL. Always the acting user's own
+   * organization (or, for a system/cron entry with no actor, the
+   * organization of whatever entity it's about) — never inferred here. */
+  organizationId: string
 }
 
 /**
@@ -29,6 +34,7 @@ export async function writeAudit(entry: AuditEntry): Promise<void> {
       old_values: entry.oldValues ?? null,
       new_values: entry.newValues ?? null,
       metadata: entry.metadata ?? null,
+      organization_id: entry.organizationId,
     })
   } catch (err) {
     console.error('[audit] failed to write entry', entry.action, err)

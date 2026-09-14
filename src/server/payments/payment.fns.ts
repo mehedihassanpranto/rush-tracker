@@ -126,6 +126,7 @@ export const submitPaymentFn = createServerFn({ method: 'POST' })
         p_transaction_reference: data.transaction_reference ?? null,
         p_payment_request_id: data.payment_request_id ?? null,
         p_actor: user.id,
+        p_organization_id: user.organizationId,
       },
     )
     if (rpcError) throw new Error(friendlyRpcError(rpcError.message))
@@ -154,6 +155,7 @@ export const submitPaymentFn = createServerFn({ method: 'POST' })
         mime_type: data.mime_type,
         file_size: stored.file_size,
         uploaded_by: user.id,
+        organization_id: user.organizationId,
       })
       if (attErr) throw new Error(attErr.message)
     } catch (err) {
@@ -172,6 +174,7 @@ export const submitPaymentFn = createServerFn({ method: 'POST' })
 
     await writeAudit({
       actorUserId: user.id,
+      organizationId: user.organizationId,
       action: 'PAYMENT_SUBMITTED',
       entityType: 'PAYMENT',
       entityId: payment.id,
@@ -186,6 +189,7 @@ export const submitPaymentFn = createServerFn({ method: 'POST' })
       )} awaiting verification`,
       entityType: 'PAYMENT',
       entityId: payment.id,
+      organizationId: user.organizationId,
     })
     return payment as Payment
   })
@@ -208,6 +212,7 @@ export const cancelMyPaymentFn = createServerFn({ method: 'POST' })
     }
     await writeAudit({
       actorUserId: user.id,
+      organizationId: user.organizationId,
       action: 'PAYMENT_CANCELLED',
       entityType: 'PAYMENT',
       entityId: data.id,
@@ -239,13 +244,14 @@ export const getMyPaymentProofUrlFn = createServerFn({ method: 'POST' })
 export const listPaymentsFn = createServerFn({ method: 'GET' })
   .validator(paymentListSchema)
   .handler(async ({ data }): Promise<Array<PaymentWithClient>> => {
-    await requireAdmin(PERMISSIONS.PAYMENTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.PAYMENTS_VIEW)
     const admin = getSupabaseAdminClient()
     let query = admin
       .from('payments')
       .select(
         'id, payment_number, client_id, payment_request_id, amount_bdt, payment_method, transaction_reference, status, submitted_at, reviewed_at, admin_note, rejection_reason, created_at, client:clients(id, client_code, name, segment)',
       )
+      .eq('organization_id', actor.organizationId)
       .order('created_at', { ascending: false })
     if (data.status !== 'ALL') query = query.eq('status', data.status)
     const { data: rows, error } = await query
@@ -260,7 +266,7 @@ export interface PaymentDetail extends PaymentWithClient {
 export const getPaymentDetailFn = createServerFn({ method: 'GET' })
   .validator(paymentIdSchema)
   .handler(async ({ data }): Promise<PaymentDetail> => {
-    await requireAdmin(PERMISSIONS.PAYMENTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.PAYMENTS_VIEW)
     const admin = getSupabaseAdminClient()
     const { data: pay, error } = await admin
       .from('payments')
@@ -268,6 +274,7 @@ export const getPaymentDetailFn = createServerFn({ method: 'GET' })
         'id, payment_number, client_id, payment_request_id, amount_bdt, payment_method, transaction_reference, status, submitted_at, reviewed_at, admin_note, rejection_reason, created_at, client:clients(id, client_code, name, segment)',
       )
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .single()
     if (error) throw new Error(error.message)
     const path = await proofPathForPayment(data.id)
@@ -277,7 +284,15 @@ export const getPaymentDetailFn = createServerFn({ method: 'GET' })
 export const getPaymentProofUrlFn = createServerFn({ method: 'POST' })
   .validator(paymentIdSchema)
   .handler(async ({ data }): Promise<{ url: string | null }> => {
-    await requireAdmin(PERMISSIONS.PAYMENTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.PAYMENTS_VIEW)
+    const admin = getSupabaseAdminClient()
+    const { data: pay } = await admin
+      .from('payments')
+      .select('id')
+      .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
+      .maybeSingle()
+    if (!pay) throw new Error('Payment not found')
     const path = await proofPathForPayment(data.id)
     if (!path) return { url: null }
     return { url: await signProofUrl(path) }
@@ -295,16 +310,20 @@ export const approvePaymentFn = createServerFn({ method: 'POST' })
         .update({ admin_note: data.admin_note })
         .eq('id', data.id)
         .eq('status', 'PENDING')
+        .eq('organization_id', actor.organizationId)
     }
 
     // p_amount_bdt is only included when actually overriding the amount —
-    // keeps a plain approval working against approve_payment(uuid, uuid)
-    // (the pre-migration signature) if the amount-override migration
-    // (20260723000024) hasn't been applied to this project yet, rather than
-    // breaking every approval on a missing-parameter error.
+    // it's an optional parameter on approve_payment with a DEFAULT null, so
+    // omitting it entirely (rather than sending null) keeps a plain approval
+    // working the same way whether or not an admin edited the amount.
+    // NOTE: this call now requires the multi-tenant RPC-scoping migration
+    // (20260723000032, which also folds in the amount-override signature)
+    // to be applied — p_organization_id has no default.
     const { data: ledgerId, error } = await admin.rpc('approve_payment', {
       p_payment_id: data.id,
       p_actor: actor.id,
+      p_organization_id: actor.organizationId,
       ...(data.amount_bdt != null ? { p_amount_bdt: data.amount_bdt } : {}),
     })
     if (error) throw new Error(friendlyRpcError(error.message))
@@ -346,6 +365,7 @@ export const rejectPaymentFn = createServerFn({ method: 'POST' })
       })
       .eq('id', data.id)
       .eq('status', 'PENDING')
+      .eq('organization_id', actor.organizationId)
       .select('id, client_id, payment_number')
     if (error) throw new Error(error.message)
     if (!updated || updated.length === 0) {
@@ -353,6 +373,7 @@ export const rejectPaymentFn = createServerFn({ method: 'POST' })
     }
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'PAYMENT_REJECTED',
       entityType: 'PAYMENT',
       entityId: data.id,

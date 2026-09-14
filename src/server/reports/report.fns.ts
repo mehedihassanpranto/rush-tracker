@@ -37,9 +37,11 @@ export interface ClientDueRow {
 
 export const clientDueReportFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Array<ClientDueRow>> => {
-    await requireAdmin(PERMISSIONS.REPORTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.REPORTS_VIEW)
     const admin = getSupabaseAdminClient()
-    const { data, error } = await admin.rpc('all_client_dues')
+    const { data, error } = await admin.rpc('all_client_dues', {
+      p_organization_id: actor.organizationId,
+    })
     if (error) throw new Error(error.message)
     return ((data ?? []) as Array<ClientDueRow>).map((r) => ({
       ...r,
@@ -70,7 +72,7 @@ export const limitApprovalReportFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }: { data: ReportFilter }): Promise<
     Array<LimitApprovalRow>
   > => {
-    await requireAdmin(PERMISSIONS.REPORTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.REPORTS_VIEW)
     const admin = getSupabaseAdminClient()
     let query = admin
       .from('limit_requests')
@@ -78,6 +80,7 @@ export const limitApprovalReportFn = createServerFn({ method: 'GET' })
         'id, request_number, approved_amount_usd, approved_usd_rate, bdt_charge, approved_new_limit_usd, reviewed_at, client:clients(name), ad_account:ad_accounts(name)',
       )
       .eq('status', 'APPROVED')
+      .eq('organization_id', actor.organizationId)
       .order('reviewed_at', { ascending: false })
       .limit(1000)
     if (data.client_id) query = query.eq('client_id', data.client_id)
@@ -117,7 +120,7 @@ export const paymentCollectionReportFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }: { data: ReportFilter }): Promise<
     Array<PaymentCollectionRow>
   > => {
-    await requireAdmin(PERMISSIONS.REPORTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.REPORTS_VIEW)
     const admin = getSupabaseAdminClient()
     let query = admin
       .from('payments')
@@ -125,6 +128,7 @@ export const paymentCollectionReportFn = createServerFn({ method: 'GET' })
         'id, payment_number, amount_bdt, payment_method, transaction_reference, reviewed_at, client:clients(name)',
       )
       .eq('status', 'APPROVED')
+      .eq('organization_id', actor.organizationId)
       .order('reviewed_at', { ascending: false })
       .limit(1000)
     if (data.client_id) query = query.eq('client_id', data.client_id)
@@ -162,13 +166,14 @@ export const adjustmentReportFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }: { data: ReportFilter }): Promise<
     Array<AdjustmentRow>
   > => {
-    await requireAdmin(PERMISSIONS.REPORTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.REPORTS_VIEW)
     const admin = getSupabaseAdminClient()
     let query = admin
       .from('adjustments')
       .select(
         'id, adjustment_number, type, amount_bdt, reason, created_at, client:clients(name)',
       )
+      .eq('organization_id', actor.organizationId)
       .order('created_at', { ascending: false })
       .limit(1000)
     if (data.client_id) query = query.eq('client_id', data.client_id)
@@ -202,13 +207,14 @@ export interface AccountUsageRow {
 
 export const accountUsageReportFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Array<AccountUsageRow>> => {
-    await requireAdmin(PERMISSIONS.REPORTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.REPORTS_VIEW)
     const admin = getSupabaseAdminClient()
     const { data: accounts, error } = await admin
       .from('ad_accounts')
       .select(
         'id, account_code, name, platform, status, current_limit_usd',
       )
+      .eq('organization_id', actor.organizationId)
       .order('name')
     if (error) throw new Error(error.message)
     const rows = (accounts ?? []) as Array<Omit<AccountUsageRow, 'current_client'>>
@@ -217,6 +223,7 @@ export const accountUsageReportFn = createServerFn({ method: 'GET' }).handler(
       .from('ad_account_assignments')
       .select('ad_account_id, client:clients(name)')
       .eq('status', 'ACTIVE')
+      .eq('organization_id', actor.organizationId)
     const clientByAccount = new Map<string, string>()
     for (const a of (active ?? []) as unknown as Array<{
       ad_account_id: string
@@ -247,12 +254,13 @@ export const usdRateUsageReportFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }: { data: ReportFilter }): Promise<
     Array<RateUsageRow>
   > => {
-    await requireAdmin(PERMISSIONS.REPORTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.REPORTS_VIEW)
     const admin = getSupabaseAdminClient()
     let query = admin
       .from('limit_requests')
       .select('approved_usd_rate, approved_amount_usd, bdt_charge, reviewed_at')
       .eq('status', 'APPROVED')
+      .eq('organization_id', actor.organizationId)
       .limit(5000)
     if (data.from) query = query.gte('reviewed_at', startOfDay(data.from))
     if (data.to) query = query.lte('reviewed_at', endOfDay(data.to))

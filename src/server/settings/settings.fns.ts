@@ -105,6 +105,7 @@ export const updateIntegrationSettingsFn = createServerFn({ method: 'POST' })
     // fields changed.
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'INTEGRATION_SETTINGS_UPDATED',
       entityType: 'APP_SETTINGS',
       entityId: null,
@@ -128,6 +129,7 @@ export const clearIntegrationSettingFn = createServerFn({ method: 'POST' })
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'INTEGRATION_SETTINGS_CLEARED',
       entityType: 'APP_SETTINGS',
       entityId: null,

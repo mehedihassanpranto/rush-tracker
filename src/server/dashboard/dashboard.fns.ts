@@ -35,29 +35,37 @@ export interface AdminDashboardStats {
  *  cards arrive with their phases. */
 export const adminDashboardStatsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<AdminDashboardStats> => {
-    await requireAdmin(PERMISSIONS.DASHBOARD_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.DASHBOARD_VIEW)
     const admin = getSupabaseAdminClient()
+    const orgId = actor.organizationId
 
     const [clients, active, available, pending, pendingPay, due] =
       await Promise.all([
-        admin.from('clients').select('*', { count: 'exact', head: true }),
+        admin
+          .from('clients')
+          .select('*', { count: 'exact', head: true })
+          .eq('organization_id', orgId),
         admin
           .from('ad_accounts')
           .select('*', { count: 'exact', head: true })
-          .eq('status', 'ACTIVE'),
+          .eq('status', 'ACTIVE')
+          .eq('organization_id', orgId),
         admin
           .from('ad_accounts')
           .select('*', { count: 'exact', head: true })
-          .eq('status', 'AVAILABLE'),
+          .eq('status', 'AVAILABLE')
+          .eq('organization_id', orgId),
         admin
           .from('limit_requests')
           .select('*', { count: 'exact', head: true })
-          .eq('status', 'PENDING'),
+          .eq('status', 'PENDING')
+          .eq('organization_id', orgId),
         admin
           .from('payments')
           .select('*', { count: 'exact', head: true })
-          .eq('status', 'PENDING'),
-        admin.rpc('total_outstanding_due'),
+          .eq('status', 'PENDING')
+          .eq('organization_id', orgId),
+        admin.rpc('total_outstanding_due', { p_organization_id: orgId }),
       ])
 
     const dueBdt = String(due.data ?? '0')
@@ -65,8 +73,8 @@ export const adminDashboardStatsFn = createServerFn({ method: 'GET' }).handler(
     // Total outstanding due in USD = Σ per-client (due_bdt ÷ that client's
     // rate), since each client now bills at its own USD rate.
     const [{ data: rateRows }, { data: clientDues }] = await Promise.all([
-      admin.from('clients').select('id, usd_rate'),
-      admin.rpc('all_client_dues'),
+      admin.from('clients').select('id, usd_rate').eq('organization_id', orgId),
+      admin.rpc('all_client_dues', { p_organization_id: orgId }),
     ])
     const rateById = new Map(
       ((rateRows ?? []) as Array<{ id: string; usd_rate: string }>).map((r) => [
@@ -84,7 +92,9 @@ export const adminDashboardStatsFn = createServerFn({ method: 'GET' }).handler(
       )
     }
 
-    const { data: todayData } = await admin.rpc('admin_today_totals')
+    const { data: todayData } = await admin.rpc('admin_today_totals', {
+      p_organization_id: orgId,
+    })
     const today = (
       todayData as Array<{
         approved_limit_usd: string
@@ -194,8 +204,9 @@ export interface AdminDashboardSections {
 
 export const adminDashboardSectionsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<AdminDashboardSections> => {
-    await requireAdmin(PERMISSIONS.DASHBOARD_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.DASHBOARD_VIEW)
     const admin = getSupabaseAdminClient()
+    const orgId = actor.organizationId
 
     const [
       pendingLR,
@@ -209,30 +220,35 @@ export const adminDashboardSectionsFn = createServerFn({ method: 'GET' }).handle
         .from('limit_requests')
         .select(LR_SELECT)
         .eq('status', 'PENDING')
+        .eq('organization_id', orgId)
         .order('created_at', { ascending: false })
         .limit(5),
       admin
         .from('payments')
         .select(PAY_SELECT)
         .eq('status', 'PENDING')
+        .eq('organization_id', orgId)
         .order('created_at', { ascending: false })
         .limit(5),
-      admin.rpc('top_due_clients', { p_limit: 5 }),
+      admin.rpc('top_due_clients', { p_organization_id: orgId, p_limit: 5 }),
       admin
         .from('limit_requests')
         .select(LR_SELECT)
         .eq('status', 'APPROVED')
+        .eq('organization_id', orgId)
         .order('approved_at', { ascending: false })
         .limit(5),
       admin
         .from('payments')
         .select(PAY_SELECT)
         .eq('status', 'APPROVED')
+        .eq('organization_id', orgId)
         .order('reviewed_at', { ascending: false })
         .limit(5),
       admin
         .from('audit_logs')
         .select('id, action, entity_type, entity_id, created_at, actor_user_id')
+        .eq('organization_id', orgId)
         .order('created_at', { ascending: false })
         .limit(10),
     ])

@@ -95,7 +95,7 @@ export async function syncAndPersistAdAccountSpendCap(
     const admin = getSupabaseAdminClient()
     const { data: account, error } = await admin
       .from('ad_accounts')
-      .select('id, name, account_code, external_account_id, current_limit_usd')
+      .select('id, name, account_code, external_account_id, current_limit_usd, organization_id')
       .eq('id', adAccountId)
       .maybeSingle()
     if (error || !account) {
@@ -129,6 +129,7 @@ export async function syncAndPersistAdAccountSpendCap(
             meta_spend_cap: account.current_limit_usd,
           },
           metadata: { source: opts.source },
+          organizationId: account.organization_id,
         })
       }
       return outcome.status
@@ -160,6 +161,7 @@ export async function syncAndPersistAdAccountSpendCap(
       message: `${account.account_code}: ${outcome.error ?? 'Meta sync failed'}`,
       entityType: 'AD_ACCOUNT',
       entityId: adAccountId,
+      organizationId: account.organization_id,
     })
     return 'failed'
   } catch (err) {

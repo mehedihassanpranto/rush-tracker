@@ -30,11 +30,16 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  * this financial safety check (e.g. an allow-list of other currencies)
  * can't be applied to one call site and silently missed on the other.
  */
-async function loadUsdLinkedAccount(admin: SupabaseClient, id: string) {
+async function loadUsdLinkedAccount(
+  admin: SupabaseClient,
+  id: string,
+  organizationId: string,
+) {
   const { data: before, error: fetchError } = await admin
     .from('ad_accounts')
     .select('*')
     .eq('id', id)
+    .eq('organization_id', organizationId)
     .single()
   if (fetchError) throw new Error(fetchError.message)
   if (!before.external_account_id) {
@@ -89,6 +94,7 @@ export const syncAdAccountNameFn = createServerFn({ method: 'POST' })
       .from('ad_accounts')
       .select('name')
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .single()
     if (error || !account) throw new Error('Ad account not found')
 
@@ -98,6 +104,7 @@ export const syncAdAccountNameFn = createServerFn({ method: 'POST' })
       data.meta_name,
       actor.id,
       'META_MANUAL_SYNC',
+      actor.organizationId,
     )
     return { renamed: result.renamed, new_name: result.newName ?? null }
   })
@@ -107,13 +114,14 @@ export const syncAdAccountNameFn = createServerFn({ method: 'POST' })
 export const listMetaBusinessAdAccountsFn = createServerFn({
   method: 'GET',
 }).handler(async (): Promise<Array<MetaImportCandidate>> => {
-  await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
+  const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
   const metaAccounts = await listMetaBusinessAdAccounts()
 
   const admin = getSupabaseAdminClient()
   const { data: linked, error } = await admin
     .from('ad_accounts')
     .select('id, account_code, external_account_id')
+    .eq('organization_id', actor.organizationId)
     .in(
       'external_account_id',
       metaAccounts.map((a) => a.external_account_id),
@@ -188,6 +196,7 @@ export const importMetaAdAccountsFn = createServerFn({ method: 'POST' })
           current_limit_usd: 0,
           usd_rate: data.usd_rate,
           status: 'AVAILABLE' as const,
+          organization_id: actor.organizationId,
         })),
       )
       .select('*')
@@ -197,6 +206,7 @@ export const importMetaAdAccountsFn = createServerFn({ method: 'POST' })
     for (const account of accounts ?? []) {
       await writeAudit({
         actorUserId: actor.id,
+        organizationId: actor.organizationId,
         action: 'AD_ACCOUNT_CREATED',
         entityType: 'AD_ACCOUNT',
         entityId: account.id,
@@ -225,7 +235,11 @@ export const applyMetaSpendCapFn = createServerFn({ method: 'POST' })
     const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
     const admin = getSupabaseAdminClient()
 
-    const { before, meta } = await loadUsdLinkedAccount(admin, data.id)
+    const { before, meta } = await loadUsdLinkedAccount(
+      admin,
+      data.id,
+      actor.organizationId,
+    )
     if (meta.spend_cap == null) {
       throw new Error('Meta reports no spend cap for this account')
     }
@@ -234,12 +248,14 @@ export const applyMetaSpendCapFn = createServerFn({ method: 'POST' })
       .from('ad_accounts')
       .update({ current_limit_usd: meta.spend_cap })
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .select('*')
       .single()
     if (error) throw new Error(error.message)
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'AD_ACCOUNT_UPDATED',
       entityType: 'AD_ACCOUNT',
       entityId: data.id,
@@ -281,6 +297,7 @@ export const updateMetaSpendCapFn = createServerFn({ method: 'POST' })
     const { before, externalAccountId, meta } = await loadUsdLinkedAccount(
       admin,
       data.id,
+      actor.organizationId,
     )
     const amountSpent = dec(meta.amount_spent ?? 0)
     const liveCap = meta.spend_cap != null ? dec(meta.spend_cap) : dec(0)
@@ -299,12 +316,14 @@ export const updateMetaSpendCapFn = createServerFn({ method: 'POST' })
       .from('ad_accounts')
       .update({ current_limit_usd: newCap.toFixed(2) })
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .select('*')
       .single()
     if (error) throw new Error(error.message)
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'AD_ACCOUNT_UPDATED',
       entityType: 'AD_ACCOUNT',
       entityId: data.id,
@@ -334,12 +353,25 @@ export const retryMetaSpendCapSyncFn = createServerFn({ method: 'POST' })
   .validator(retryMetaSpendCapSyncSchema)
   .handler(async ({ data }): Promise<AdAccount> => {
     const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
+    const admin = getSupabaseAdminClient()
+
+    // Never trust that data.id belongs to the caller's own org — this is
+    // the only entry point to syncAndPersistAdAccountSpendCap that's
+    // user-reachable with an arbitrary id (the others come from an
+    // already-org-validated context).
+    const { data: owned } = await admin
+      .from('ad_accounts')
+      .select('id')
+      .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
+      .maybeSingle()
+    if (!owned) throw new Error('Ad account not found')
+
     await syncAndPersistAdAccountSpendCap(data.id, {
       actorUserId: actor.id,
       source: 'META_SPEND_CAP_AUTO_SYNC',
     })
 
-    const admin = getSupabaseAdminClient()
     const { data: account, error } = await admin
       .from('ad_accounts')
       .select('*')

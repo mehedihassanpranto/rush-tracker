@@ -44,22 +44,38 @@ const LEDGER_COLUMNS =
 // Admin
 // ===========================================================================
 
+/** Never trust that a client_id passed into an admin fn belongs to the
+ * caller's own organization — client_financials() and similar per-client
+ * RPCs/queries take the id as given with no org check of their own. */
+async function assertClientInOrg(clientId: string, organizationId: string): Promise<void> {
+  const admin = getSupabaseAdminClient()
+  const { data } = await admin
+    .from('clients')
+    .select('id')
+    .eq('id', clientId)
+    .eq('organization_id', organizationId)
+    .maybeSingle()
+  if (!data) throw new Error('Client not found')
+}
+
 export const clientFinancialsFn = createServerFn({ method: 'GET' })
   .validator(z.object({ client_id: z.uuid() }))
   .handler(async ({ data }): Promise<ClientFinancials> => {
-    await requireAdmin(PERMISSIONS.CLIENTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.CLIENTS_VIEW)
+    await assertClientInOrg(data.client_id, actor.organizationId)
     return fetchClientFinancials(data.client_id)
   })
 
 export const listClientLedgerFn = createServerFn({ method: 'GET' })
   .validator(z.object({ client_id: z.uuid() }))
   .handler(async ({ data }): Promise<Array<LedgerEntryWithBalance>> => {
-    await requireAdmin(PERMISSIONS.LEDGER_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.LEDGER_VIEW)
     const admin = getSupabaseAdminClient()
     const { data: rows, error } = await admin
       .from('ledger_entries')
       .select(LEDGER_COLUMNS)
       .eq('client_id', data.client_id)
+      .eq('organization_id', actor.organizationId)
       .order('created_at', { ascending: false })
     if (error) throw new Error(error.message)
     return withRunningBalance((rows ?? []) as unknown as Array<LedgerEntry>)
@@ -67,11 +83,12 @@ export const listClientLedgerFn = createServerFn({ method: 'GET' })
 
 export const listLedgerFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Array<LedgerEntryWithClient>> => {
-    await requireAdmin(PERMISSIONS.LEDGER_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.LEDGER_VIEW)
     const admin = getSupabaseAdminClient()
     const { data, error } = await admin
       .from('ledger_entries')
       .select(`${LEDGER_COLUMNS}, client:clients(id, client_code, name)`)
+      .eq('organization_id', actor.organizationId)
       .order('created_at', { ascending: false })
       .limit(200)
     if (error) throw new Error(error.message)

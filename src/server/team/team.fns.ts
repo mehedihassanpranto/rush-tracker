@@ -69,10 +69,12 @@ export const addTeamMemberFn = createServerFn({ method: 'POST' })
       full_name: data.full_name,
       password: data.password,
       client_id: membership.clientId,
+      organization_id: actor.organizationId,
     })
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'TEAM_MEMBER_ADDED',
       entityType: 'CLIENT',
       entityId: membership.clientId,
@@ -104,6 +106,7 @@ export const setTeamMemberStatusFn = createServerFn({ method: 'POST' })
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'TEAM_MEMBER_STATUS_CHANGED',
       entityType: 'CLIENT',
       entityId: membership.clientId,

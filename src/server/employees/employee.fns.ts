@@ -19,18 +19,20 @@ import type {
 
 export const listEmployeesFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Array<EmployeeWithClients>> => {
-    await requireAdmin(PERMISSIONS.EMPLOYEES_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.EMPLOYEES_VIEW)
     const admin = getSupabaseAdminClient()
 
     const { data: employees, error } = await admin
       .from('employees')
       .select('*')
+      .eq('organization_id', actor.organizationId)
       .order('created_at', { ascending: false })
     if (error) throw new Error(error.message)
 
     const { data: links } = await admin
       .from('client_employees')
       .select('employee_id, client:clients(id, client_code, name)')
+      .eq('organization_id', actor.organizationId)
 
     const clientsByEmployee = new Map<
       string,
@@ -56,13 +58,14 @@ export const listEmployeesFn = createServerFn({ method: 'GET' }).handler(
 export const getEmployeeFn = createServerFn({ method: 'GET' })
   .validator(z.object({ id: z.uuid() }))
   .handler(async ({ data }): Promise<EmployeeWithClients> => {
-    await requireAdmin(PERMISSIONS.EMPLOYEES_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.EMPLOYEES_VIEW)
     const admin = getSupabaseAdminClient()
 
     const { data: employee, error } = await admin
       .from('employees')
       .select('*')
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .single()
     if (error) throw new Error(error.message)
 
@@ -70,6 +73,7 @@ export const getEmployeeFn = createServerFn({ method: 'GET' })
       .from('client_employees')
       .select('client:clients(id, client_code, name)')
       .eq('employee_id', data.id)
+      .eq('organization_id', actor.organizationId)
 
     const clients = ((links ?? []) as unknown as Array<{
       client: { id: string; client_code: string; name: string } | null
@@ -84,13 +88,14 @@ export const getEmployeeFn = createServerFn({ method: 'GET' })
 export const listClientEmployeesFn = createServerFn({ method: 'GET' })
   .validator(z.object({ client_id: z.uuid() }))
   .handler(async ({ data }): Promise<Array<ClientEmployeeRow>> => {
-    await requireAdmin(PERMISSIONS.EMPLOYEES_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.EMPLOYEES_VIEW)
     const admin = getSupabaseAdminClient()
 
     const { data: rows, error } = await admin
       .from('client_employees')
       .select('id, assigned_at, employee:employees(id, employee_code, name, status)')
       .eq('client_id', data.client_id)
+      .eq('organization_id', actor.organizationId)
       .order('assigned_at', { ascending: false })
     if (error) throw new Error(error.message)
 
@@ -102,13 +107,14 @@ export const listClientEmployeesFn = createServerFn({ method: 'GET' })
 export const listAssignableEmployeesFn = createServerFn({ method: 'GET' })
   .validator(z.object({ client_id: z.uuid() }))
   .handler(async ({ data }): Promise<Array<Employee>> => {
-    await requireAdmin(PERMISSIONS.EMPLOYEES_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.EMPLOYEES_VIEW)
     const admin = getSupabaseAdminClient()
 
     const { data: employees, error } = await admin
       .from('employees')
       .select('*')
       .eq('status', 'ACTIVE')
+      .eq('organization_id', actor.organizationId)
       .order('name')
     if (error) throw new Error(error.message)
 
@@ -116,6 +122,7 @@ export const listAssignableEmployeesFn = createServerFn({ method: 'GET' })
       .from('client_employees')
       .select('employee_id')
       .eq('client_id', data.client_id)
+      .eq('organization_id', actor.organizationId)
     const already = new Set(
       (existing ?? []).map((r) => r.employee_id as string),
     )
@@ -131,13 +138,19 @@ export const createEmployeeFn = createServerFn({ method: 'POST' })
 
     const { data: employee, error } = await admin
       .from('employees')
-      .insert({ name: data.name, email: data.email ?? null, status: data.status })
+      .insert({
+        name: data.name,
+        email: data.email ?? null,
+        status: data.status,
+        organization_id: actor.organizationId,
+      })
       .select('*')
       .single()
     if (error) throw new Error(error.message)
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'EMPLOYEE_CREATED',
       entityType: 'EMPLOYEE',
       entityId: employee.id,
@@ -156,18 +169,22 @@ export const updateEmployeeFn = createServerFn({ method: 'POST' })
       .from('employees')
       .select('*')
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .single()
+    if (!before) throw new Error('Employee not found')
 
     const { data: employee, error } = await admin
       .from('employees')
       .update({ name: data.name, email: data.email ?? null, status: data.status })
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .select('*')
       .single()
     if (error) throw new Error(error.message)
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'EMPLOYEE_UPDATED',
       entityType: 'EMPLOYEE',
       entityId: data.id,
@@ -187,12 +204,14 @@ export const setEmployeeStatusFn = createServerFn({ method: 'POST' })
       .from('employees')
       .update({ status: data.status })
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .select('*')
       .single()
     if (error) throw new Error(error.message)
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'EMPLOYEE_STATUS_CHANGED',
       entityType: 'EMPLOYEE',
       entityId: data.id,
@@ -207,9 +226,29 @@ export const assignEmployeeToClientFn = createServerFn({ method: 'POST' })
     const actor = await requireAdmin(PERMISSIONS.EMPLOYEES_MANAGE)
     const admin = getSupabaseAdminClient()
 
-    const { error } = await admin
-      .from('client_employees')
-      .insert({ client_id: data.client_id, employee_id: data.employee_id })
+    // Never trust that client_id/employee_id belong to the caller's own org.
+    const [{ data: client }, { data: employee }] = await Promise.all([
+      admin
+        .from('clients')
+        .select('id')
+        .eq('id', data.client_id)
+        .eq('organization_id', actor.organizationId)
+        .maybeSingle(),
+      admin
+        .from('employees')
+        .select('id')
+        .eq('id', data.employee_id)
+        .eq('organization_id', actor.organizationId)
+        .maybeSingle(),
+    ])
+    if (!client) throw new Error('Client not found')
+    if (!employee) throw new Error('Employee not found')
+
+    const { error } = await admin.from('client_employees').insert({
+      client_id: data.client_id,
+      employee_id: data.employee_id,
+      organization_id: actor.organizationId,
+    })
     if (error) {
       if (error.code === '23505') {
         throw new Error('This employee is already assigned to this client.')
@@ -219,6 +258,7 @@ export const assignEmployeeToClientFn = createServerFn({ method: 'POST' })
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'EMPLOYEE_ASSIGNED_TO_CLIENT',
       entityType: 'EMPLOYEE',
       entityId: data.employee_id,
@@ -237,16 +277,20 @@ export const unassignEmployeeFromClientFn = createServerFn({ method: 'POST' })
       .from('client_employees')
       .select('client_id, employee_id')
       .eq('id', data.client_employee_id)
+      .eq('organization_id', actor.organizationId)
       .single()
+    if (!link) throw new Error('Assignment not found')
 
     const { error } = await admin
       .from('client_employees')
       .delete()
       .eq('id', data.client_employee_id)
+      .eq('organization_id', actor.organizationId)
     if (error) throw new Error(error.message)
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'EMPLOYEE_UNASSIGNED_FROM_CLIENT',
       entityType: 'EMPLOYEE',
       entityId: link?.employee_id ?? null,
@@ -274,6 +318,7 @@ export const deleteEmployeeFn = createServerFn({ method: 'POST' })
       .from('employees')
       .select('id, employee_code, name')
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .single()
     if (!employee) throw new Error('Employee not found')
 
@@ -287,11 +332,16 @@ export const deleteEmployeeFn = createServerFn({ method: 'POST' })
       )
     }
 
-    const { error } = await admin.from('employees').delete().eq('id', data.id)
+    const { error } = await admin
+      .from('employees')
+      .delete()
+      .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
     if (error) throw new Error(error.message)
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'EMPLOYEE_DELETED',
       entityType: 'EMPLOYEE',
       entityId: data.id,

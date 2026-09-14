@@ -43,22 +43,25 @@ function sanitize(term: string): string {
 export const globalSearchFn = createServerFn({ method: 'GET' })
   .validator(z.object({ q: z.string() }))
   .handler(async ({ data }): Promise<SearchResults> => {
-    await requireAdmin(PERMISSIONS.DASHBOARD_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.DASHBOARD_VIEW)
     const term = sanitize(data.q)
     if (term.length < 2) return EMPTY
     const admin = getSupabaseAdminClient()
     const like = `%${term}%`
+    const orgId = actor.organizationId
 
     const [clients, accounts, limitRequests, payments, paymentRequests] =
       await Promise.all([
         admin
           .from('clients')
           .select('id, client_code, name')
+          .eq('organization_id', orgId)
           .or(`name.ilike.${like},client_code.ilike.${like}`)
           .limit(10),
         admin
           .from('ad_accounts')
           .select('id, account_code, name, external_account_id')
+          .eq('organization_id', orgId)
           .or(
             `name.ilike.${like},account_code.ilike.${like},external_account_id.ilike.${like}`,
           )
@@ -66,16 +69,19 @@ export const globalSearchFn = createServerFn({ method: 'GET' })
         admin
           .from('limit_requests')
           .select('id, request_number, client_id')
+          .eq('organization_id', orgId)
           .ilike('request_number', like)
           .limit(10),
         admin
           .from('payments')
           .select('id, payment_number, client_id')
+          .eq('organization_id', orgId)
           .ilike('payment_number', like)
           .limit(10),
         admin
           .from('payment_requests')
           .select('id, request_number, client_id')
+          .eq('organization_id', orgId)
           .ilike('request_number', like)
           .limit(10),
       ])

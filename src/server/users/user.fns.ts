@@ -53,12 +53,13 @@ async function permissionIdByKey(): Promise<Map<string, string>> {
 
 export const listStaffUsersFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<StaffUsersResult> => {
-    await requireAdmin(PERMISSIONS.USERS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.USERS_VIEW)
     const admin = getSupabaseAdminClient()
 
     const { data: profiles, error } = await admin
       .from('user_profiles')
       .select('user_id, full_name, status, role_id, role:roles(key)')
+      .eq('organization_id', actor.organizationId)
       .order('created_at', { ascending: true })
     if (error) throw new Error(error.message)
 
@@ -141,16 +142,23 @@ export const createStaffUserFn = createServerFn({ method: 'POST' })
     if (error) throw new Error(error.message)
     const userId = created.user.id
 
-    // The trigger creates the profile from app_role; ensure name + role.
+    // The trigger creates the profile from app_role, organization_id
+    // defaulted to org zero (it has no way to know the real target org) —
+    // ensure name + role + the actor's own organization.
     const roles = await roleIdByKey()
     const roleId = roles.get(data.role)
     await admin
       .from('user_profiles')
-      .update({ full_name: data.full_name, ...(roleId ? { role_id: roleId } : {}) })
+      .update({
+        full_name: data.full_name,
+        organization_id: actor.organizationId,
+        ...(roleId ? { role_id: roleId } : {}),
+      })
       .eq('user_id', userId)
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'USER_CREATED',
       entityType: 'USER',
       entityId: userId,
@@ -176,14 +184,17 @@ export const setUserRoleFn = createServerFn({ method: 'POST' })
       .from('user_profiles')
       .select('role:roles(key)')
       .eq('user_id', data.user_id)
+      .eq('organization_id', actor.organizationId)
       .single()
+    if (!before) throw new Error('User not found')
     const prevRole =
-      (before as { role: { key: string } | null } | null)?.role?.key ?? null
+      (before as unknown as { role: { key: string } | null }).role?.key ?? null
 
     const { error } = await admin
       .from('user_profiles')
       .update({ role_id: roleId })
       .eq('user_id', data.user_id)
+      .eq('organization_id', actor.organizationId)
     if (error) throw new Error(error.message)
 
     // Keep the JWT app_role in sync (source of truth is user_profiles.role_id).
@@ -193,6 +204,7 @@ export const setUserRoleFn = createServerFn({ method: 'POST' })
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'ROLE_CHANGED',
       entityType: 'USER',
       entityId: data.user_id,
@@ -215,10 +227,12 @@ export const setUserStatusFn = createServerFn({ method: 'POST' })
       .from('user_profiles')
       .update({ status: data.status })
       .eq('user_id', data.user_id)
+      .eq('organization_id', actor.organizationId)
     if (error) throw new Error(error.message)
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'USER_STATUS_CHANGED',
       entityType: 'USER',
       entityId: data.user_id,
@@ -242,9 +256,11 @@ export const setUserPermissionsFn = createServerFn({ method: 'POST' })
       .from('user_profiles')
       .select('role:roles(key)')
       .eq('user_id', data.user_id)
+      .eq('organization_id', actor.organizationId)
       .single()
+    if (!prof) throw new Error('User not found')
     const targetRole =
-      (prof as { role: { key: string } | null } | null)?.role?.key ?? null
+      (prof as unknown as { role: { key: string } | null }).role?.key ?? null
     if (targetRole !== 'ADMIN') {
       throw new Error('Permissions can only be granted to Admin users')
     }
@@ -274,6 +290,7 @@ export const setUserPermissionsFn = createServerFn({ method: 'POST' })
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'PERMISSION_CHANGED',
       entityType: 'USER',
       entityId: data.user_id,

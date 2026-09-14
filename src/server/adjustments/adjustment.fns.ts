@@ -13,13 +13,14 @@ function friendlyRpcError(message: string): string {
 export const listAdjustmentsFn = createServerFn({ method: 'GET' })
   .validator(z.object({ client_id: z.uuid().optional() }))
   .handler(async ({ data }): Promise<Array<AdjustmentWithClient>> => {
-    await requireAdmin(PERMISSIONS.ADJUSTMENTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.ADJUSTMENTS_VIEW)
     const admin = getSupabaseAdminClient()
     let query = admin
       .from('adjustments')
       .select(
         'id, adjustment_number, client_id, type, amount_bdt, reference_type, reference_id, reason, internal_note, created_at, client:clients(id, client_code, name)',
       )
+      .eq('organization_id', actor.organizationId)
       .order('created_at', { ascending: false })
       .limit(200)
     if (data.client_id) query = query.eq('client_id', data.client_id)
@@ -41,6 +42,7 @@ export const createAdjustmentFn = createServerFn({ method: 'POST' })
       p_reason: data.reason,
       p_internal_note: data.internal_note ?? null,
       p_actor: actor.id,
+      p_organization_id: actor.organizationId,
     })
     if (error) throw new Error(friendlyRpcError(error.message))
     return { adjustment_id: id as string }
@@ -55,6 +57,7 @@ export const reverseLedgerEntryFn = createServerFn({ method: 'POST' })
       p_ledger_id: data.ledger_id,
       p_reason: data.reason,
       p_actor: actor.id,
+      p_organization_id: actor.organizationId,
     })
     if (error) throw new Error(friendlyRpcError(error.message))
     return { reversal_ledger_id: id as string }

@@ -37,6 +37,18 @@ export interface SessionUser {
    * the first active membership. Always null for non-CLIENT users or a
    * CLIENT with no active membership. */
   activeClientId: string | null
+  /** The organization (customer/tenant) this user belongs to — every
+   * agency-scoped query in src/server/**\/*.fns.ts filters/tags by this.
+   * Never null for a real user (multi-tenant migration backfilled every
+   * profile to org zero); only meaningfully absent for a hypothetical
+   * platform-admin-only account with no home organization, which does not
+   * exist yet. */
+  organizationId: string
+  /** Cross-organization platform access (distinct from the per-organization
+   * SUPER_ADMIN role — see the multi-tenant migration's notes). A platform
+   * admin bypasses organization scoping entirely; guards and server fns
+   * must check this before applying the normal organization_id filter. */
+  isPlatformAdmin: boolean
 }
 
 export function homePathForUser(user: Pick<SessionUser, 'role'>): string {

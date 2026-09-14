@@ -31,6 +31,7 @@ export const updateMyProfileFn = createServerFn({ method: 'POST' })
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'PROFILE_UPDATED',
       entityType: 'USER',
       entityId: actor.id,

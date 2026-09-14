@@ -21,6 +21,9 @@ export interface NotifyInput {
    * cookie); left null for admin-facing notifications, which are never
    * filtered. */
   clientId?: string | null
+  /** The organization every recipient (and the notification row itself)
+   * belongs to. Required — notifications.organization_id is NOT NULL. */
+  organizationId: string
 }
 
 /** Insert one notification row per recipient user. */
@@ -37,6 +40,7 @@ export async function notify(input: NotifyInput): Promise<void> {
       entity_type: input.entityType ?? null,
       entity_id: input.entityId ?? null,
       client_id: input.clientId ?? null,
+      organization_id: input.organizationId,
     }))
     await admin.from('notifications').insert(rows)
   } catch (err) {
@@ -44,13 +48,18 @@ export async function notify(input: NotifyInput): Promise<void> {
   }
 }
 
-/** Recipient ids: all ACTIVE admin/super-admin users. */
-async function adminUserIds(): Promise<Array<string>> {
+/** Recipient ids: all ACTIVE admin/super-admin users OF THIS ORGANIZATION.
+ * Without the organization_id filter, every admin across every subscribing
+ * agency would be notified about every other agency's activity — this was
+ * a real cross-tenant leak found and fixed as part of the multi-tenant
+ * conversion, not a pre-existing requirement. */
+async function adminUserIds(organizationId: string): Promise<Array<string>> {
   const admin = getSupabaseAdminClient()
   const { data } = await admin
     .from('user_profiles')
     .select('user_id, status, role:roles(key)')
     .eq('status', 'ACTIVE')
+    .eq('organization_id', organizationId)
   return ((data ?? []) as unknown as Array<{
     user_id: string
     role: { key: string } | null
@@ -70,21 +79,37 @@ async function clientMemberUserIds(clientId: string): Promise<Array<string>> {
   return ((data ?? []) as Array<{ user_id: string }>).map((r) => r.user_id)
 }
 
-/** Notify every active admin (e.g. a client submitted a request/payment). */
+/** Notify every active admin of one organization (e.g. a client submitted a
+ * request/payment) — organizationId is required, never inferred, since
+ * there's no client/account context to derive it from at every call site. */
 export async function notifyAdmins(
   input: Omit<NotifyInput, 'userIds'>,
 ): Promise<void> {
-  await notify({ ...input, userIds: await adminUserIds() })
+  await notify({ ...input, userIds: await adminUserIds(input.organizationId) })
 }
 
-/** Notify every active member of a client (e.g. an approval/rejection). */
+/** Notify every active member of a client (e.g. an approval/rejection).
+ * organizationId is resolved from the client row itself — clientId already
+ * uniquely determines it, so every call site doesn't need to also thread
+ * one through (and can't accidentally pass a mismatched one). */
 export async function notifyClientMembers(
   clientId: string,
-  input: Omit<NotifyInput, 'userIds' | 'clientId'>,
+  input: Omit<NotifyInput, 'userIds' | 'clientId' | 'organizationId'>,
 ): Promise<void> {
+  const admin = getSupabaseAdminClient()
+  const { data: client } = await admin
+    .from('clients')
+    .select('organization_id')
+    .eq('id', clientId)
+    .maybeSingle()
+  if (!client) {
+    console.error('[notifyClientMembers] client not found, skipping', clientId)
+    return
+  }
   await notify({
     ...input,
     userIds: await clientMemberUserIds(clientId),
     clientId,
+    organizationId: (client as { organization_id: string }).organization_id,
   })
 }

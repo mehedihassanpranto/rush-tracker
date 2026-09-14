@@ -8,12 +8,13 @@ import type { UsdMarginEntry } from '@/types/domain'
 
 export const listUsdMarginEntriesFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Array<UsdMarginEntry>> => {
-    await requireAdmin(PERMISSIONS.FINANCE_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.FINANCE_VIEW)
     const admin = getSupabaseAdminClient()
 
     const { data: rows, error } = await admin
       .from('usd_margin_entries')
       .select('*')
+      .eq('organization_id', actor.organizationId)
       .order('transaction_date', { ascending: false })
       .limit(500)
     if (error) throw new Error(error.message)
@@ -34,6 +35,7 @@ export const createUsdMarginEntryFn = createServerFn({ method: 'POST' })
         usd_amount: data.usd_amount,
         buying_rate: data.buying_rate,
         selling_rate: data.selling_rate,
+        organization_id: actor.organizationId,
       })
       .select('*')
       .single()
@@ -41,6 +43,7 @@ export const createUsdMarginEntryFn = createServerFn({ method: 'POST' })
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'USD_MARGIN_ENTRY_RECORDED',
       entityType: 'USD_MARGIN_ENTRY',
       entityId: row.id,

@@ -39,6 +39,7 @@ export async function syncAdAccountName(
   metaName: string | null,
   actorUserId: string | null,
   source: 'META_SYNC' | 'META_MANUAL_SYNC',
+  organizationId: string,
 ): Promise<{ renamed: boolean; newName?: string }> {
   if (!metaName || metaName === currentName) return { renamed: false }
   const admin = getSupabaseAdminClient()
@@ -46,6 +47,7 @@ export async function syncAdAccountName(
     .from('ad_accounts')
     .update({ name: metaName })
     .eq('id', accountId)
+    .eq('organization_id', organizationId)
   if (error) throw new Error(error.message)
 
   await writeAudit({
@@ -56,6 +58,7 @@ export async function syncAdAccountName(
     oldValues: { name: currentName },
     newValues: { name: metaName },
     metadata: { source },
+    organizationId,
   })
   return { renamed: true, newName: metaName }
 }
@@ -108,7 +111,7 @@ export async function syncMetaAdAccounts(): Promise<MetaSyncResult> {
   const { data: linked, error } = await admin
     .from('ad_accounts')
     .select(
-      'id, account_code, name, external_account_id, meta_last_status_code, meta_low_balance_alerted',
+      'id, account_code, name, external_account_id, meta_last_status_code, meta_low_balance_alerted, organization_id',
     )
     .not('external_account_id', 'is', null)
   if (error) throw new Error(error.message)
@@ -137,6 +140,7 @@ export async function syncMetaAdAccounts(): Promise<MetaSyncResult> {
         meta.name,
         null, // system-initiated, no signed-in actor
         'META_SYNC',
+        row.organization_id,
       )
       if (result.renamed && result.newName) {
         currentName = result.newName
@@ -202,6 +206,16 @@ export async function syncMetaAdAccounts(): Promise<MetaSyncResult> {
       title: 'Meta Business Portfolio sync',
       message: parts.join(', ') + '.',
       entityType: 'AD_ACCOUNT',
+      // KNOWN LIMITATION: this cron syncs ONE globally-configured Meta
+      // Business Portfolio (app_settings, still org-zero-only — see the
+      // multi-tenant migration's notes) against every linked ad_accounts
+      // row with no per-org grouping at all. Hardcoding org zero here is
+      // consistent with that reality, not a new gap — making this digest
+      // (and the account-gathering above it) genuinely multi-org-aware
+      // needs its own dedicated pass once a second organization actually
+      // uses the Meta integration; out of scope for the org_id-scoping
+      // pass that touched every other server fn.
+      organizationId: '00000000-0000-0000-0000-000000000001',
     })
   }
 

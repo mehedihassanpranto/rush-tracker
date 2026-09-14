@@ -44,6 +44,8 @@ interface ProfileRow {
   full_name: string
   status: UserStatus
   role_id: string
+  organization_id: string
+  is_platform_admin: boolean
   role: { key: RoleKey } | null
 }
 
@@ -60,7 +62,9 @@ async function loadSessionUser(
 
   const { data: profile } = (await supabase
     .from('user_profiles')
-    .select('user_id, full_name, status, role_id, role:roles(key)')
+    .select(
+      'user_id, full_name, status, role_id, organization_id, is_platform_admin, role:roles(key)',
+    )
     .eq('user_id', user.id)
     .single()) as { data: ProfileRow | null }
 
@@ -142,6 +146,8 @@ async function loadSessionUser(
     permissions,
     memberships,
     activeClientId,
+    organizationId: profile.organization_id,
+    isPlatformAdmin: profile.is_platform_admin,
   }
 }
 

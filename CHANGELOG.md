@@ -6,6 +6,192 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-09-14 (4)
+
+**Migrations `20260723000031` and `20260723000032` (multi-tenant Phase 1 +
+1B) applied to the live project via the Supabase CLI.** Owner asked to use
+the CLI instead of the SQL editor. Blocked initially on two things, both
+resolved: (1) no CLI auth in this environment (`supabase login` needs a
+browser) — owner supplied a Personal Access Token, used only for this
+session's CLI env var, never written to any file; (2) every prior
+migration (`000001`–`000030`) had been applied by hand via the SQL editor,
+so the CLI's own remote migration-history bookkeeping had zero record of
+any of them — a plain `db push` would have tried to re-run all ~30 from
+scratch and failed (or worse, partially executed a couple of
+drop-then-recreate statements against live tables). Fixed by reconciling
+history first: `supabase migration repair --status applied` for every
+version through `000030` (updates only the CLI's bookkeeping table, runs
+no SQL), verified after with `supabase migration list` that local/remote
+now match. One migration's live status was checked directly rather than
+assumed before repairing it as "applied": `approve_payment`'s signature
+(migration `000024`) was probed with a safe bogus-id RPC call (fails on
+its first check either way) to confirm the 3-arg form was actually live.
+`db push --dry-run` then confirmed only `000031`/`000032` would run;
+owner confirmed via AskUserQuestion before the real push. Both applied
+cleanly, verified directly afterward: `organizations` has exactly one row
+("xRush Agency"), the platform-admin account's `is_platform_admin` is
+true, all 6 live clients backfilled to org zero, `total_outstanding_due`/
+`all_client_dues` callable with the new `p_organization_id` param, old
+unscoped signatures correctly gone from the schema cache. `CLAUDE.md`'s
+Commands section updated: `supabase db push` can be used directly for
+future migrations now that the CLI's history is reconciled, no local
+install needed (`npx supabase ...`).
+
+---
+
+## 2026-09-14 (3)
+
+**Multi-tenant subscription conversion — Phase 1B (server-layer org
+scoping), migration NOT YET APPLIED to the live project.** The real
+isolation layer, closing the gap Phase 1 (schema + RLS) flagged: since RLS
+never runs in normal app usage (everything goes through the service-role
+admin client), every read/write across all 23 `src/server/**/*.fns.ts`
+files — plus `client-login.server.ts`, `notification.service.ts`,
+`audit.service.ts`, `meta-sync.server.ts`, `spend-cap-sync.server.ts` —
+now filters reads by `organization_id`, tags it on inserts, and validates
+it before any update/delete that targets a row by id.
+
+`SessionUser` gained `organizationId`/`isPlatformAdmin`, populated in
+`loadSessionUser()` — every existing `requireAdmin()`/
+`requireClientMembership()` caller gets them for free. New migration
+`20260723000032_multi_tenant_rpc_scoping.sql`: 9 write RPCs that look up a
+row by id gained a `p_organization_id` param, validated as an IDOR guard
+before acting; 4 bulk aggregate RPCs (`total_outstanding_due`,
+`all_client_dues`, `admin_today_totals`, `top_due_clients`) gained the
+same param plus an internal filter, since they scan across all clients
+with no per-row check otherwise.
+
+**Two critical bugs found and fixed, not theoretical:**
+1. `notifyAdmins()` fanned out to every admin across **every**
+   organization with zero filter — any client's activity would have
+   notified every other subscribing agency's admins too. Fixed with a
+   required `organizationId` param; `notifyClientMembers()` needed no
+   call-site changes since it now resolves the org from the client row
+   itself.
+2. The "Clear all data" button's fallback wipe path (`directWipe()`,
+   used whenever the `reset_all_data()` RPC isn't installed — true right
+   now, since neither pending migration is applied yet) had **its own,
+   independent copy of the exact TRUNCATE-everything bug** already fixed
+   in the RPC: no organization filter on any delete, and a storage
+   cleanup step that emptied the **entire shared proofs bucket**, every
+   organization's files. Right now, this fallback is the only working
+   path (the RPC isn't live), so this was a live, reachable bug, not a
+   hypothetical. Fixed: both scoped to the caller's own organization,
+   storage paths captured before their owning rows are deleted. Also
+   fixed incidentally: this fallback's table list had drifted out of
+   sync with the RPC (missing `employees`/`client_employees`).
+   Document-code sequences are shared across every organization, so
+   neither reset path touches them anymore — correct, but a real,
+   flagged behavior change from before.
+
+**One earlier decision reversed, with reasoning**: Phase 1 said
+`app_settings` (Meta credentials) would be scoped per-organization now.
+Checking the actual runtime consumer, `getMetaConfig()`, showed it takes
+zero parameters and is called from the unauthenticated daily cron —
+making it org-aware is a real redesign (threading org through every Meta
+API call site), not a query filter. Doing only half of it (a per-org
+Settings screen over a still-single-tenant runtime) would have looked
+like it worked and silently not. Left single-tenant, clearly flagged as a
+dedicated follow-up. Per-account Meta actions already in scope here
+(name sync, spend-cap push/apply/auto-sync) ARE correctly org-validated,
+since each already operates on one specific, pre-checked account.
+
+Also fixed along the way: `importMetaAdAccountsFn` wasn't setting
+`organization_id` on newly-imported accounts at all (would have silently
+defaulted every import to org zero); `provisionClientLogin()` (shared by
+admin "Add login" and portal "Add teammate") now refuses to reuse an
+existing login that belongs to a *different* organization, and correctly
+sets a brand-new user's real org (the auth trigger defaults to org zero,
+having no way to know better). `writeAudit()` gained a required
+`organizationId` — 40 call sites across 14 files, 37 via a small
+verified script, 3 system/cron sites by hand using the affected
+account's own org.
+
+`npm run typecheck` / `npm run build`: clean. `npm test`: 48/49, same
+single pre-existing failure as Phase 1 (confirmed unrelated again).
+**Owner must apply `20260723000032_multi_tenant_rpc_scoping.sql`**
+alongside `20260723000031` — no DB connection available in this dev
+environment.
+
+Next: Phase 2 (super-admin panel) and Phase 3 (subscription-gate
+enforcement) — not started.
+
+---
+
+## 2026-09-14 (2)
+
+**Multi-tenant subscription conversion kicked off — Phase 1 of 4 (schema +
+RLS foundation), migration NOT YET APPLIED to the live project.** Owner
+wants to sell Rush Tracker as a subscription product to other agencies,
+with fully isolated per-customer data and a manually-operated super-admin
+panel to activate/suspend access (no payment gateway). Requested as 3
+phases; became 4 after a finding surfaced before writing any SQL (see
+below).
+
+Before touching any code: read every migration, listed every table holding
+"our agency"-scoped data (17: `clients`, `client_memberships`,
+`ad_accounts`, `ad_account_assignments`, `limit_requests`,
+`ledger_entries`, `attachments`, `payment_requests`, `payments`,
+`adjustments`, `exchange_rates`, `employees`, `client_employees`,
+`notifications`, `usd_margin_entries`, `audit_logs`, plus `user_profiles`),
+and flagged three tables named in the request that don't actually exist
+yet (`team_members`, `invites`, `funding_platforms`/`usd_purchases`/
+`usd_treasury_ledger` — the latter a still-unbuilt, design-stage USD
+purchase-tracking idea) rather than guessing at them.
+
+Two decisions needed the owner's call before proceeding: (1) the new
+cross-org access flag would have collided in name with the existing
+per-organization `SUPER_ADMIN` role — resolved as `is_platform_admin`,
+a distinct name, distinct concept (bypasses the subscription gate
+entirely; the existing role stays subject to its own org's gate); (2)
+`app_settings` (Meta integration credentials) is currently one global
+value per key — resolved to scope it per-organization so each subscribing
+agency can eventually plug in their own Meta Business Portfolio (not yet
+built — tracked for Phase 1B).
+
+**The finding that added a phase**: RLS in this app has never been the
+real authorization layer — confirmed against this codebase's own
+documented security rules and 23 real server-fn files — because virtually
+every business read/write goes through `src/server/**/*.fns.ts` using the
+service-role key, which bypasses RLS entirely. Schema + RLS alone would
+give a working suspend/activate toggle and redirect, but would NOT stop
+two simultaneously-*active* organizations from seeing each other's data
+mixed together in every admin list/report, since none of those 23 files
+filter by anything today. Surfaced to the owner before writing SQL; they
+chose to fold "server-layer org scoping" in as an explicit Phase 1B ahead
+of the super-admin panel (Phase 2) and access-gate enforcement (Phase 3).
+
+**This pass (Phase 1 only)**: new `organizations` table, org zero seeded
+("xRush Agency", fixed id), `organization_id` added to all 17 tables above
+with a DB-level DEFAULT of org zero's id (safety net — every existing
+insert keeps working until Phase 1B makes each one explicit; a fixed
+literal was required anyway since Postgres doesn't allow subqueries in
+DEFAULT expressions), `user_profiles.is_platform_admin` granted to
+`mehedi.h.prantoz@gmail.com` (verified live: existing account, already
+this org's `SUPER_ADMIN`), three new RLS helper functions
+(`current_org_id()`, `is_org_active()`, `is_platform_admin()`) matching
+the existing `is_admin()`/`is_client_member()` style, and every existing
+SELECT policy on those 17 tables updated via `ALTER POLICY` to require an
+organization + active-subscription match, OR'd with the platform-admin
+bypass. `organizations` itself gets zero RLS policies for `authenticated`
+(same treatment as `app_settings` — service-role-only). Manual rollback
+documented as a comment block in the migration (Supabase's tooling has no
+down-migration mechanism, matching this repo's existing convention).
+`npm test`: 48/49 pass — the 1 failure is pre-existing (confirmed via
+`git log`, predates this session, unrelated: a stale `SENSITIVE_PERMISSIONS`
+test from the earlier Finance work). Typecheck/build unaffected (no app
+code touched in this phase). **Owner must apply
+`20260723000031_multi_tenant_foundation.sql`** via the SQL editor or
+`supabase db push` — no DB connection/CLI available in this dev
+environment (read-only service-role access was used beforehand to confirm
+the target account and that `organizations` didn't already exist).
+
+Next: Phase 1B (server-layer org scoping across the 23 `*.fns.ts` files —
+the real isolation layer), then Phase 2 (super-admin panel) and Phase 3
+(live subscription-gate enforcement) as originally scoped.
+
+---
+
 ## 2026-09-14
 
 **"Meta Due" summary added next to "Total Remaining", portal dashboard +

@@ -31,6 +31,8 @@ function user(over: Partial<SessionUser> = {}): SessionUser {
     permissions: [],
     memberships: [],
     activeClientId: null,
+    organizationId: 'org1',
+    isPlatformAdmin: false,
     ...over,
   }
 }

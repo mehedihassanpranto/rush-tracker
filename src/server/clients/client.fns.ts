@@ -25,12 +25,13 @@ export interface ClientListItem extends Client {
 
 export const listClientsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Array<ClientListItem>> => {
-    await requireAdmin(PERMISSIONS.CLIENTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.CLIENTS_VIEW)
     const admin = getSupabaseAdminClient()
 
     const { data: clients, error } = await admin
       .from('clients')
       .select('*')
+      .eq('organization_id', actor.organizationId)
       .order('created_at', { ascending: false })
     if (error) throw new Error(error.message)
 
@@ -38,6 +39,7 @@ export const listClientsFn = createServerFn({ method: 'GET' }).handler(
       .from('ad_account_assignments')
       .select('client_id')
       .eq('status', 'ACTIVE')
+      .eq('organization_id', actor.organizationId)
 
     const counts = new Map<string, number>()
     for (const row of activeAssignments ?? []) {
@@ -48,7 +50,9 @@ export const listClientsFn = createServerFn({ method: 'GET' }).handler(
     // Current due per client, ledger-derived (spec §35). Best-effort: if the
     // aggregate isn't available, the list still renders with 0 dues.
     const dueByClient = new Map<string, string>()
-    const { data: dueRows } = await admin.rpc('all_client_dues')
+    const { data: dueRows } = await admin.rpc('all_client_dues', {
+      p_organization_id: actor.organizationId,
+    })
     for (const r of (dueRows ?? []) as Array<{
       client_id: string
       current_due: string | number
@@ -72,12 +76,13 @@ export const listClientsFn = createServerFn({ method: 'GET' }).handler(
 export const getClientFn = createServerFn({ method: 'GET' })
   .validator(z.object({ id: z.uuid() }))
   .handler(async ({ data }): Promise<Client> => {
-    await requireAdmin(PERMISSIONS.CLIENTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.CLIENTS_VIEW)
     const admin = getSupabaseAdminClient()
     const { data: client, error } = await admin
       .from('clients')
       .select('*')
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .single()
     if (error) throw new Error(error.message)
     return client as Client
@@ -101,6 +106,7 @@ export const createClientFn = createServerFn({ method: 'POST' })
         usd_rate: data.usd_rate,
         status: data.status,
         segment: data.segment,
+        organization_id: actor.organizationId,
       })
       .select('*')
       .single()
@@ -108,6 +114,7 @@ export const createClientFn = createServerFn({ method: 'POST' })
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'CLIENT_CREATED',
       entityType: 'CLIENT',
       entityId: client.id,
@@ -126,7 +133,9 @@ export const updateClientFn = createServerFn({ method: 'POST' })
       .from('clients')
       .select('*')
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .single()
+    if (!before) throw new Error('Client not found')
 
     const { data: client, error } = await admin
       .from('clients')
@@ -141,12 +150,14 @@ export const updateClientFn = createServerFn({ method: 'POST' })
         segment: data.segment,
       })
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .select('*')
       .single()
     if (error) throw new Error(error.message)
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'CLIENT_UPDATED',
       entityType: 'CLIENT',
       entityId: data.id,
@@ -166,12 +177,14 @@ export const setClientStatusFn = createServerFn({ method: 'POST' })
       .from('clients')
       .update({ status: data.status })
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .select('*')
       .single()
     if (error) throw new Error(error.message)
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'CLIENT_STATUS_CHANGED',
       entityType: 'CLIENT',
       entityId: data.id,
@@ -198,6 +211,7 @@ export const deleteClientFn = createServerFn({ method: 'POST' })
       .from('clients')
       .select('id, client_code, name')
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .single()
     if (!client) throw new Error('Client not found')
 
@@ -262,6 +276,7 @@ export const deleteClientFn = createServerFn({ method: 'POST' })
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'CLIENT_DELETED',
       entityType: 'CLIENT',
       entityId: data.id,
@@ -280,13 +295,14 @@ export interface ClientUserRow {
 export const listClientUsersFn = createServerFn({ method: 'GET' })
   .validator(z.object({ client_id: z.uuid() }))
   .handler(async ({ data }): Promise<Array<ClientUserRow>> => {
-    await requireAdmin(PERMISSIONS.CLIENTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.CLIENTS_VIEW)
     const admin = getSupabaseAdminClient()
 
     const { data: memberships, error } = await admin
       .from('client_memberships')
       .select('user_id, status, profile:user_profiles(full_name)')
       .eq('client_id', data.client_id)
+      .eq('organization_id', actor.organizationId)
     if (error) throw new Error(error.message)
 
     const rows = (memberships ?? []) as unknown as Array<{
@@ -321,16 +337,29 @@ export const createClientUserFn = createServerFn({ method: 'POST' })
   .validator(clientUserCreateSchema)
   .handler(async ({ data }): Promise<{ user_id: string; reused_existing_user: boolean }> => {
     const actor = await requireAdmin(PERMISSIONS.CLIENTS_MANAGE)
+    const admin = getSupabaseAdminClient()
+
+    // Never trust that data.client_id belongs to the caller's own org —
+    // provisionClientLogin trusts whatever client_id it's given.
+    const { data: client } = await admin
+      .from('clients')
+      .select('id')
+      .eq('id', data.client_id)
+      .eq('organization_id', actor.organizationId)
+      .maybeSingle()
+    if (!client) throw new Error('Client not found')
 
     const { user_id: userId, reused_existing_user } = await provisionClientLogin({
       email: data.email,
       full_name: data.full_name,
       password: data.password,
       client_id: data.client_id,
+      organization_id: actor.organizationId,
     })
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'CLIENT_USER_CREATED',
       entityType: 'CLIENT',
       entityId: data.client_id,
@@ -354,6 +383,7 @@ export const updateClientUserProfileFn = createServerFn({ method: 'POST' })
       .select('user_id')
       .eq('user_id', data.user_id)
       .eq('client_id', data.client_id)
+      .eq('organization_id', actor.organizationId)
       .maybeSingle()
     if (!membership) {
       throw new Error('That login is not a member of this client')
@@ -363,6 +393,7 @@ export const updateClientUserProfileFn = createServerFn({ method: 'POST' })
       .from('user_profiles')
       .update({ full_name: data.full_name })
       .eq('user_id', data.user_id)
+      .eq('organization_id', actor.organizationId)
     if (profileErr) throw new Error(profileErr.message)
 
     const { error: authErr } = await admin.auth.admin.updateUserById(
@@ -373,6 +404,7 @@ export const updateClientUserProfileFn = createServerFn({ method: 'POST' })
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'CLIENT_USER_UPDATED',
       entityType: 'CLIENT',
       entityId: data.client_id,
@@ -395,6 +427,7 @@ export const setClientMembershipStatusFn = createServerFn({ method: 'POST' })
       .update({ status: data.status })
       .eq('user_id', data.user_id)
       .eq('client_id', data.client_id)
+      .eq('organization_id', actor.organizationId)
       .select('user_id')
       .maybeSingle()
     if (error) throw new Error(error.message)
@@ -404,6 +437,7 @@ export const setClientMembershipStatusFn = createServerFn({ method: 'POST' })
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'CLIENT_MEMBERSHIP_STATUS_CHANGED',
       entityType: 'CLIENT',
       entityId: data.client_id,

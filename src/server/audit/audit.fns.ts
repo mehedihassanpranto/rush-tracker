@@ -26,7 +26,7 @@ const auditFilterSchema = z.object({
 export const listAuditLogsFn = createServerFn({ method: 'GET' })
   .validator(auditFilterSchema)
   .handler(async ({ data }): Promise<Array<AuditLogRow>> => {
-    await requireAdmin(PERMISSIONS.AUDIT_LOGS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.AUDIT_LOGS_VIEW)
     const admin = getSupabaseAdminClient()
 
     let query = admin
@@ -34,6 +34,7 @@ export const listAuditLogsFn = createServerFn({ method: 'GET' })
       .select(
         'id, actor_user_id, action, entity_type, entity_id, created_at',
       )
+      .eq('organization_id', actor.organizationId)
       .order('created_at', { ascending: false })
       .limit(data.limit ?? 200)
     if (data.action) query = query.eq('action', data.action)
@@ -75,11 +76,12 @@ export const listAuditLogsFn = createServerFn({ method: 'GET' })
 /** Distinct action + entity-type values, for the filter dropdowns. */
 export const auditFilterOptionsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<{ actions: Array<string>; entityTypes: Array<string> }> => {
-    await requireAdmin(PERMISSIONS.AUDIT_LOGS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.AUDIT_LOGS_VIEW)
     const admin = getSupabaseAdminClient()
     const { data } = await admin
       .from('audit_logs')
       .select('action, entity_type')
+      .eq('organization_id', actor.organizationId)
       .order('created_at', { ascending: false })
       .limit(2000)
     const rows = (data ?? []) as Array<{ action: string; entity_type: string }>

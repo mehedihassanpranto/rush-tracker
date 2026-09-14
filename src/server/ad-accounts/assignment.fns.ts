@@ -16,12 +16,13 @@ import type {
 /** Active clients available as assignment/transfer targets. */
 export const listActiveClientsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Array<Pick<Client, 'id' | 'client_code' | 'name'>>> => {
-    await requireAdmin(PERMISSIONS.AD_ACCOUNTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_VIEW)
     const admin = getSupabaseAdminClient()
     const { data, error } = await admin
       .from('clients')
       .select('id, client_code, name')
       .eq('status', 'ACTIVE')
+      .eq('organization_id', actor.organizationId)
       .order('name')
     if (error) throw new Error(error.message)
     return data as Array<Pick<Client, 'id' | 'client_code' | 'name'>>
@@ -31,12 +32,13 @@ export const listActiveClientsFn = createServerFn({ method: 'GET' }).handler(
 /** Accounts with no active assignment (AVAILABLE/INACTIVE, not suspended). */
 export const listAssignableAccountsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Array<AdAccount>> => {
-    await requireAdmin(PERMISSIONS.AD_ACCOUNTS_ASSIGN)
+    const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_ASSIGN)
     const admin = getSupabaseAdminClient()
     const { data, error } = await admin
       .from('ad_accounts')
       .select('*')
       .eq('status', 'AVAILABLE')
+      .eq('organization_id', actor.organizationId)
       .order('name')
     if (error) throw new Error(error.message)
     return data as Array<AdAccount>
@@ -47,7 +49,7 @@ export const listAssignableAccountsFn = createServerFn({ method: 'GET' }).handle
 export const listClientAccountsFn = createServerFn({ method: 'GET' })
   .validator(z.object({ client_id: z.uuid() }))
   .handler(async ({ data }): Promise<Array<AdAccountWithClient>> => {
-    await requireAdmin(PERMISSIONS.CLIENTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.CLIENTS_VIEW)
     const admin = getSupabaseAdminClient()
     const { data: rows, error } = await admin
       .from('ad_account_assignments')
@@ -56,6 +58,7 @@ export const listClientAccountsFn = createServerFn({ method: 'GET' })
       )
       .eq('client_id', data.client_id)
       .eq('status', 'ACTIVE')
+      .eq('organization_id', actor.organizationId)
     if (error) throw new Error(error.message)
 
     // current_due is ledger-derived (spec §35), never a stored column — one
@@ -93,12 +96,13 @@ function rpcErrorMessage(message: string): string {
   return message.replace(/^.*?:\s*/, '').trim() || message
 }
 
-async function accountLabel(accountId: string): Promise<string> {
+async function accountLabel(accountId: string, organizationId: string): Promise<string> {
   const admin = getSupabaseAdminClient()
   const { data } = await admin
     .from('ad_accounts')
     .select('name, account_code')
     .eq('id', accountId)
+    .eq('organization_id', organizationId)
     .maybeSingle()
   const a = data as { name: string; account_code: string } | null
   return a ? `${a.name} (${a.account_code})` : 'an ad account'
@@ -107,6 +111,7 @@ async function accountLabel(accountId: string): Promise<string> {
 /** Client currently holding the account's active assignment, if any. */
 async function currentAssignedClientId(
   accountId: string,
+  organizationId: string,
 ): Promise<string | null> {
   const admin = getSupabaseAdminClient()
   const { data } = await admin
@@ -114,6 +119,7 @@ async function currentAssignedClientId(
     .select('client_id')
     .eq('ad_account_id', accountId)
     .eq('status', 'ACTIVE')
+    .eq('organization_id', organizationId)
     .maybeSingle()
   return (data as { client_id: string } | null)?.client_id ?? null
 }
@@ -127,6 +133,7 @@ export const assignAccountFn = createServerFn({ method: 'POST' })
       p_account_id: data.ad_account_id,
       p_client_id: data.client_id,
       p_actor: actor.id,
+      p_organization_id: actor.organizationId,
       p_notes: data.notes ?? null,
     })
     if (error) throw new Error(rpcErrorMessage(error.message))
@@ -134,7 +141,7 @@ export const assignAccountFn = createServerFn({ method: 'POST' })
     await notifyClientMembers(data.client_id, {
       type: 'ACCOUNT_ASSIGNED',
       title: 'Ad account assigned',
-      message: `${await accountLabel(data.ad_account_id)} is now assigned to you`,
+      message: `${await accountLabel(data.ad_account_id, actor.organizationId)} is now assigned to you`,
       entityType: 'AD_ACCOUNT',
       entityId: data.ad_account_id,
     })
@@ -148,11 +155,15 @@ export const releaseAccountFn = createServerFn({ method: 'POST' })
     const admin = getSupabaseAdminClient()
 
     // Capture the holding client before the RPC clears the active assignment.
-    const releasedClientId = await currentAssignedClientId(data.ad_account_id)
+    const releasedClientId = await currentAssignedClientId(
+      data.ad_account_id,
+      actor.organizationId,
+    )
 
     const { data: id, error } = await admin.rpc('release_ad_account', {
       p_account_id: data.ad_account_id,
       p_actor: actor.id,
+      p_organization_id: actor.organizationId,
       p_notes: data.notes ?? null,
     })
     if (error) throw new Error(rpcErrorMessage(error.message))
@@ -163,6 +174,7 @@ export const releaseAccountFn = createServerFn({ method: 'POST' })
         title: 'Ad account released',
         message: `${await accountLabel(
           data.ad_account_id,
+          actor.organizationId,
         )} is no longer assigned to you`,
         entityType: 'AD_ACCOUNT',
         entityId: data.ad_account_id,
@@ -178,17 +190,21 @@ export const transferAccountFn = createServerFn({ method: 'POST' })
     const admin = getSupabaseAdminClient()
 
     // Capture the losing client before the RPC re-points the assignment.
-    const fromClientId = await currentAssignedClientId(data.ad_account_id)
+    const fromClientId = await currentAssignedClientId(
+      data.ad_account_id,
+      actor.organizationId,
+    )
 
     const { data: id, error } = await admin.rpc('transfer_ad_account', {
       p_account_id: data.ad_account_id,
       p_to_client_id: data.to_client_id,
       p_actor: actor.id,
+      p_organization_id: actor.organizationId,
       p_notes: data.notes ?? null,
     })
     if (error) throw new Error(rpcErrorMessage(error.message))
 
-    const label = await accountLabel(data.ad_account_id)
+    const label = await accountLabel(data.ad_account_id, actor.organizationId)
     if (fromClientId && fromClientId !== data.to_client_id) {
       await notifyClientMembers(fromClientId, {
         type: 'ACCOUNT_TRANSFERRED',

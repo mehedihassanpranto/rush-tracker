@@ -24,6 +24,7 @@ type ActiveAssignmentRow = {
 
 async function currentClientMap(
   accountIds: Array<string>,
+  organizationId: string,
 ): Promise<Map<string, AdAccountClient>> {
   const map = new Map<string, AdAccountClient>()
   if (accountIds.length === 0) return map
@@ -32,6 +33,7 @@ async function currentClientMap(
     .from('ad_account_assignments')
     .select('ad_account_id, client:clients(id, client_code, name, usd_rate)')
     .eq('status', 'ACTIVE')
+    .eq('organization_id', organizationId)
     .in('ad_account_id', accountIds)
 
   const rows = (data ?? []) as unknown as Array<ActiveAssignmentRow>
@@ -44,7 +46,9 @@ async function currentClientMap(
   // cheap single-client client_financials() RPC instead of paying for the
   // bulk all_client_dues() aggregate just to resolve one row; the list
   // page's many-clients call still uses the bulk RPC (one round trip either
-  // way, never O(accounts) due lookups).
+  // way, never O(accounts) due lookups). client_financials() takes an
+  // explicit client_id already scoped to this org via the
+  // ad_account_assignments filter above, so it needs no org param itself.
   const dueByClient = new Map<string, string>()
   if (distinctClientIds.length === 1) {
     const { data: financials } = await admin.rpc('client_financials', {
@@ -55,7 +59,9 @@ async function currentClientMap(
     )?.[0]?.current_due
     dueByClient.set(distinctClientIds[0], String(due ?? '0'))
   } else if (distinctClientIds.length > 1) {
-    const { data: dueRows } = await admin.rpc('all_client_dues')
+    const { data: dueRows } = await admin.rpc('all_client_dues', {
+      p_organization_id: organizationId,
+    })
     for (const r of (dueRows ?? []) as Array<{
       client_id: string
       current_due: string | number
@@ -77,16 +83,20 @@ async function currentClientMap(
 
 export const listAdAccountsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Array<AdAccountWithClient>> => {
-    await requireAdmin(PERMISSIONS.AD_ACCOUNTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_VIEW)
     const admin = getSupabaseAdminClient()
     const { data, error } = await admin
       .from('ad_accounts')
       .select('*')
+      .eq('organization_id', actor.organizationId)
       .order('created_at', { ascending: false })
     if (error) throw new Error(error.message)
 
     const accounts = data as Array<AdAccount>
-    const clients = await currentClientMap(accounts.map((a) => a.id))
+    const clients = await currentClientMap(
+      accounts.map((a) => a.id),
+      actor.organizationId,
+    )
     return accounts.map((a) => ({
       ...a,
       current_client: clients.get(a.id) ?? null,
@@ -97,22 +107,23 @@ export const listAdAccountsFn = createServerFn({ method: 'GET' }).handler(
 export const getAdAccountFn = createServerFn({ method: 'GET' })
   .validator(z.object({ id: z.uuid() }))
   .handler(async ({ data }): Promise<AdAccountWithClient> => {
-    await requireAdmin(PERMISSIONS.AD_ACCOUNTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_VIEW)
     const admin = getSupabaseAdminClient()
     const { data: account, error } = await admin
       .from('ad_accounts')
       .select('*')
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .single()
     if (error) throw new Error(error.message)
-    const clients = await currentClientMap([data.id])
+    const clients = await currentClientMap([data.id], actor.organizationId)
     return { ...(account as AdAccount), current_client: clients.get(data.id) ?? null }
   })
 
 export const listAssignmentHistoryFn = createServerFn({ method: 'GET' })
   .validator(z.object({ ad_account_id: z.uuid() }))
   .handler(async ({ data }): Promise<Array<AssignmentWithRefs>> => {
-    await requireAdmin(PERMISSIONS.AD_ACCOUNTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_VIEW)
     const admin = getSupabaseAdminClient()
     const { data: rows, error } = await admin
       .from('ad_account_assignments')
@@ -120,6 +131,7 @@ export const listAssignmentHistoryFn = createServerFn({ method: 'GET' })
         'id, ad_account_id, client_id, opening_limit_usd, closing_limit_usd, assigned_at, released_at, status, notes, created_at, client:clients(id, client_code, name)',
       )
       .eq('ad_account_id', data.ad_account_id)
+      .eq('organization_id', actor.organizationId)
       .order('assigned_at', { ascending: false })
     if (error) throw new Error(error.message)
     return (rows ?? []).map((r) => ({
@@ -143,6 +155,7 @@ export const createAdAccountFn = createServerFn({ method: 'POST' })
         usd_rate: data.usd_rate,
         threshold_usd: data.threshold_usd,
         status: data.status,
+        organization_id: actor.organizationId,
       })
       .select('*')
       .single()
@@ -150,6 +163,7 @@ export const createAdAccountFn = createServerFn({ method: 'POST' })
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'AD_ACCOUNT_CREATED',
       entityType: 'AD_ACCOUNT',
       entityId: account.id,
@@ -168,7 +182,9 @@ export const updateAdAccountFn = createServerFn({ method: 'POST' })
       .from('ad_accounts')
       .select('*')
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .single()
+    if (!before) throw new Error('Ad account not found')
 
     const { data: account, error } = await admin
       .from('ad_accounts')
@@ -180,12 +196,14 @@ export const updateAdAccountFn = createServerFn({ method: 'POST' })
         threshold_usd: data.threshold_usd,
       })
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .select('*')
       .single()
     if (error) throw new Error(error.message)
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'AD_ACCOUNT_UPDATED',
       entityType: 'AD_ACCOUNT',
       entityId: data.id,
@@ -205,6 +223,7 @@ export const renameAdAccountFn = createServerFn({ method: 'POST' })
       .from('ad_accounts')
       .select('name')
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .single()
 
     // Only `name` changes — id and account_code stay stable so all historical
@@ -213,12 +232,14 @@ export const renameAdAccountFn = createServerFn({ method: 'POST' })
       .from('ad_accounts')
       .update({ name: data.name })
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .select('*')
       .single()
     if (error) throw new Error(error.message)
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'AD_ACCOUNT_RENAMED',
       entityType: 'AD_ACCOUNT',
       entityId: data.id,
@@ -238,12 +259,14 @@ export const setAdAccountStatusFn = createServerFn({ method: 'POST' })
       .from('ad_accounts')
       .update({ status: data.status })
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .select('*')
       .single()
     if (error) throw new Error(error.message)
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'AD_ACCOUNT_STATUS_CHANGED',
       entityType: 'AD_ACCOUNT',
       entityId: data.id,

@@ -214,6 +214,7 @@ export const createLimitRequestFn = createServerFn({ method: 'POST' })
         total_cost_bdt: totalCost,
         amount_paid_bdt: amountPaid,
         due_balance_bdt: dueBalance,
+        organization_id: user.organizationId,
       })
       .select('*')
       .single()
@@ -245,6 +246,7 @@ export const createLimitRequestFn = createServerFn({ method: 'POST' })
           mime_type: data.mime_type,
           file_size: stored.file_size,
           uploaded_by: user.id,
+          organization_id: user.organizationId,
         })
         if (attErr) throw new Error(attErr.message)
       } catch (err) {
@@ -255,6 +257,7 @@ export const createLimitRequestFn = createServerFn({ method: 'POST' })
 
     await writeAudit({
       actorUserId: user.id,
+      organizationId: user.organizationId,
       action: 'LIMIT_REQUEST_CREATED',
       entityType: 'LIMIT_REQUEST',
       entityId: created.id,
@@ -273,6 +276,7 @@ export const createLimitRequestFn = createServerFn({ method: 'POST' })
       )} requested`,
       entityType: 'LIMIT_REQUEST',
       entityId: created.id,
+      organizationId: user.organizationId,
     })
 
     await sendTelegramMessage(
@@ -321,6 +325,7 @@ export const cancelMyLimitRequestFn = createServerFn({ method: 'POST' })
 
     await writeAudit({
       actorUserId: user.id,
+      organizationId: user.organizationId,
       action: 'LIMIT_REQUEST_CANCELLED',
       entityType: 'LIMIT_REQUEST',
       entityId: data.id,
@@ -368,13 +373,14 @@ async function proofPathForRequest(requestId: string): Promise<string | null> {
 export const listLimitRequestsFn = createServerFn({ method: 'GET' })
   .validator(limitRequestListSchema)
   .handler(async ({ data }): Promise<Array<LimitRequestWithRefs>> => {
-    await requireAdmin(PERMISSIONS.LIMIT_REQUESTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.LIMIT_REQUESTS_VIEW)
     const admin = getSupabaseAdminClient()
     let query = admin
       .from('limit_requests')
       .select(
         '*, client:clients(id, client_code, name), ad_account:ad_accounts(id, account_code, name)',
       )
+      .eq('organization_id', actor.organizationId)
       .order('created_at', { ascending: false })
     if (data.status !== 'ALL') query = query.eq('status', data.status)
 
@@ -393,7 +399,7 @@ export const listLimitRequestsFn = createServerFn({ method: 'GET' })
 export const listAdAccountUsageFn = createServerFn({ method: 'GET' })
   .validator(z.object({ ad_account_id: z.uuid() }))
   .handler(async ({ data }): Promise<Array<LimitRequestWithRefs>> => {
-    await requireAdmin(PERMISSIONS.LIMIT_REQUESTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.LIMIT_REQUESTS_VIEW)
     const admin = getSupabaseAdminClient()
     const { data: rows, error } = await admin
       .from('limit_requests')
@@ -402,6 +408,7 @@ export const listAdAccountUsageFn = createServerFn({ method: 'GET' })
       )
       .eq('ad_account_id', data.ad_account_id)
       .eq('status', 'APPROVED')
+      .eq('organization_id', actor.organizationId)
       .order('approved_at', { ascending: false })
     if (error) throw new Error(error.message)
     return rows as unknown as Array<LimitRequestWithRefs>
@@ -415,7 +422,7 @@ export const listAdAccountUsageFn = createServerFn({ method: 'GET' })
 export const listClientLimitRequestsFn = createServerFn({ method: 'GET' })
   .validator(z.object({ client_id: z.uuid() }))
   .handler(async ({ data }): Promise<Array<LimitRequestWithRefs>> => {
-    await requireAdmin(PERMISSIONS.LIMIT_REQUESTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.LIMIT_REQUESTS_VIEW)
     const admin = getSupabaseAdminClient()
     const { data: rows, error } = await admin
       .from('limit_requests')
@@ -424,6 +431,7 @@ export const listClientLimitRequestsFn = createServerFn({ method: 'GET' })
       )
       .eq('client_id', data.client_id)
       .eq('status', 'APPROVED')
+      .eq('organization_id', actor.organizationId)
       .order('approved_at', { ascending: false })
     if (error) throw new Error(error.message)
     return rows as unknown as Array<LimitRequestWithRefs>
@@ -432,7 +440,7 @@ export const listClientLimitRequestsFn = createServerFn({ method: 'GET' })
 export const getLimitRequestDetailFn = createServerFn({ method: 'GET' })
   .validator(limitRequestIdSchema)
   .handler(async ({ data }): Promise<LimitRequestDetail> => {
-    await requireAdmin(PERMISSIONS.LIMIT_REQUESTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.LIMIT_REQUESTS_VIEW)
     const admin = getSupabaseAdminClient()
 
     const { data: req, error } = await admin
@@ -441,6 +449,7 @@ export const getLimitRequestDetailFn = createServerFn({ method: 'GET' })
         '*, client:clients(id, client_code, name), ad_account:ad_accounts(id, account_code, name)',
       )
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .single()
     if (error) throw new Error(error.message)
     const request = req as unknown as LimitRequestWithRefs
@@ -483,6 +492,7 @@ export const uploadLimitProofFn = createServerFn({ method: 'POST' })
       .from('limit_requests')
       .select('status')
       .eq('id', data.request_id)
+      .eq('organization_id', actor.organizationId)
       .single()
     if (!req) throw new Error('Request not found')
     if ((req as { status: string }).status !== 'PENDING') {
@@ -504,6 +514,7 @@ export const uploadLimitProofFn = createServerFn({ method: 'POST' })
       mime_type: data.mime_type,
       file_size: stored.file_size,
       uploaded_by: actor.id,
+      organization_id: actor.organizationId,
     })
     if (error) throw new Error(error.message)
     return { ok: true }
@@ -512,7 +523,15 @@ export const uploadLimitProofFn = createServerFn({ method: 'POST' })
 export const getLimitProofUrlFn = createServerFn({ method: 'POST' })
   .validator(limitRequestIdSchema)
   .handler(async ({ data }): Promise<{ url: string | null }> => {
-    await requireAdmin(PERMISSIONS.LIMIT_REQUESTS_VIEW)
+    const actor = await requireAdmin(PERMISSIONS.LIMIT_REQUESTS_VIEW)
+    const admin = getSupabaseAdminClient()
+    const { data: req } = await admin
+      .from('limit_requests')
+      .select('id')
+      .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
+      .maybeSingle()
+    if (!req) throw new Error('Request not found')
     const path = await proofPathForRequest(data.id)
     if (!path) return { url: null }
     return { url: await signProofUrl(path) }
@@ -529,6 +548,7 @@ export const approveLimitRequestFn = createServerFn({ method: 'POST' })
       p_approved_amount: data.approved_amount_usd,
       p_approved_rate: data.approved_usd_rate,
       p_actor: actor.id,
+      p_organization_id: actor.organizationId,
       p_admin_note: data.admin_note ?? null,
     })
     if (error) throw new Error(friendlyRpcError(error.message))
@@ -563,6 +583,7 @@ export const approveLimitRequestFn = createServerFn({ method: 'POST' })
           mime_type: (att as { mime_type: string | null } | null)?.mime_type,
           file_size: (att as { file_size: number | null } | null)?.file_size,
           uploaded_by: actor.id,
+          organization_id: actor.organizationId,
         })
       }
     } catch (err) {
@@ -620,6 +641,7 @@ export const rejectLimitRequestFn = createServerFn({ method: 'POST' })
       })
       .eq('id', data.id)
       .eq('status', 'PENDING')
+      .eq('organization_id', actor.organizationId)
       .select('id, client_id, request_number')
     if (error) throw new Error(error.message)
     if (!updated || updated.length === 0) {
@@ -628,6 +650,7 @@ export const rejectLimitRequestFn = createServerFn({ method: 'POST' })
 
     await writeAudit({
       actorUserId: actor.id,
+      organizationId: actor.organizationId,
       action: 'LIMIT_REQUEST_REJECTED',
       entityType: 'LIMIT_REQUEST',
       entityId: data.id,
@@ -656,6 +679,7 @@ export const rebaseLimitRequestFn = createServerFn({ method: 'POST' })
     const { error } = await admin.rpc('rebase_limit_request', {
       p_request_id: data.id,
       p_actor: actor.id,
+      p_organization_id: actor.organizationId,
     })
     if (error) throw new Error(friendlyRpcError(error.message))
     return { ok: true }
