@@ -2077,9 +2077,160 @@ bug fixes, and anything else that isn't a whole new named feature.
   (alongside `20260723000031` from Phase 1, if not already applied) via
   the SQL editor or `supabase db push` — same no-DB-connection constraint
   as every other pending migration in this project.
-  Next: Phase 2 (super-admin panel to list organizations and
-  activate/suspend them) and Phase 3 (live subscription-gate enforcement,
-  `/subscription-suspended` page) — not started.
+- **Multi-tenant subscription conversion — Phase 2 (super-admin panel) +
+  Phase 3 (live subscription gate): done, pending owner review, no new
+  migration** (both phases build entirely on the `organizations` table +
+  `is_platform_admin` flag from Phase 1). Verified live in a real browser
+  against the production database — not just typecheck/build — using the
+  same temporary Playwright + magic-link session technique documented
+  elsewhere in this file, installed and removed again after (confirmed
+  zero `package.json`/lockfile diff).
+  **Phase 2**: new `/admin/organizations` route, gated to
+  `user.isPlatformAdmin` only (redirects everyone else to `/admin`) — a
+  new `requirePlatformAdmin()` guard in `guards.server.ts`, distinct from
+  `requireAdmin()`, since this is the one place in the app that
+  deliberately sees and edits across every organization rather than just
+  the caller's own. `src/server/organizations/organization.fns.ts`:
+  `listOrganizationsFn` (all orgs, client-side search/filter — the list is
+  manually curated and small by design), `updateOrganizationFn`
+  (name/plan/notes — mirrors `updateClientFn`), and
+  `updateOrganizationSubscriptionStatusFn` (the activate/suspend toggle,
+  stamps/clears `suspended_at` — mirrors `setClientStatusFn`'s separate-
+  from-general-edit pattern). Both writes audited
+  (`ORGANIZATION_UPDATED` / `ORGANIZATION_SUBSCRIPTION_STATUS_CHANGED`).
+  `updateOrganizationSubscriptionStatusFn` refuses to let a platform admin
+  suspend their OWN organization — they'd personally still bypass the
+  gate either way, but every other real user in that org would be locked
+  out; a realistic one-click mistake worth blocking outright rather than
+  just documenting. UI: `EditOrganizationDialog`
+  (`src/components/admin/organizations/`) follows the employee dialog's
+  exact RHF+Zod pattern; the list page reuses `StatusBadge` directly (no
+  new variant needed — `ACTIVE`/`SUSPENDED`/`CANCELLED` were already
+  defined with the right emerald/amber/zinc colors, DB values just
+  uppercased at the display call site since they're stored lowercase).
+  "Organizations" added to `ADMIN_NAV` behind a new `platformAdminOnly`
+  flag on `NavItem`, filtered out in `admin/route.tsx` for everyone else
+  (an unfiltered nav array has no other gating mechanism in this app, so
+  this is a new, minimal field, not a new pattern).
+  **Real bug found and fixed during live verification**: org zero's
+  hand-picked sentinel id (`00000000-0000-0000-0000-000000000001`, chosen
+  in the Phase 1 migration) is not a real RFC 4122 UUID — its version
+  nibble is `0`, not `1`–`8` — so Zod v4's strict `z.uuid()` rejected it
+  outright the moment it was submitted as form input (`Invalid UUID`),
+  which would have permanently blocked editing or toggling org zero
+  specifically (any *other* organization, with a real
+  `gen_random_uuid()`-generated id, would have been fine). Fixed with a
+  shape-only regex validator (`src/schemas/organization.ts`) for
+  organization ids specifically, accepting the general 8-4-4-4-12 hex
+  grouping without enforcing the version/variant nibbles — every other
+  `z.uuid()` usage in the app is untouched, since every other entity's id
+  is a real `gen_random_uuid()` value.
+  **Phase 3**: `SessionUser` gained `organizationSubscriptionStatus`,
+  fetched fresh on every session load (`auth.fns.ts`'s `loadSessionUser()`)
+  via the service-role client specifically — `organizations` has zero RLS
+  policies for `authenticated` (Phase 1's design), so even a user's own
+  org row isn't reachable through the RLS-scoped client `loadSessionUser`
+  otherwise uses. Two enforcement layers, matching this app's own stated
+  architecture (route guards are UX only; server fns are the real
+  boundary): (1) `guards.server.ts`'s shared `loadUserOrThrow()` — the
+  function every `requireUser()`/`requireAdmin()`/`requireClientMembership()`
+  call already goes through — now throws a new `AuthError` code
+  (`SUBSCRIPTION_SUSPENDED`) when `!user.isPlatformAdmin &&
+  organizationSubscriptionStatus !== 'active'`, so flipping the toggle
+  blocks every protected server fn immediately, not on next login;
+  `requirePlatformAdmin()` deliberately does NOT go through this check,
+  by design ("Super admins bypass this check entirely" applies everywhere,
+  not just on the organizations panel's own route). (2) `admin/route.tsx`
+  and `portal/route.tsx`'s `beforeLoad` — the same UX-redirect pattern
+  both already use for role mismatches — redirect to
+  `/subscription-suspended` under the identical condition, so a suspended
+  org's user gets a clear page instead of a wall of failed-request toasts.
+  New `/subscription-suspended` route: authenticated-only (redirects to
+  `/login` with no session), and — the inverse case — redirects an
+  active-org or platform-admin user who somehow lands here straight back
+  to their normal home, rather than showing a page that doesn't apply to
+  them. Loads no app data at all (only calls `logoutFn`). Message names
+  "xRush Agency" (org zero) as the contact, matching the "[agency name]"
+  the owner's original request specified — this is the SaaS vendor to
+  contact, not the suspended org's own name.
+  **Live verification, both phases together, against the real production
+  database** (org zero is the only real organization, `active` today —
+  every check below had to be done without ever actually leaving it
+  suspended): logged in as the real platform-admin account via the
+  established magic-link session-injection technique; confirmed the
+  dashboard loads with zero regression (proving the new per-session
+  organization-status query doesn't break existing sessions);
+  `/admin/organizations` renders correctly, "Organizations" appears in
+  the nav for the platform admin; the self-suspend guard was exercised
+  for real (clicking "Suspend" on org zero) and correctly blocked with
+  the exact error message, confirmed via a direct DB read that
+  `subscription_status` never changed and — critically — that no
+  `ORGANIZATION_SUBSCRIPTION_STATUS_CHANGED` audit row was written for
+  the blocked attempt (the guard throws before the audit call is ever
+  reached); the edit dialog was round-tripped for real (set `plan` to a
+  test value, saved, reverted to blank, saved again), confirmed via a
+  direct DB read that the final state exactly matches the original
+  (`plan: null`) and via the `audit_logs` table that both
+  `ORGANIZATION_UPDATED` rows are present with the correct old/new
+  values in the correct order. Zero browser console errors throughout.
+  `npm run typecheck` / `npm run build`: clean. `npm test`: 48/49, same
+  single pre-existing failure as every other pass today (confirmed
+  unrelated again).
+  All 4 phases of the multi-tenant subscription conversion are now done,
+  pending the owner's final review.
+- **CRITICAL FIX — a suspended organization's users could never reach
+  `/subscription-suspended`: migration `20260723000033`, confirmed applied
+  to the live project.** Found by a post-implementation review pass that
+  tested the one path Phase 3's own verification had missed: an *actually
+  suspended* organization (the earlier pass only proved an *active* org
+  isn't blocked). Created a throwaway organization + user, suspended it,
+  and requested `/portal` — it redirected to **`/login`**, not
+  `/subscription-suspended`.
+  **Root cause**: `20260723000031`'s `user_profiles_select` RLS policy
+  gates every row — including the caller's own — on
+  `is_org_active(organization_id)`. But `loadSessionUser()` (`auth.fns.ts`)
+  reads exactly that row, through the RLS-scoped client, to build
+  `SessionUser` at all. Suspended org → own profile row invisible →
+  `loadSessionUser()` returns null → `context.user` is null → the route
+  guards read that as "not signed in" and bounce to `/login`;
+  `/subscription-suspended` did the same (it requires a session too), and
+  logging back in failed with "This account is inactive or not fully
+  provisioned" (same `loadSessionUser()` call). Net effect: a suspended
+  organization's users were indistinguishable from logged-out ones, and
+  the entire Phase 3 page was unreachable dead code for the exact case it
+  exists for. **This interaction was actually predicted in writing during
+  Phase 1** ("if the user's org is SUSPENDED... it would look exactly like
+  'invalid session/logged out'") and then not carried through into Phase
+  3 — a flagged risk that was never closed, which is why the review pass
+  tested it specifically.
+  **Fix**: the caller's own row is now always readable regardless of
+  subscription status (it is their own identity row — no tenant isolation
+  is lost); reading *other* users' rows still requires both an
+  organization match and an active subscription, exactly as before. The
+  gate itself is untouched — it lives in `guards.server.ts` and the route
+  guards, never in hiding a user's identity from themselves.
+  **Verified end-to-end after the fix**, against a real suspended
+  organization: own profile readable again; CLIENT-role user at `/portal`
+  → `/subscription-suspended`; ADMIN-role user at `/admin` →
+  `/subscription-suspended`; `/admin/organizations` → likewise; the
+  suspended page itself renders with the right copy ("Subscription
+  inactive" / "Contact xRush Agency to reactivate access." / "Sign out").
+  The server-side layer (`loadUserOrThrow()`'s `SUBSCRIPTION_SUSPENDED`
+  throw) is verified by inspection plus the empirically-confirmed fact
+  that `organizationSubscriptionStatus` is correctly `'suspended'` for
+  that user — it is the same field, read from the same
+  `getCurrentUserFn()` call, that made the route redirect fire. Throwaway
+  organization and user were both deleted afterward; confirmed org zero is
+  the only remaining organization, still `active`, with no orphaned
+  profiles.
+  Also hardened while there: `loadSessionUser()`'s organization lookup now
+  logs its error explicitly. `organization_id` is a NOT NULL FK, so the
+  row always exists — a null result means the *query* failed, and the
+  behavior is deliberately fail-closed (treated as suspended), which means
+  a transient DB blip would bounce an entire organization to
+  `/subscription-suspended`. Logged loudly so that reads as an outage
+  rather than a subscription problem. **Flagged, not changed**: whether
+  fail-closed is the right tradeoff there is the owner's call.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

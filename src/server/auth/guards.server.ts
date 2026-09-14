@@ -17,7 +17,7 @@ import type { SessionMembership, SessionUser } from '@/lib/auth/types'
 
 export class AuthError extends Error {
   constructor(
-    public readonly code: 'UNAUTHENTICATED' | 'FORBIDDEN',
+    public readonly code: 'UNAUTHENTICATED' | 'FORBIDDEN' | 'SUBSCRIPTION_SUSPENDED',
     message: string,
   ) {
     super(message)
@@ -29,12 +29,41 @@ async function loadUserOrThrow(): Promise<SessionUser> {
   // getCurrentUserFn re-validates the JWT via supabase.auth.getUser().
   const user = await getCurrentUserFn()
   if (!user) throw new AuthError('UNAUTHENTICATED', 'Not signed in')
+  // Multi-tenant subscription gate (Phase 3): the actual enforcement point
+  // for "flipping the toggle takes effect immediately" — organizationSubscriptionStatus
+  // is fetched fresh on every session load (auth.fns.ts), never from a
+  // cached JWT claim. This is the real security boundary; the admin/portal
+  // route guards' redirect to /subscription-suspended is UX only, same as
+  // every other route-level check in this app. Platform admins bypass
+  // entirely, regardless of their own organization's status.
+  if (!user.isPlatformAdmin && user.organizationSubscriptionStatus !== 'active') {
+    throw new AuthError('SUBSCRIPTION_SUSPENDED', 'Your organization’s subscription is not active')
+  }
   return user
 }
 
 /** Any authenticated, ACTIVE user. */
 export async function requireUser(): Promise<SessionUser> {
   return loadUserOrThrow()
+}
+
+/**
+ * Cross-organization platform access (Phase 2's organizations panel and any
+ * future platform-level tooling) — distinct from requireAdmin(), which is
+ * scoped to the caller's own organization. Deliberately does NOT go through
+ * loadUserOrThrow()'s subscription-suspended check by re-deriving it here:
+ * a platform admin must always reach this, even if — hypothetically — their
+ * own organization's subscription were ever something other than active,
+ * since they're the one who manages every organization's subscription
+ * status in the first place.
+ */
+export async function requirePlatformAdmin(): Promise<SessionUser> {
+  const user = await getCurrentUserFn()
+  if (!user) throw new AuthError('UNAUTHENTICATED', 'Not signed in')
+  if (!user.isPlatformAdmin) {
+    throw new AuthError('FORBIDDEN', 'Platform admin access required')
+  }
+  return user
 }
 
 /** ADMIN or SUPER_ADMIN, optionally holding a specific permission. */

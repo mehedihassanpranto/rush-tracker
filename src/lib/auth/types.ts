@@ -49,6 +49,11 @@ export interface SessionUser {
    * admin bypasses organization scoping entirely; guards and server fns
    * must check this before applying the normal organization_id filter. */
   isPlatformAdmin: boolean
+  /** organizationId's live subscription_status, fetched fresh on every
+   * session load (never cached in a JWT claim — see guards.server.ts and
+   * the admin/portal route guards, both of which gate on this). A
+   * platform admin bypasses this entirely regardless of its value. */
+  organizationSubscriptionStatus: 'active' | 'suspended' | 'cancelled'
 }
 
 export function homePathForUser(user: Pick<SessionUser, 'role'>): string {

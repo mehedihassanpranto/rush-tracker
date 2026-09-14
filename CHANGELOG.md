@@ -6,6 +6,98 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-09-14 (6)
+
+**Review pass over Phases 2–3 — found and fixed a critical bug that made
+the whole subscription gate's user-facing half dead code.** Migration
+`20260723000033`, applied and verified live.
+
+The Phase 3 verification had only proved that an *active* organization
+isn't blocked; it never tested an *actually suspended* one. Testing that
+path (throwaway organization + user, suspended, then requesting `/portal`)
+showed it redirecting to **`/login`**, not `/subscription-suspended`.
+
+Root cause: Phase 1's `user_profiles_select` RLS policy gates every row —
+including the caller's own — on `is_org_active()`. But the session loader
+reads exactly that row to build the session at all. So a suspended org's
+user couldn't read their own profile → no session → treated as logged
+out. They could never see the suspended page, and logging back in failed
+with "account is inactive or not fully provisioned". Notably this exact
+interaction was written down as a risk during Phase 1 and then never
+closed in Phase 3 — which is why this pass went looking for it.
+
+Fix: a user's own profile row is always readable regardless of
+subscription status (it's their own identity row — no isolation lost);
+other users' rows still require an org match *and* an active
+subscription. The gate itself is unchanged — it lives in the server-fn
+guards and the route guards.
+
+Verified after the fix against a real suspended org: CLIENT user →
+`/subscription-suspended`, ADMIN user → `/subscription-suspended`,
+`/admin/organizations` → same, and the suspended page renders with the
+correct copy. Throwaway org and user deleted; org zero confirmed
+untouched and still active.
+
+Also hardened: the session loader's organization lookup now logs query
+errors explicitly. That lookup fails closed (a failed query is treated as
+suspended), so a transient DB blip would bounce a whole organization to
+the suspended page — logged loudly so it reads as an outage, not a
+billing problem. Whether fail-closed is the right tradeoff is flagged for
+the owner rather than changed unilaterally.
+
+---
+
+## 2026-09-14 (5)
+
+**Multi-tenant subscription conversion — Phase 2 (super-admin panel) and
+Phase 3 (live subscription gate). All 4 phases now done.**
+
+Phase 2: new `/admin/organizations` page, platform-admin only (a new
+`requirePlatformAdmin()` guard, distinct from `requireAdmin()` — this is
+the one screen that deliberately sees every organization, not just the
+caller's own). List/search/filter, an edit dialog for name/plan/notes,
+and an activate/suspend toggle that stamps/clears `suspended_at` and
+refuses to let a platform admin suspend their own organization (they'd
+personally still bypass the gate, but everyone else in that org would be
+locked out — a realistic mistake worth blocking). Both actions audited.
+"Organizations" added to the admin nav behind a new `platformAdminOnly`
+flag, filtered out for everyone else.
+
+Phase 3: `SessionUser` gained `organizationSubscriptionStatus`, fetched
+fresh on every session load via the service-role client (organizations
+has no RLS policies for regular users). Enforced in two places: the
+shared guard function every protected server fn already goes through
+(so flipping the toggle blocks access immediately, not on next login),
+and the admin/portal route guards' `beforeLoad` (same UX-redirect pattern
+they already use for role mismatches), sending a suspended org's user to
+a new `/subscription-suspended` page. Platform admins bypass both
+checks everywhere, not just on the organizations panel itself.
+
+**Real bug found and fixed during verification**: org zero's hand-picked
+id (`00000000-0000-0000-0000-000000000001`, chosen back in the Phase 1
+migration) isn't a real RFC 4122 UUID — Zod v4's strict `z.uuid()`
+rejected it the moment it was submitted as form input, which would have
+permanently blocked editing or suspending org zero specifically (any
+other, normally-generated organization id would have been fine). Fixed
+with a shape-only regex validator scoped to organization ids alone;
+nothing else in the app was affected.
+
+**Verified live in a real browser against the production database**, not
+just typecheck/build — logged in as the real platform-admin account via
+the same magic-link session-injection technique used in earlier sessions
+(Playwright installed and removed again after, zero `package.json`/
+lockfile diff). Confirmed: dashboard loads with no regression, the
+Organizations page renders real data correctly, the self-suspend guard
+actually blocks the action (verified via a direct DB read that nothing
+changed and that no audit row was written for the blocked attempt), and
+the edit dialog round-trips correctly (set a test value, reverted,
+confirmed via direct DB read the final state exactly matches the
+original, and via `audit_logs` that both changes are recorded with
+correct old/new values). Zero console errors. `npm test`: 48/49, same
+single pre-existing unrelated failure as every other pass today.
+
+---
+
 ## 2026-09-14 (4)
 
 **Migrations `20260723000031` and `20260723000032` (multi-tenant Phase 1 +

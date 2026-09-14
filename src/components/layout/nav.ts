@@ -10,6 +10,7 @@ import {
   Megaphone,
   ScrollText,
   Settings,
+  Shield,
   SlidersHorizontal,
   TrendingUp,
   UserCog,
@@ -26,6 +27,10 @@ export interface NavItem {
   to?: string
   /** Development phase that delivers this screen (for disabled items). */
   phase?: number
+  /** Only shown to user.isPlatformAdmin — filtered out for everyone else
+   * in admin/route.tsx (distinct from the per-org ADMIN/SUPER_ADMIN role;
+   * see the multi-tenant migration's notes). */
+  platformAdminOnly?: boolean
 }
 
 /** Admin navigation (spec §61). Items unlock as their phase is delivered. */
@@ -44,6 +49,12 @@ export const ADMIN_NAV: Array<NavItem> = [
   { label: 'Audit Log', icon: ScrollText, to: '/admin/audit' },
   { label: 'Users', icon: UserCog, to: '/admin/users' },
   { label: 'Settings', icon: Settings, to: '/admin/settings' },
+  {
+    label: 'Organizations',
+    icon: Shield,
+    to: '/admin/organizations',
+    platformAdminOnly: true,
+  },
 ]
 
 /** Client portal navigation (spec §61). */

@@ -28,6 +28,17 @@ export const Route = createFileRoute('/portal')({
     if (isAdminRole(context.user.role)) {
       throw redirect({ to: '/admin' })
     }
+    // Multi-tenant subscription gate (Phase 3) — UX only, redirects here
+    // proactively; the real enforcement is server-side in every server fn's
+    // guard (guards.server.ts). Platform admins bypass (none exist with
+    // role CLIENT today, but the check stays consistent with every other
+    // gate in this app).
+    if (
+      !context.user.isPlatformAdmin &&
+      context.user.organizationSubscriptionStatus !== 'active'
+    ) {
+      throw redirect({ to: '/subscription-suspended' })
+    }
     return { user: context.user }
   },
   component: PortalLayout,

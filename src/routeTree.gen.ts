@@ -14,6 +14,7 @@ import { Route as AuthRouteRouteImport } from './routes/_auth/route'
 import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as PortalRouteRouteImport } from './routes/portal/route'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as SubscriptionSuspendedRouteImport } from './routes/subscription-suspended'
 import { Route as AuthForgotPasswordRouteImport } from './routes/_auth/forgot-password'
 import { Route as AuthLoginRouteImport } from './routes/_auth/login'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
@@ -29,6 +30,7 @@ import { Route as AdminFinanceIndexRouteImport } from './routes/admin/finance/in
 import { Route as AdminLedgerIndexRouteImport } from './routes/admin/ledger/index'
 import { Route as AdminLimitRequestsIndexRouteImport } from './routes/admin/limit-requests/index'
 import { Route as AdminLimitRequestsRequestIdRouteImport } from './routes/admin/limit-requests/$requestId'
+import { Route as AdminOrganizationsIndexRouteImport } from './routes/admin/organizations/index'
 import { Route as AdminPaymentRequestsIndexRouteImport } from './routes/admin/payment-requests/index'
 import { Route as AdminPaymentsIndexRouteImport } from './routes/admin/payments/index'
 import { Route as AdminPaymentsPaymentIdRouteImport } from './routes/admin/payments/$paymentId'
@@ -68,6 +70,11 @@ const PortalRouteRoute = PortalRouteRouteImport.update({
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SubscriptionSuspendedRoute = SubscriptionSuspendedRouteImport.update({
+  id: '/subscription-suspended',
+  path: '/subscription-suspended',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthForgotPasswordRoute = AuthForgotPasswordRouteImport.update({
@@ -147,6 +154,11 @@ const AdminLimitRequestsRequestIdRoute =
     path: '/limit-requests/$requestId',
     getParentRoute: () => AdminRouteRoute,
   } as any)
+const AdminOrganizationsIndexRoute = AdminOrganizationsIndexRouteImport.update({
+  id: '/organizations/',
+  path: '/organizations/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminPaymentRequestsIndexRoute =
   AdminPaymentRequestsIndexRouteImport.update({
     id: '/payment-requests/',
@@ -237,6 +249,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRouteRouteWithChildren
   '/portal': typeof PortalRouteRouteWithChildren
   '/reset-password': typeof ResetPasswordRoute
+  '/subscription-suspended': typeof SubscriptionSuspendedRoute
   '/forgot-password': typeof AuthForgotPasswordRoute
   '/login': typeof AuthLoginRoute
   '/admin/': typeof AdminIndexRoute
@@ -254,6 +267,7 @@ export interface FileRoutesByFullPath {
   '/admin/finance/': typeof AdminFinanceIndexRoute
   '/admin/ledger/': typeof AdminLedgerIndexRoute
   '/admin/limit-requests/': typeof AdminLimitRequestsIndexRoute
+  '/admin/organizations/': typeof AdminOrganizationsIndexRoute
   '/admin/payment-requests/': typeof AdminPaymentRequestsIndexRoute
   '/admin/payments/': typeof AdminPaymentsIndexRoute
   '/admin/reports/': typeof AdminReportsIndexRoute
@@ -272,6 +286,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/subscription-suspended': typeof SubscriptionSuspendedRoute
   '/forgot-password': typeof AuthForgotPasswordRoute
   '/login': typeof AuthLoginRoute
   '/admin': typeof AdminIndexRoute
@@ -289,6 +304,7 @@ export interface FileRoutesByTo {
   '/admin/finance': typeof AdminFinanceIndexRoute
   '/admin/ledger': typeof AdminLedgerIndexRoute
   '/admin/limit-requests': typeof AdminLimitRequestsIndexRoute
+  '/admin/organizations': typeof AdminOrganizationsIndexRoute
   '/admin/payment-requests': typeof AdminPaymentRequestsIndexRoute
   '/admin/payments': typeof AdminPaymentsIndexRoute
   '/admin/reports': typeof AdminReportsIndexRoute
@@ -311,6 +327,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRouteRouteWithChildren
   '/portal': typeof PortalRouteRouteWithChildren
   '/reset-password': typeof ResetPasswordRoute
+  '/subscription-suspended': typeof SubscriptionSuspendedRoute
   '/_auth/forgot-password': typeof AuthForgotPasswordRoute
   '/_auth/login': typeof AuthLoginRoute
   '/admin/': typeof AdminIndexRoute
@@ -328,6 +345,7 @@ export interface FileRoutesById {
   '/admin/finance/': typeof AdminFinanceIndexRoute
   '/admin/ledger/': typeof AdminLedgerIndexRoute
   '/admin/limit-requests/': typeof AdminLimitRequestsIndexRoute
+  '/admin/organizations/': typeof AdminOrganizationsIndexRoute
   '/admin/payment-requests/': typeof AdminPaymentRequestsIndexRoute
   '/admin/payments/': typeof AdminPaymentsIndexRoute
   '/admin/reports/': typeof AdminReportsIndexRoute
@@ -350,6 +368,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/portal'
     | '/reset-password'
+    | '/subscription-suspended'
     | '/forgot-password'
     | '/login'
     | '/admin/'
@@ -367,6 +386,7 @@ export interface FileRouteTypes {
     | '/admin/finance/'
     | '/admin/ledger/'
     | '/admin/limit-requests/'
+    | '/admin/organizations/'
     | '/admin/payment-requests/'
     | '/admin/payments/'
     | '/admin/reports/'
@@ -385,6 +405,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/reset-password'
+    | '/subscription-suspended'
     | '/forgot-password'
     | '/login'
     | '/admin'
@@ -402,6 +423,7 @@ export interface FileRouteTypes {
     | '/admin/finance'
     | '/admin/ledger'
     | '/admin/limit-requests'
+    | '/admin/organizations'
     | '/admin/payment-requests'
     | '/admin/payments'
     | '/admin/reports'
@@ -423,6 +445,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/portal'
     | '/reset-password'
+    | '/subscription-suspended'
     | '/_auth/forgot-password'
     | '/_auth/login'
     | '/admin/'
@@ -440,6 +463,7 @@ export interface FileRouteTypes {
     | '/admin/finance/'
     | '/admin/ledger/'
     | '/admin/limit-requests/'
+    | '/admin/organizations/'
     | '/admin/payment-requests/'
     | '/admin/payments/'
     | '/admin/reports/'
@@ -462,6 +486,7 @@ export interface RootRouteChildren {
   AdminRouteRoute: typeof AdminRouteRouteWithChildren
   PortalRouteRoute: typeof PortalRouteRouteWithChildren
   ResetPasswordRoute: typeof ResetPasswordRoute
+  SubscriptionSuspendedRoute: typeof SubscriptionSuspendedRoute
   ApiCronMetaSyncRoute: typeof ApiCronMetaSyncRoute
 }
 
@@ -500,6 +525,13 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/subscription-suspended': {
+      id: '/subscription-suspended'
+      path: '/subscription-suspended'
+      fullPath: '/subscription-suspended'
+      preLoaderRoute: typeof SubscriptionSuspendedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_auth/forgot-password': {
@@ -605,6 +637,13 @@ declare module '@tanstack/react-router' {
       path: '/limit-requests/$requestId'
       fullPath: '/admin/limit-requests/$requestId'
       preLoaderRoute: typeof AdminLimitRequestsRequestIdRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/organizations/': {
+      id: '/admin/organizations/'
+      path: '/organizations'
+      fullPath: '/admin/organizations/'
+      preLoaderRoute: typeof AdminOrganizationsIndexRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/payment-requests/': {
@@ -750,6 +789,7 @@ interface AdminRouteRouteChildren {
   AdminFinanceIndexRoute: typeof AdminFinanceIndexRoute
   AdminLedgerIndexRoute: typeof AdminLedgerIndexRoute
   AdminLimitRequestsIndexRoute: typeof AdminLimitRequestsIndexRoute
+  AdminOrganizationsIndexRoute: typeof AdminOrganizationsIndexRoute
   AdminPaymentRequestsIndexRoute: typeof AdminPaymentRequestsIndexRoute
   AdminPaymentsIndexRoute: typeof AdminPaymentsIndexRoute
   AdminReportsIndexRoute: typeof AdminReportsIndexRoute
@@ -772,6 +812,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminFinanceIndexRoute: AdminFinanceIndexRoute,
   AdminLedgerIndexRoute: AdminLedgerIndexRoute,
   AdminLimitRequestsIndexRoute: AdminLimitRequestsIndexRoute,
+  AdminOrganizationsIndexRoute: AdminOrganizationsIndexRoute,
   AdminPaymentRequestsIndexRoute: AdminPaymentRequestsIndexRoute,
   AdminPaymentsIndexRoute: AdminPaymentsIndexRoute,
   AdminReportsIndexRoute: AdminReportsIndexRoute,
@@ -818,6 +859,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRouteRoute: AdminRouteRouteWithChildren,
   PortalRouteRoute: PortalRouteRouteWithChildren,
   ResetPasswordRoute: ResetPasswordRoute,
+  SubscriptionSuspendedRoute: SubscriptionSuspendedRoute,
   ApiCronMetaSyncRoute: ApiCronMetaSyncRoute,
 }
 export const routeTree = rootRouteImport

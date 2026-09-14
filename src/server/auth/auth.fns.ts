@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getCookies, getRequestUrl } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { getSupabaseServerClient } from '@/lib/supabase/server'
+import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import {
   ACTIVE_CLIENT_COOKIE,
   activeMemberships,
@@ -137,6 +138,37 @@ async function loadSessionUser(
   const cookieClientId = getCookies()[ACTIVE_CLIENT_COOKIE] ?? null
   const activeClientId = resolveActiveClientId(active, cookieClientId)
 
+  // organizations has zero RLS policies for `authenticated` (it can hold
+  // cross-tenant subscription data — see the multi-tenant migration), so
+  // this one supplementary lookup goes through the service-role client
+  // rather than the RLS-scoped `supabase` param used above. Fetched fresh
+  // on every session load, never cached — the whole point of the
+  // subscription gate is that flipping the toggle takes effect
+  // immediately, not on next JWT refresh.
+  const admin = getSupabaseAdminClient()
+  const { data: org, error: orgError } = await admin
+    .from('organizations')
+    .select('subscription_status')
+    .eq('id', profile.organization_id)
+    .single()
+  if (orgError) {
+    // organization_id is a NOT NULL FK, so the row always exists — reaching
+    // here means the query itself failed (transient DB/network issue), not
+    // a missing organization. Deliberately fails CLOSED (treated as
+    // suspended below) rather than granting access on an error, but logged
+    // loudly because the visible symptom — every user of that organization
+    // bounced to /subscription-suspended — otherwise looks like a
+    // subscription problem rather than an outage.
+    console.error(
+      '[auth] organization subscription lookup failed for org',
+      profile.organization_id,
+      orgError.message,
+    )
+  }
+  const organizationSubscriptionStatus =
+    (org as { subscription_status: 'active' | 'suspended' | 'cancelled' } | null)
+      ?.subscription_status ?? 'suspended'
+
   return {
     id: user.id,
     email: user.email ?? '',
@@ -148,6 +180,7 @@ async function loadSessionUser(
     activeClientId,
     organizationId: profile.organization_id,
     isPlatformAdmin: profile.is_platform_admin,
+    organizationSubscriptionStatus,
   }
 }
 

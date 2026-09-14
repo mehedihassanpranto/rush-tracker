@@ -372,3 +372,20 @@ export interface UsdMarginEntry {
   created_at: string
 }
 
+// ---------------------------------------------------------------------------
+// Organizations — multi-tenant subscription conversion, Phase 2.
+// See supabase/migrations/20260723000031_multi_tenant_foundation.sql.
+// ---------------------------------------------------------------------------
+
+export type OrganizationSubscriptionStatus = 'active' | 'suspended' | 'cancelled'
+
+export interface Organization {
+  id: string
+  name: string
+  subscription_status: OrganizationSubscriptionStatus
+  plan: string | null
+  notes: string | null
+  suspended_at: string | null
+  created_at: string
+}
+

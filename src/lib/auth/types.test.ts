@@ -33,6 +33,7 @@ function user(over: Partial<SessionUser> = {}): SessionUser {
     activeClientId: null,
     organizationId: 'org1',
     isPlatformAdmin: false,
+    organizationSubscriptionStatus: 'active',
     ...over,
   }
 }
