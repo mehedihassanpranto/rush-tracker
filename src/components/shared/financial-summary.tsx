@@ -6,6 +6,7 @@ import type { ClientFinancials } from '@/types/domain'
 export function FinancialSummary({
   financials,
   totalRemainingUsd,
+  totalMetaDueUsd,
 }: {
   financials: ClientFinancials
   /**
@@ -16,6 +17,12 @@ export function FinancialSummary({
    * yet) rather than showing a permanent "—".
    */
   totalRemainingUsd?: string | null
+  /**
+   * Sum of Meta Due (balance owed to Meta) across the same set of accounts
+   * as totalRemainingUsd — same not-ledger-derived, hide-until-loaded
+   * treatment.
+   */
+  totalMetaDueUsd?: string | null
 }) {
   const cards = [
     { label: 'Total Approved (USD)', value: formatUsd(financials.total_approved_usd) },
@@ -41,10 +48,19 @@ export function FinancialSummary({
           },
         ]
       : []),
+    ...(totalMetaDueUsd != null
+      ? [
+          {
+            label: 'Meta Due',
+            value: formatUsd(totalMetaDueUsd),
+            subValue: 'Balance owed to Meta, linked USD accounts',
+          },
+        ]
+      : []),
   ]
   return (
     <div
-      className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-3 ${cards.length === 6 ? 'xl:grid-cols-6' : 'xl:grid-cols-5'}`}
+      className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-3 ${cards.length >= 6 ? 'xl:grid-cols-6' : 'xl:grid-cols-5'}`}
     >
       {cards.map((c) => (
         <Card key={c.label}>

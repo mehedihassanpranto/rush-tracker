@@ -1810,6 +1810,27 @@ bug fixes, and anything else that isn't a whole new named feature.
   `admin_note ?? rejection_reason ?? '—'`. No new data exposure — the
   client-facing fn was already shipping this field to the browser bundle,
   just not displayed. `npm run typecheck` and `npm run build` both pass.
+- **"Meta Due" summary card, portal dashboard + admin client detail page
+  (post-Phase-8 addition): done, pending owner review, no migration** —
+  sits right after "Total Remaining" in both places, same pairing as the
+  per-row Remaining/Meta Due columns already shown elsewhere.
+  `listMyAccountsMetaRemainingFn` (`meta.fns.ts`, the client-scoped Meta fn
+  behind the portal's existing "Remaining" column/card) now also returns
+  `meta_balance` per account — same bulk Graph API fetch already made, no
+  new call. Also relaxed its per-row gate from requiring `spend_cap` to
+  requiring only a matched Meta account, mirroring the admin-side
+  `balanceByAccountId` fix from the "Double red bell" entry above: an
+  account can carry a Meta bill balance with no spend cap set, and the old
+  gate silently hid it. Portal (`portal/index.tsx`) sums `meta_balance`
+  across the client's own USD-currency linked accounts into a new "Meta
+  Due" card. Admin (`$clientId.tsx` + `financial-summary.tsx`):
+  `FinancialSummary` gained a `totalMetaDueUsd` prop/card;
+  `$clientId.tsx` computes it the same way `totalRemainingUsd` already is,
+  from the same `balanceByAccountId` map the Ad Accounts tab's per-row Meta
+  Due column already builds — no new query. Both cards USD-only (no FX
+  path, same gate as every other Meta-money aggregate here), hidden rather
+  than shown as a misleading "$0.00" until the data resolves. `npm run
+  typecheck` and `npm run build` both pass.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

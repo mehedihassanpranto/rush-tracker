@@ -101,6 +101,18 @@ function ClientDashboard() {
           }, dec(0))
           .toFixed(2)
       : null
+  // Sum of Meta Due (balance owed to Meta) across this client's own
+  // USD-currency linked accounts — same no-FX, currency-native gate as
+  // Total Remaining above.
+  const totalMetaDueUsd =
+    remaining !== undefined
+      ? remaining
+          .reduce((sum, r) => {
+            if (r.meta_balance == null || r.currency !== 'USD') return sum
+            return sum.plus(dec(r.meta_balance))
+          }, dec(0))
+          .toFixed(2)
+      : null
 
   return (
     <div className="space-y-6">
@@ -187,6 +199,21 @@ function ClientDashboard() {
             <CardContent>
               <p className="text-xs text-muted-foreground">
                 Meta spend headroom across your ad accounts
+              </p>
+            </CardContent>
+          </Card>
+        )}
+        {totalMetaDueUsd !== null && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Meta Due</CardDescription>
+              <CardTitle className="text-2xl">
+                {formatUsd(totalMetaDueUsd)}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground">
+                Balance owed to Meta across your ad accounts
               </p>
             </CardContent>
           </Card>

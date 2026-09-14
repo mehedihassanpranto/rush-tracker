@@ -356,17 +356,19 @@ export const retryMetaSpendCapSyncFn = createServerFn({ method: 'POST' })
 export interface MyAccountRemaining {
   ad_account_id: string
   remaining: string | null
+  meta_balance: string | null
   currency: string | null
 }
 
 /**
- * Remaining Meta spend headroom (spend_cap − amount_spent) for the signed-in
- * client's own actively-assigned accounts — never anything beyond them. All
- * other Meta fns in this file are requireAdmin-gated and would leak the
- * whole Business Portfolio if reused directly; this reuses the same
- * underlying bulk Graph API fetch (still 2 calls total, not one per
- * account) but the response never leaves the server until it's been
- * filtered down to only this client's own external_account_ids.
+ * Remaining Meta spend headroom (spend_cap − amount_spent) and Meta Due
+ * (balance owed to Meta) for the signed-in client's own actively-assigned
+ * accounts — never anything beyond them. All other Meta fns in this file
+ * are requireAdmin-gated and would leak the whole Business Portfolio if
+ * reused directly; this reuses the same underlying bulk Graph API fetch
+ * (still 2 calls total, not one per account) but the response never leaves
+ * the server until it's been filtered down to only this client's own
+ * external_account_ids.
  *
  * Display-only — no currency gate on the value itself (that's only needed
  * for the admin side's alert thresholds, which don't exist here);
@@ -407,17 +409,22 @@ export const listMyAccountsMetaRemainingFn = createServerFn({
   return linkedRows.map((r) => {
     const externalId = r.account!.external_account_id!
     const m = byExternalId.get(externalId)
-    if (!m || m.spend_cap == null) {
+    if (!m) {
       return {
         ad_account_id: r.ad_account_id,
         remaining: null,
-        currency: m?.currency ?? null,
+        meta_balance: null,
+        currency: null,
       }
     }
-    const remaining = dec(m.spend_cap).minus(dec(m.amount_spent ?? 0))
+    const remaining =
+      m.spend_cap != null
+        ? dec(m.spend_cap).minus(dec(m.amount_spent ?? 0)).toFixed(2)
+        : null
     return {
       ad_account_id: r.ad_account_id,
-      remaining: remaining.toFixed(2),
+      remaining,
+      meta_balance: m.meta_balance,
       currency: m.currency,
     }
   })

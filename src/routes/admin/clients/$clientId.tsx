@@ -199,6 +199,20 @@ function ClientDetailPage() {
           }, dec(0))
           .toFixed(2)
       : null
+  // Sum of Meta Due across this client's own linked accounts, same USD-only
+  // gate as totalRemainingUsd above.
+  const totalMetaDueUsd =
+    canManageMeta && metaAccounts !== undefined
+      ? (accounts ?? [])
+          .reduce((sum, a) => {
+            const balance = balanceByAccountId.get(a.id)
+            if (!balance || balance.metaDue == null || balance.currency !== 'USD') {
+              return sum
+            }
+            return sum.plus(dec(balance.metaDue))
+          }, dec(0))
+          .toFixed(2)
+      : null
   const { data: users } = useQuery({
     queryKey: ['client-users', clientId],
     queryFn: () => listUsers({ data: { client_id: clientId } }),
@@ -283,6 +297,7 @@ function ClientDetailPage() {
           <FinancialSummary
             financials={financials}
             totalRemainingUsd={totalRemainingUsd}
+            totalMetaDueUsd={totalMetaDueUsd}
           />
         </div>
       )}

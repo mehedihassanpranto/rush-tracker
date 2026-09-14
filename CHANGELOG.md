@@ -6,6 +6,31 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-09-14
+
+**"Meta Due" summary added next to "Total Remaining", portal dashboard +
+admin client detail page.** `listMyAccountsMetaRemainingFn`
+(`meta.fns.ts`) now also returns `meta_balance` (Meta's `balance` field —
+already surfaced elsewhere as "Meta Due") per account, alongside the
+existing `remaining` figure — same underlying bulk Graph API fetch, no new
+call. Also relaxed its per-row gate from requiring `spend_cap` to requiring
+only a Meta account match (mirrors the admin-side `balanceByAccountId` fix
+already documented in `CLAUDE.md`): an account can carry a Meta bill
+balance with no spend cap set, and the old gate would have silently hidden
+it. Portal dashboard (`portal/index.tsx`) sums this across the client's own
+USD-currency linked accounts into a new "Meta Due" card, right after
+"Total Remaining". Admin client detail page: `FinancialSummary`
+(`components/shared/financial-summary.tsx`) gained a `totalMetaDueUsd`
+prop/card, placed right after "Total Remaining"; `$clientId.tsx` computes
+it the same way `totalRemainingUsd` already is, from the same
+`balanceByAccountId` map the Ad Accounts tab's per-row Meta Due column
+already builds — no new query. Both cards are USD-only (no FX path), same
+gate as every other Meta-money aggregate in this app, and hide (rather than
+show a misleading "$0.00") until the data resolves. `npm run typecheck` and
+`npm run build` both pass.
+
+---
+
 ## 2026-09-01
 
 **New "Finance" section — USD buy/sell margin tracking (forex spread
