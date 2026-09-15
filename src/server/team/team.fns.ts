@@ -7,9 +7,11 @@ import { addTeamMemberSchema, teamMemberStatusSchema } from '@/schemas/team'
 
 /**
  * Client-portal "Team Members" — self-service portal logins for the
- * client's own staff, scoped to the caller's own client only. This is NOT
- * the Employee/client_employees feature (agency staff assigned to service
- * clients, admin-only) — it reuses the existing client_memberships /
+ * client's own staff, scoped to the caller's own client only. This has never
+ * been the Employee/client_employees feature (agency staff assigned to service
+ * clients) — that one was removed from the app on 2026-09-15, though its two
+ * tables remain; the naming collision is why they were kept apart in the first
+ * place. Team Members reuses the existing client_memberships /
  * user_profiles / auth.users mechanism the admin's "Add login" already
  * writes to, just with requireClientMembership() instead of requireAdmin(),
  * and the client_id always derived from the caller's own membership, never

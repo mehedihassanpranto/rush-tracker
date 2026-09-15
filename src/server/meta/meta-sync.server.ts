@@ -1,9 +1,20 @@
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { writeAudit } from '@/server/audit/audit.service'
 import { notifyAdmins } from '@/server/notifications/notification.service'
-import { listMetaBusinessAdAccounts, metaStatusLabel } from '@/server/meta/meta.server'
+import {
+  isMetaConfigured,
+  listMetaBusinessAdAccounts,
+  metaStatusLabel,
+} from '@/server/meta/meta.server'
 import { sendTelegramMessage } from '@/server/telegram/telegram.service'
+import { DEPLOYMENT_ORGANIZATION_ID } from '@/lib/organizations/deployment-org'
+import {
+  PLATFORM_CREDENTIALS,
+  organizationCredentials,
+} from '@/lib/meta/credential-scope'
+import type { MetaCredentialScope } from '@/lib/meta/credential-scope'
 import { LOW_BALANCE_THRESHOLD } from '@/lib/meta/thresholds'
+import { operatingOrganizationId } from '@/server/ad-accounts/scope.server'
 import { dec, formatCurrencyAmount } from '@/lib/money/money'
 
 const META_DISABLED_STATUS_CODE = 2
@@ -39,7 +50,11 @@ export async function syncAdAccountName(
   metaName: string | null,
   actorUserId: string | null,
   source: 'META_SYNC' | 'META_MANUAL_SYNC',
-  organizationId: string,
+  // The organization the AUDIT row belongs to — the operating agency, which
+  // for a platform-pool account is the one holding the grant, not the (NULL)
+  // owner. Access is authorized by the caller before this is reached, so the
+  // update matches on id alone.
+  auditOrganizationId: string,
 ): Promise<{ renamed: boolean; newName?: string }> {
   if (!metaName || metaName === currentName) return { renamed: false }
   const admin = getSupabaseAdminClient()
@@ -47,7 +62,6 @@ export async function syncAdAccountName(
     .from('ad_accounts')
     .update({ name: metaName })
     .eq('id', accountId)
-    .eq('organization_id', organizationId)
   if (error) throw new Error(error.message)
 
   await writeAudit({
@@ -58,7 +72,7 @@ export async function syncAdAccountName(
     oldValues: { name: currentName },
     newValues: { name: metaName },
     metadata: { source },
-    organizationId,
+    organizationId: auditOrganizationId,
   })
   return { renamed: true, newName: metaName }
 }
@@ -104,16 +118,39 @@ function checkAdAccountAlerts(
   return { newlyDisabled, newlyLow, isLowNow, remaining }
 }
 
-export async function syncMetaAdAccounts(): Promise<MetaSyncResult> {
-  const metaAccounts = await listMetaBusinessAdAccounts()
+/**
+ * Sync ONE Business Portfolio against the ad_accounts rows that live in it.
+ *
+ * The unit of work is a CREDENTIAL SET, not an agency, because the two stopped
+ * being the same thing when the platform pool landed:
+ *   - an agency's own credentials cover the accounts it owns
+ *     (`organization_id = them`, `is_platform = false`)
+ *   - the platform's credentials (the deployment's META_* env vars) cover the
+ *     whole pool (`is_platform = true`), whoever each account is granted to
+ * Comparing a portfolio against rows it does not contain would report every
+ * one of them as "new to import" and never rename any of them.
+ */
+async function syncCredentialSet(
+  scope: MetaCredentialScope,
+): Promise<MetaSyncResult> {
+  // The scope IS the unit of work, so it also decides which rows to compare
+  // against — deriving this rather than taking a second parameter removes any
+  // way to pass a portfolio and a row set that don't belong together.
+  const platformPool = scope.kind === 'platform'
+  const credentialOrgId = platformPool ? null : scope.organizationId
+  const metaAccounts = await listMetaBusinessAdAccounts(scope)
   const admin = getSupabaseAdminClient()
 
-  const { data: linked, error } = await admin
+  let query = admin
     .from('ad_accounts')
     .select(
-      'id, account_code, name, external_account_id, meta_last_status_code, meta_low_balance_alerted, organization_id',
+      'id, account_code, name, external_account_id, meta_last_status_code, meta_low_balance_alerted, organization_id, is_platform',
     )
     .not('external_account_id', 'is', null)
+  query = platformPool
+    ? query.eq('is_platform', true)
+    : query.eq('organization_id', credentialOrgId!).eq('is_platform', false)
+  const { data: linked, error } = await query
   if (error) throw new Error(error.message)
 
   const linkedByExternalId = new Map(
@@ -123,6 +160,7 @@ export async function syncMetaAdAccounts(): Promise<MetaSyncResult> {
   const renamed: MetaSyncResult['renamed'] = []
   const newlyDisabledList: MetaSyncResult['newly_disabled'] = []
   const newlyLowList: MetaSyncResult['newly_low_balance'] = []
+  const accountOrgs = new Map<string, string>()
   let newAvailable = 0
 
   for (const meta of metaAccounts) {
@@ -132,6 +170,13 @@ export async function syncMetaAdAccounts(): Promise<MetaSyncResult> {
       continue
     }
 
+    // A pool account has no owner of its own; its audit trail belongs to the
+    // agency currently holding the grant (falling back to the platform's own
+    // organization while it is ungranted).
+    const operatingOrg =
+      (await operatingOrganizationId(admin, row)) ?? DEPLOYMENT_ORGANIZATION_ID
+    accountOrgs.set(row.id, operatingOrg)
+
     let currentName = row.name
     try {
       const result = await syncAdAccountName(
@@ -140,7 +185,7 @@ export async function syncMetaAdAccounts(): Promise<MetaSyncResult> {
         meta.name,
         null, // system-initiated, no signed-in actor
         'META_SYNC',
-        row.organization_id,
+        operatingOrg,
       )
       if (result.renamed && result.newName) {
         currentName = result.newName
@@ -173,7 +218,8 @@ export async function syncMetaAdAccounts(): Promise<MetaSyncResult> {
 
     if (newlyDisabled) {
       newlyDisabledList.push({ id: row.id, account_code: row.account_code, name: currentName })
-      await sendTelegramMessage(
+      await alertTelegram(
+        scope,
         `🚫 Ad account ${row.account_code} "${currentName}" was disabled on Meta (status: ${metaStatusLabel(meta.meta_status_code)}).`,
       )
     }
@@ -184,7 +230,8 @@ export async function syncMetaAdAccounts(): Promise<MetaSyncResult> {
         name: currentName,
         remaining,
       })
-      await sendTelegramMessage(
+      await alertTelegram(
+        scope,
         `⚠️ Ad account ${row.account_code} "${currentName}" is low on Meta spend headroom: ${formatCurrencyAmount(remaining, meta.currency)} remaining (threshold: ${LOW_BALANCE_THRESHOLD}).`,
       )
     }
@@ -201,22 +248,25 @@ export async function syncMetaAdAccounts(): Promise<MetaSyncResult> {
     if (newAvailable > 0) parts.push(`${newAvailable} new account(s) available to import`)
     if (newlyDisabledList.length > 0) parts.push(`${newlyDisabledList.length} newly disabled`)
     if (newlyLowList.length > 0) parts.push(`${newlyLowList.length} newly low on balance`)
-    await notifyAdmins({
-      type: 'META_SYNC',
-      title: 'Meta Business Portfolio sync',
-      message: parts.join(', ') + '.',
-      entityType: 'AD_ACCOUNT',
-      // KNOWN LIMITATION: this cron syncs ONE globally-configured Meta
-      // Business Portfolio (app_settings, still org-zero-only — see the
-      // multi-tenant migration's notes) against every linked ad_accounts
-      // row with no per-org grouping at all. Hardcoding org zero here is
-      // consistent with that reality, not a new gap — making this digest
-      // (and the account-gathering above it) genuinely multi-org-aware
-      // needs its own dedicated pass once a second organization actually
-      // uses the Meta integration; out of scope for the org_id-scoping
-      // pass that touched every other server fn.
-      organizationId: '00000000-0000-0000-0000-000000000001',
-    })
+    // notifyAdmins fans out within ONE organization. For an agency's own
+    // portfolio that is simply that agency. For the platform pool the touched
+    // accounts can belong to several agencies at once, so the digest goes to
+    // each of them — never a broadcast across tenants.
+    const recipients = platformPool
+      ? [...new Set(accountOrgs.values())]
+      : [credentialOrgId!]
+    const target = recipients.length > 0 ? recipients : [DEPLOYMENT_ORGANIZATION_ID]
+    for (const organizationId of target) {
+      await notifyAdmins({
+        type: 'META_SYNC',
+        title: platformPool
+          ? 'Platform pool Meta sync'
+          : 'Meta Business Portfolio sync',
+        message: parts.join(', ') + '.',
+        entityType: 'AD_ACCOUNT',
+        organizationId,
+      })
+    }
   }
 
   return {
@@ -226,4 +276,131 @@ export async function syncMetaAdAccounts(): Promise<MetaSyncResult> {
     newly_disabled: newlyDisabledList,
     newly_low_balance: newlyLowList,
   }
+}
+
+/**
+ * Telegram alerts go to the ONE chat configured on the deployment
+ * (`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`), which belongs to the deployment's
+ * owner. Sending another agency's account names and balances into that chat
+ * would leak their data to xRush, so these fire for exactly two credential
+ * sets: org zero's own portfolio, and the platform pool — which xRush operates
+ * (it holds every grant) and whose alerts it has always received.
+ *
+ * The platform arm matters since migration 000037: the pool used to be synced
+ * under org zero's id, so the old `!== DEPLOYMENT_ORGANIZATION_ID` check passed
+ * it by accident. Now that the pool is its own scope, dropping this arm would
+ * have silently ended every disabled/low-balance Telegram alert for all 34
+ * accounts, with nothing failing to show it.
+ *
+ * Per-agency Telegram is a separate feature (each agency would register its own
+ * bot/chat, the same way each now registers its own Meta credentials) and is
+ * deliberately NOT inferred here — other agencies get the in-app notification,
+ * which is correctly scoped to them.
+ */
+async function alertTelegram(scope: MetaCredentialScope, message: string) {
+  const isDeploymentOwned =
+    scope.kind === 'platform' ||
+    scope.organizationId === DEPLOYMENT_ORGANIZATION_ID
+  if (!isDeploymentOwned) return
+  await sendTelegramMessage(message)
+}
+
+export interface MetaSyncOrganizationResult extends MetaSyncResult {
+  /** null for the platform pool — it is a credential set, not an agency. */
+  organization_id: string | null
+  organization_name: string
+}
+
+export interface MetaSyncRunResult {
+  organizations: Array<MetaSyncOrganizationResult>
+  /** Agencies deliberately not synced, and why — a connected-but-broken
+   * portfolio is an error, but "hasn't connected one" is normal. */
+  skipped: Array<{
+    organization_id: string | null
+    organization_name: string
+    reason: 'not_configured' | 'failed'
+    error?: string
+  }>
+}
+
+/**
+ * Unattended daily sync across every subscribing agency AND the platform pool.
+ *
+ * Each agency is synced against its own Business Portfolio using its own
+ * credentials, and the pool is synced once against the platform's, and one agency's failure never stops the others — a bad or
+ * expired token belongs to that customer, and must not silently stop
+ * everybody else's accounts from syncing.
+ *
+ * Suspended/cancelled agencies are skipped entirely: their users can't reach
+ * the app at all, so acting on their Meta account on their behalf (and
+ * spending their API quota) every night would be wrong.
+ */
+export async function syncMetaAdAccounts(): Promise<MetaSyncRunResult> {
+  const admin = getSupabaseAdminClient()
+  const { data: orgs, error } = await admin
+    .from('organizations')
+    .select('id, name')
+    .eq('subscription_status', 'active')
+  if (error) throw new Error(error.message)
+
+  const organizations: MetaSyncRunResult['organizations'] = []
+  const skipped: MetaSyncRunResult['skipped'] = []
+
+  for (const org of (orgs ?? []) as Array<{ id: string; name: string }>) {
+    if (!(await isMetaConfigured(organizationCredentials(org.id)))) {
+      skipped.push({
+        organization_id: org.id,
+        organization_name: org.name,
+        reason: 'not_configured',
+      })
+      continue
+    }
+    try {
+      const result = await syncCredentialSet(organizationCredentials(org.id))
+      organizations.push({
+        ...result,
+        organization_id: org.id,
+        organization_name: org.name,
+      })
+    } catch (err) {
+      console.error('[meta-sync] organization failed', org.id, err)
+      skipped.push({
+        organization_id: org.id,
+        organization_name: org.name,
+        reason: 'failed',
+        error: err instanceof Error ? err.message : 'Meta sync failed',
+      })
+    }
+  }
+
+  // The platform pool is its own credential set, synced once regardless of how
+  // many agencies hold grants — the accounts all live in one portfolio, so one
+  // pass covers them. Runs even if no agency has grants yet, so ungranted pool
+  // accounts still get their names and alert state kept current.
+  if (await isMetaConfigured(PLATFORM_CREDENTIALS)) {
+    try {
+      const result = await syncCredentialSet(PLATFORM_CREDENTIALS)
+      organizations.push({
+        ...result,
+        organization_id: null,
+        organization_name: 'Platform pool',
+      })
+    } catch (err) {
+      console.error('[meta-sync] platform pool failed', err)
+      skipped.push({
+        organization_id: null,
+        organization_name: 'Platform pool',
+        reason: 'failed',
+        error: err instanceof Error ? err.message : 'Meta sync failed',
+      })
+    }
+  } else {
+    skipped.push({
+      organization_id: null,
+      organization_name: 'Platform pool',
+      reason: 'not_configured',
+    })
+  }
+
+  return { organizations, skipped }
 }

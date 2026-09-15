@@ -12,3 +12,7 @@ dist-ssr
 .vinxi
 __unconfig*
 todos.json
+
+# Supabase CLI local state — machine-specific link info (project ref, pooler
+# connection string), not project config. Never commit.
+supabase/.temp/

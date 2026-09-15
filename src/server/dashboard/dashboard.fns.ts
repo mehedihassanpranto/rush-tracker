@@ -1,5 +1,9 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
+import {
+  adAccountScope,
+  applyAdAccountScope,
+} from '@/server/ad-accounts/scope.server'
 import { requireAdmin, requireClientMembership } from '@/server/auth/guards.server'
 import { bdtToUsd, clientUsdRate } from '@/server/exchange-rates/rate.service'
 import { dec } from '@/lib/money/money'
@@ -38,6 +42,7 @@ export const adminDashboardStatsFn = createServerFn({ method: 'GET' }).handler(
     const actor = await requireAdmin(PERMISSIONS.DASHBOARD_VIEW)
     const admin = getSupabaseAdminClient()
     const orgId = actor.organizationId
+    const accountScope = await adAccountScope(admin, orgId)
 
     const [clients, active, available, pending, pendingPay, due] =
       await Promise.all([
@@ -45,16 +50,20 @@ export const adminDashboardStatsFn = createServerFn({ method: 'GET' }).handler(
           .from('clients')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', orgId),
-        admin
-          .from('ad_accounts')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'ACTIVE')
-          .eq('organization_id', orgId),
-        admin
-          .from('ad_accounts')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'AVAILABLE')
-          .eq('organization_id', orgId),
+        applyAdAccountScope(
+          admin
+            .from('ad_accounts')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'ACTIVE'),
+          accountScope,
+        ),
+        applyAdAccountScope(
+          admin
+            .from('ad_accounts')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'AVAILABLE'),
+          accountScope,
+        ),
         admin
           .from('limit_requests')
           .select('*', { count: 'exact', head: true })

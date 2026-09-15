@@ -126,7 +126,7 @@ export function NotificationBell({ role }: { role: RoleKey }) {
         {isClient && (
           <div className="border-t px-3 py-2 text-center">
             <Link
-              to="/portal/notifications"
+              to="/client/notifications"
               className="text-xs text-primary underline-offset-4 hover:underline"
             >
               View all notifications

@@ -16,13 +16,21 @@ describe('permission catalog (spec §8)', () => {
     )
   })
 
-  it('marks the four sensitive permissions and nothing else', () => {
+  // Deliberately an exact allow-list, not a count: marking a permission
+  // sensitive restricts it to SUPER_ADMIN by default, and un-marking one
+  // quietly widens who gets it. Adding a sensitive permission SHOULD fail this
+  // test until it is listed here on purpose.
+  // (The title used to say "four" and went stale when Finance added two —
+  //  keep counts out of it.)
+  it('marks exactly these permissions sensitive and nothing else', () => {
     expect([...SENSITIVE_PERMISSIONS].sort()).toEqual(
       [
         PERMISSIONS.ADJUSTMENTS_CREATE,
         PERMISSIONS.EXCHANGE_RATE_MANAGE,
         PERMISSIONS.USERS_MANAGE,
         PERMISSIONS.INTEGRATIONS_MANAGE,
+        PERMISSIONS.FINANCE_VIEW,
+        PERMISSIONS.FINANCE_MANAGE,
       ].sort(),
     )
   })

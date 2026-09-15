@@ -25,7 +25,17 @@ function summary(over: Partial<MetaAdAccountSummary> = {}): MetaAdAccountSummary
   }
 }
 
-const account = { external_account_id: 'act_123', current_limit_usd: '800.00' }
+/** A second agency's id — the point of these assertions is that the sync
+ * uses the ACCOUNT'S OWN organization's Meta credentials, never an ambient
+ * default. */
+const ORG = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa'
+
+const account = {
+  external_account_id: 'act_123',
+  current_limit_usd: '800.00',
+  organization_id: ORG,
+  is_platform: false,
+}
 
 describe('syncAdAccountSpendCap', () => {
   beforeEach(() => {
@@ -37,6 +47,8 @@ describe('syncAdAccountSpendCap', () => {
     const outcome = await syncAdAccountSpendCap({
       external_account_id: null,
       current_limit_usd: '800.00',
+      organization_id: ORG,
+      is_platform: false,
     })
     expect(outcome).toEqual({ status: 'not_applicable' })
     expect(mockFetch).not.toHaveBeenCalled()
@@ -49,7 +61,42 @@ describe('syncAdAccountSpendCap', () => {
     const outcome = await syncAdAccountSpendCap(account)
 
     expect(outcome).toEqual({ status: 'synced' })
-    expect(mockUpdate).toHaveBeenCalledWith('act_123', '800.00')
+    expect(mockUpdate).toHaveBeenCalledWith('act_123', '800.00', {
+      kind: 'organization',
+      organizationId: ORG,
+    })
+  })
+
+  it("reads Meta with the account's own organization credentials", async () => {
+    mockFetch.mockResolvedValue(summary({ spend_cap: '800.00' }))
+
+    await syncAdAccountSpendCap(account)
+
+    expect(mockFetch).toHaveBeenCalledWith('act_123', {
+      kind: 'organization',
+      organizationId: ORG,
+    })
+  })
+
+  it('uses the PLATFORM credentials for a pool account, not the operating agency', async () => {
+    mockFetch.mockResolvedValue(summary({ spend_cap: '700.00' }))
+    mockUpdate.mockResolvedValue(undefined)
+
+    await syncAdAccountSpendCap({
+      external_account_id: 'act_123',
+      current_limit_usd: '800.00',
+      // A pool account has no owning agency at all.
+      organization_id: null,
+      is_platform: true,
+    })
+
+    // The platform scope, NOT org zero's id: since migration 000037 the pool's
+    // credentials are their own thing, and an organization id here would mean
+    // reading app_settings for an agency that does not own this account.
+    expect(mockFetch).toHaveBeenCalledWith('act_123', { kind: 'platform' })
+    expect(mockUpdate).toHaveBeenCalledWith('act_123', '800.00', {
+      kind: 'platform',
+    })
   })
 
   it('is already_synced without calling updateMetaAdAccountSpendCap when already in sync (idempotency)', async () => {

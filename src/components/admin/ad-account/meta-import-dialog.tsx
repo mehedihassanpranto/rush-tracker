@@ -43,10 +43,15 @@ export function MetaImportDialog({
     }
   }, [open])
 
-  const { data: candidates, isLoading } = useQuery({
+  const {
+    data: candidates,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['meta-business-ad-accounts'],
     queryFn: () => listCandidates(),
     enabled: open,
+    retry: false,
   })
 
   const importable = useMemo(
@@ -104,7 +109,18 @@ export function MetaImportDialog({
 
         {isLoading && <Skeleton className="h-40 w-full" />}
 
-        {!isLoading && importable.length === 0 && (
+        {/* A failed fetch must never fall through to the empty state below:
+            "everything is already linked" and "no portfolio is connected"
+            look identical there, and the second one has an action to take. */}
+        {!isLoading && error && (
+          <p className="py-6 text-center text-sm text-danger">
+            {error instanceof Error
+              ? error.message
+              : "Couldn't reach Meta. Try again in a moment."}
+          </p>
+        )}
+
+        {!isLoading && !error && importable.length === 0 && (
           <p className="py-6 text-center text-sm text-muted-foreground">
             No new accounts to import — everything in the Business Portfolio
             is already linked.

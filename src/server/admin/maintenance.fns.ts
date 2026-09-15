@@ -14,7 +14,10 @@ export const RESET_CONFIRM_PHRASE = 'DELETE ALL DATA'
  * for billing + USD display) survives a reset. client_employees/employees
  * are included to match reset_all_data()'s RPC behavior — this JS fallback
  * had drifted out of sync with it (a real, pre-existing gap found and fixed
- * incidentally while adding organization scoping below).
+ * incidentally while adding organization scoping below). **They stay listed
+ * even though the Employees FEATURE was removed on 2026-09-15**: the tables
+ * and their FKs still exist, so dropping them from this list would leave rows
+ * behind and break the delete order if the feature ever comes back.
  */
 const WIPE_ORDER = [
   'notifications',
@@ -47,6 +50,11 @@ async function directWipe(
   admin: SupabaseClient,
   organizationId: string,
 ): Promise<void> {
+  // NOTE: platform-pool ad accounts (organization_id IS NULL) deliberately
+  // survive this. An agency clearing its own data must not destroy an account
+  // the platform owns and merely granted to them — the grant survives too, so
+  // the account comes back unassigned rather than disappearing. Only accounts
+  // the agency owns outright are wiped.
   for (const table of WIPE_ORDER) {
     const { error } = await admin
       .from(table)

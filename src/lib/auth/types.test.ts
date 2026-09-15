@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  activeMemberships,
-  hasPermission,
-  homePathForUser,
-  isAdminRole,
-  resolveActiveClientId,
-} from './types'
+import { activeMemberships, displayRoleFor, hasPermission, homePathForUser, isAdminRole, resolveActiveClientId } from './types'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import type { SessionMembership, SessionUser } from './types'
 
@@ -49,10 +43,15 @@ describe('isAdminRole', () => {
 })
 
 describe('homePathForUser', () => {
-  it('routes clients to the portal, admins to /admin', () => {
-    expect(homePathForUser({ role: 'CLIENT' })).toBe('/portal')
-    expect(homePathForUser({ role: 'ADMIN' })).toBe('/admin')
-    expect(homePathForUser({ role: 'SUPER_ADMIN' })).toBe('/admin')
+  it('routes clients to /client, agency admins to /agency', () => {
+    expect(homePathForUser({ role: 'CLIENT', isPlatformAdmin: false })).toBe('/client')
+    expect(homePathForUser({ role: 'ADMIN', isPlatformAdmin: false })).toBe('/agency')
+    expect(homePathForUser({ role: 'SUPER_ADMIN', isPlatformAdmin: false })).toBe('/agency')
+  })
+
+  it('sends a platform admin to the platform panel, whatever their agency role', () => {
+    expect(homePathForUser({ role: 'CLIENT', isPlatformAdmin: true })).toBe('/platform')
+    expect(homePathForUser({ role: 'SUPER_ADMIN', isPlatformAdmin: true })).toBe('/platform')
   })
 })
 
@@ -130,5 +129,32 @@ describe('resolveActiveClientId (multi-client login switching)', () => {
 
   it('returns null when the user has no active memberships at all', () => {
     expect(resolveActiveClientId([], 'c1')).toBeNull()
+  })
+})
+
+describe('displayRoleFor', () => {
+  it('calls a platform admin the Platform Owner, never its agency role', () => {
+    // The platform account's role column really is CLIENT — the signup
+    // trigger's default, deliberately never changed (see the function's own
+    // comment for why promoting it would be actively harmful).
+    expect(
+      displayRoleFor({ role: 'CLIENT', isPlatformAdmin: true }),
+    ).toBe('Platform Owner')
+  })
+
+  it('still says Platform Owner if the account also holds an agency role', () => {
+    // A dual-hat account exists during a migration; platform is the wider
+    // power, so it is the honest label.
+    expect(
+      displayRoleFor({ role: 'SUPER_ADMIN', isPlatformAdmin: true }),
+    ).toBe('Platform Owner')
+  })
+
+  it('shows the real agency role for everyone else', () => {
+    expect(displayRoleFor({ role: 'SUPER_ADMIN', isPlatformAdmin: false })).toBe(
+      'SUPER ADMIN',
+    )
+    expect(displayRoleFor({ role: 'ADMIN', isPlatformAdmin: false })).toBe('ADMIN')
+    expect(displayRoleFor({ role: 'CLIENT', isPlatformAdmin: false })).toBe('CLIENT')
   })
 })

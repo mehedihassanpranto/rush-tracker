@@ -6,6 +6,784 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-09-15
+
+**Removed "New account" from the agency ad accounts page.**
+
+Requested: the option isn't needed. Ad accounts now reach an agency either by
+grant from the platform pool or by "Import from Meta" — typing one in by hand
+was the redundant third path. Removed the header button, its dialog state, and
+the `AccountCreateDialog` component itself (267 lines), which nothing else used.
+
+`AccountEditDialog`, `AccountRenameDialog` and `TransferDialog` live in the same
+file, so the cut was the real risk here. Verified in a browser on a real account
+(`ADA-0003`): the actions menu still offers Rename / Edit details / Fetch from
+Meta / Deactivate / Release, and **Edit details opens correctly populated**
+(`META`, ad account id, `4400`, `130`, `0`). Nothing was saved. Zero console
+errors. `npm test` 80/80, typecheck and build clean.
+
+`createAdAccountFn` and `adAccountCreateSchema` were **left in place** — nothing
+calls them now, but they are the whole restore path if the button is ever wanted
+back, and the endpoint stays behind `requireAdmin(AD_ACCOUNTS_MANAGE)`. Say the
+word to delete them too.
+
+---
+
+**Removed the Employees feature from the agency app.**
+
+Requested: "i dont need the feature right now." Deleted the `/agency/employees`
+screen, the Employees tab on the client detail page, the three employee dialogs,
+`employee.fns.ts`, `schemas/employee.ts`, the `Employee`/`EmployeeWithClients`/
+`ClientEmployeeRow` domain types, the nav item, and the `employees.view` /
+`employees.manage` permission constants (so they no longer appear as togglable
+permissions on the Users screen).
+
+**The two tables were deliberately left in place.** "Right now" reads as
+reversible, and dropping `employees` / `client_employees` would be a one-way
+schema change nobody asked for — it would also break the live
+`reset_all_data()` RPC, which truncates them, and force edits to `WIPE_ORDER`
+and `OFFBOARD_ORDER`. Both are empty anyway (the seeded E1–E6 went in the
+earlier "Clear all data" incident), so nothing is being preserved except the
+option to bring the feature back. The `employees.view`/`employees.manage` rows
+in the `permissions` table are likewise left; **0 role grants and 0 user grants
+reference them**, so they are inert.
+
+`WIPE_ORDER`, `OFFBOARD_ORDER` and `offboarding.test.ts` still name both tables
+— correctly, since the tables and their FK to `organizations` still exist, and
+removing them from the delete order would leave rows behind and break
+offboarding. Both lists now carry a comment saying why, so the next reader
+doesn't "tidy" them away.
+
+Stale copy fixed in the same pass: the "Clear all data" dialog no longer lists
+"employee" among what it deletes, `revoke-grant-dialog`'s comment no longer
+cites a delete-employee dialog that no longer exists, and `team.fns.ts`'s note
+distinguishing **Team Members** (a client's own portal logins — untouched, and
+never the same feature) now says the other side was removed.
+
+Verified in a browser as a real agency SUPER_ADMIN: sidebar is 13 items with no
+Employees, `/agency/employees` returns 404, a real client detail page
+(`CL-0004`) renders with 6 tabs and no Employees tab, and `/agency/users` no
+longer mentions employees anywhere. `npm test` 80/80, typecheck and build clean.
+
+---
+
+**Fixed: the platform account's user menu said "Role: CLIENT".**
+
+Reported as confusing by the platform owner, and it was — the header printed
+`user.role` raw. That column is the account's **agency** role, and the platform
+account genuinely has none: `handle_new_user()` defaults every new signup to
+CLIENT, and `rush@xrush.online` was deliberately left there when the platform
+and agency were split into separate accounts. Confirmed live — `role=CLIENT`,
+`is_platform_admin=true`, **0 client memberships**, so the CLIENT role grants it
+nothing; it is the absence of agency powers, and it is what keeps `/agency`
+closed to the account (`isAdminRole()` fails).
+
+`requirePlatformAdmin()` checks only `is_platform_admin`, never the role, so
+platform access never depended on that column.
+
+**The label was the bug, not the data** — and the obvious "fix" would have been
+harmful: promoting the account to SUPER_ADMIN would make it a super admin *of
+organization zero*, handing it xRush Agency's clients and ledger, which is
+exactly what separating the two removed. New pure `displayRoleFor()`
+(`src/lib/auth/types.ts`, beside `homePathForUser`, 3 unit tests) returns
+**"Platform Owner"** whenever `isPlatformAdmin` — including for a dual-hat
+account, where platform is the wider power — and the real agency role for
+everyone else. The column is untouched.
+
+Verified in a browser: platform → "Role: Platform Owner", agency SUPER_ADMIN →
+"Role: SUPER ADMIN", client → "Role: CLIENT". `npm test` 80/80.
+
+---
+
+**URL scheme renamed: `/admin` → `/agency`, `/portal` → `/client`.**
+
+The three areas now read as what they are: **`/platform`** (the vendor plane,
+unchanged), **`/agency`** (one agency's own data) and **`/client`** (one client's
+own data). `/client` also matches the original spec's `_client` naming.
+
+`src/routes/admin/` → `src/routes/agency/` and `src/routes/portal/` →
+`src/routes/client/` (git mv, so history follows), then every quoted route path
+rewritten — 50 `/admin` and 19 `/portal` across 21 files. The rewrite only
+matched paths at the start of a quoted string (`'/admin`, `"/admin`, `` `/admin ``),
+which cannot touch an import specifier since those all begin `@/` — confirmed
+zero overlap before running it, so `@/components/admin/**` and
+`@/server/admin/**` are untouched. Component directories were deliberately NOT
+renamed: they are not URLs, and this was a URL change.
+
+**Nothing outside the router referenced these paths** — checked before starting:
+no path is stored in the database, and no server function builds one, so there
+is no data migration and no stale link in a notification row.
+
+Route guards and `homePathForUser()` follow automatically; the generated route
+tree plus TanStack Router's typed `to` mean a missed path is a type error, not a
+runtime 404. 11 stale code comments describing the old routes were corrected in
+the same pass, as were `docs/DEPLOYMENT.md`, `docs/SECURITY_REVIEW.md` and
+`CLAUDE.md`'s routing-convention paragraph. Log entries in `CLAUDE.md` and this
+changelog dated before today still name `/admin` and `/portal`; they are a
+historical record and were left as written.
+
+**Verified in a real browser for all three roles** (temporary Playwright +
+magic-link sessions, removed after, zero lockfile diff):
+
+| signed in as | `/` lands on | cross-area attempts | old path |
+| --- | --- | --- | --- |
+| platform admin | `/platform/organizations` | `/agency`, `/client` → `/platform/organizations` | `/admin`, `/portal` → 404 |
+| agency SUPER_ADMIN | `/agency` | `/client`, `/platform` → `/agency` | `/admin` → 404 |
+| client | `/client` | `/agency`, `/platform` → `/client` | `/portal` → 404 |
+
+Page content confirmed loading on `/agency/ad-accounts`, `/agency/clients`,
+`/client/ad-accounts`, `/client/due` and `/platform/settings`, and all **26
+sidebar links across the three areas** resolve under their own prefix. `npm
+test` 77/77, typecheck and build clean.
+
+**The old URLs now 404 rather than redirecting.** That is the honest result of a
+rename and fine while production isn't in real use; if bookmarks or an external
+link ever need to survive, legacy `/admin/*` → `/agency/*` redirect routes are a
+small separate addition.
+
+---
+
+**Meta integration moved from xRush Agency to the Rush Tracker platform.**
+Migration `20260723000037_platform_settings.sql`, **applied**.
+
+The Meta System User token and Business Portfolio ID were modelled as org
+zero's — xRush Agency's — credentials: `app_settings` is keyed by
+`(organization_id, key)`, and `getMetaConfig()` fell back to the `META_*` env
+vars for org zero alone. That was always a half-truth. **All 34 ad accounts
+those credentials govern are platform-pool accounts** (`is_platform = true`,
+`organization_id` NULL since migration 000035), so the portfolio they point at
+belongs to the platform, not to the agency that happens to hold the grants.
+
+New `platform_settings` table: key/value, **no `organization_id` at all**, RLS
+enabled with zero policies (identical treatment to `app_settings` — it holds a
+live secret). A separate table rather than a reserved id in `app_settings`,
+because that column is NOT NULL and FK-constrained, so the platform would have
+needed a fake organization row — exactly the conflation being undone. The
+`META_*` env vars are now the platform's fallback, and **nothing an agency can
+edit reaches them**.
+
+`metaCredentialOrgFor()` returned an organization id and is now
+`metaCredentialScopeFor()`, returning a union — `{ kind: 'platform' }` or
+`{ kind: 'organization', organizationId }`. `getMetaConfig()`,
+`fetchMetaAdAccount()`, `listMetaBusinessAdAccounts()`,
+`updateMetaAdAccountSpendCap()` and `isMetaConfigured()` all take that scope.
+
+**New `/platform/settings`** (platform nav) manages the platform's credentials;
+`/admin/settings` keeps managing each agency's own. The credentials card is now
+one shared component taking a `scope` prop rather than a second copy — the two
+screens have identical masking, never-prefill and clearing rules, and a
+duplicate would drift.
+
+**Two regressions this would have caused, both prevented:**
+
+- **Every live Meta figure for xRush would have gone blank.** The ad accounts
+  list, the clients list and the client detail page all read live data through
+  `listMetaBusinessAdAccountsFn`, which fetches *the agency's own portfolio* —
+  and xRush no longer has one. New `listUsableMetaAdAccountsFn` instead fetches
+  across every credential set the agency can actually reach (its own portfolio
+  plus the platform's, for granted accounts), deduped to one Graph call per
+  portfolio. Verified live: **34/34 rows still show Remaining and Meta Due.**
+  The import dialog keeps the old fn, whose "your own portfolio" semantics are
+  the correct ones for importing.
+- **Telegram alerts for the pool would have stopped silently.** `alertTelegram()`
+  gated on `organizationId !== DEPLOYMENT_ORGANIZATION_ID`; the pool used to be
+  synced under org zero's id, so it passed by accident. Now gated on the
+  platform scope OR org zero.
+
+**Also added: "Add from Meta" on the pool panel** (`listPoolImportCandidatesFn`
+/ `importPoolAccountsFn`, `requirePlatformAdmin`). Without it the transfer would
+have removed a working capability: no agency can see the platform's portfolio
+any more, and the platform had no import screen, so adding a newly-created Meta
+account to the pool would have needed hand-written SQL. Imported accounts are
+`is_platform: true`, ungranted, `usd_rate: 0` (no client yet, so nothing to
+bill). Audited as `AD_ACCOUNT_CREATED` / `metadata.source:
+'PLATFORM_POOL_IMPORT'`.
+
+**Verified live.** `platform_settings` created and empty (env fallback live);
+the platform scope resolves and reaches the portfolio (36 accounts); **both
+xRush Agency and Arrow Solutions now resolve to "not configured"** — no
+borrowing. Write/read/clear round-tripped through the new table using
+`META_API_VERSION` only (never the token, and written to the same value as env,
+so a mid-test failure changed nothing). RLS proven with a row present: service
+role sees 1, the public anon key sees 0 and its write is refused (42501). In a
+real browser: `/platform/settings` shows all three fields as "Environment
+variable"; xRush's own Settings now shows the token and Portfolio ID as **"Not
+set"** (API version still env — it is a protocol version, not a credential);
+the pool import dialog lists exactly the 2 portfolio accounts not yet in the
+pool, submit disabled with nothing selected. Nothing was imported. Zero console
+errors. `npm test` 77/77, typecheck and build clean, Playwright removed with no
+dependency diff.
+
+---
+
+## 2026-09-15 (earlier)
+
+**Audit for missing data after the pool migration — one security hole, two
+real bugs, no data actually lost.**
+
+Prompted by "find any issues of data missing". Migration `20260723000035` set
+`organization_id = NULL` on all 34 ad accounts, so every query still filtering
+on that column silently returns nothing. Swept the SQL, the server layer, the
+data, and every screen.
+
+**SECURITY — pool accounts bypassed the assignment IDOR guard.** Migration
+`20260723000036`, **applied**. `assign_ad_account`, `release_ad_account` and
+`transfer_ad_account` checked ownership with
+`v_account.organization_id <> p_organization_id`. For a pool account that
+column is NULL, and `NULL <> x` is **NULL, not true** — which PL/pgSQL's `IF`
+treats as false, so the guard never fired. **Any agency could assign, release
+or transfer any pool account, including one granted to a different agency.**
+
+Proven before fixing: agency B assigned a pool account granted only to agency A
+to one of B's own clients and it **succeeded**, while the same attempt against
+an account A *owned* was correctly refused. After the fix the same attack is
+refused and creates no assignment row, while the legitimate holder can still
+assign and release both its owned and its granted accounts. Both directions are
+now regression-tested.
+
+The replacement asks the question that is actually correct now — *may this
+organization use this account?* — owned-by-them OR granted-to-them, the same
+union the server layer uses, and NULL-safe because `EXISTS` returns a real
+boolean.
+
+**The agency profile reported "Ad accounts 0"** for an agency holding 34
+granted accounts — its count still used a plain `organization_id` filter. Now
+uses the same union.
+
+**Revoking a grant had no confirmation step**, unlike every other destructive
+action here (delete client / employee / agency / admin all confirm). A single
+dropdown click silently took a live account away from an agency — and did,
+twice, during this session's own browser testing, stripping `ADA-0006`
+("xRush Agency - Skinthic 02") from xRush. Restored both times and now
+confirmed 34/34. Revoke now goes through a dialog stating that the agency loses
+the account immediately and that its clients holding it lose it too.
+
+**No data was lost.** Full sweep across 17 tables: no dangling
+`organization_id`, no financial rows orphaned from their client, no ownership
+CHECK violations, all 18 active assignments consistent with the agency that
+actually holds the account, and every screen reconciles against the database —
+ad accounts 34/34, clients 6/6, ledger 83 rows, platform profile and pool both
+34. (Search briefly looked empty in the sweep; that was the sweep's own
+selector — the page renders a list, not a table.)
+
+`npm test`: 74/74.
+
+---
+
+## 2026-09-14 (17)
+
+**Platform admins can now read an agency's books, deliberately and auditably.**
+
+The owner pointed out that the platform super admin can access all agency
+accounts. Measured rather than assumed: it was **already true at the database
+layer and invisible at the app layer**. Migration `20260723000031` ends 17 RLS
+SELECT policies with `or public.is_platform_admin()`, so signing in as the
+platform account with the **public anon key** — exactly as a browser would —
+returned 7 clients (including one belonging to a separate seeded agency), 84
+ledger entries, 33 payments and 34 ad accounts, plus that other agency's ledger
+rows verbatim.
+
+So the power existed and nothing recorded its use. The owner chose to keep it
+and surface it properly.
+
+**New: a read-only support view** at
+`/platform/organizations/$organizationId/data` — the agency's real clients with
+dues, its ad accounts (owned and granted), and its most recent 100 ledger
+entries. Reached by an explicit "View agency data" click, not shown inline on
+the profile.
+
+**Every open is recorded in that agency's OWN audit log**, not the platform's,
+so the customer can see when the vendor looked. Verified end to end: the entry
+reads *"Rush Platform — Platform Agency Data Viewed"* at the top of xRush's own
+Audit Log. The audit write happens before the data is returned, so an access
+counts even if the page never renders, and the page fetches once per visit
+(`staleTime: Infinity`) so background refetching cannot inflate the record with
+accesses nobody made.
+
+**Read-only on purpose.** Viewing a customer's ledger is support; editing it is
+not, and would need its own design.
+
+**The profile footnote was corrected.** It claimed an agency's data "stays
+private to them" — true of the UI, false of the database, and now false of the
+UI too. It now says the records are one deliberate click away and that opening
+them is recorded in the agency's own log.
+
+**Two bugs found by looking at the rendered page, not the code:**
+
+- **The route silently didn't exist.** Adding `$organizationId.data.tsx`
+  turned the sibling `$organizationId.tsx` into a layout parent with no
+  `<Outlet />`, so `/data` rendered the profile page instead — no error, just
+  the wrong screen. Fixed by renaming the leaf to `$organizationId.index.tsx`.
+- **The profile reported "Ad accounts 0" for xRush.** Its count still used a
+  plain `organization_id` filter, which the pool migration set to NULL on all
+  34 accounts. It now uses the same owned-or-granted union as every other read.
+
+---
+
+## 2026-09-14 (16)
+
+**Platform and agency are now two separate accounts.** This was the split
+asked for two sessions ago; it needed the account email, which arrived today.
+
+- **`rush@xrush.online` is the platform account.** Organization zero (every
+  profile needs one — `organization_id` is NOT NULL), the signup trigger's
+  default **CLIENT** role, and `is_platform_admin = true`.
+- **`mehedi.h.prantoz@gmail.com` is now xRush Agency's owner only** — still
+  SUPER_ADMIN of org zero, no longer a platform admin.
+
+**The CLIENT role on the platform account is deliberate — do not "fix" it.**
+`requirePlatformAdmin()` checks only the flag, never the role, so the platform
+account needs no agency role to do its job. Giving it ADMIN or SUPER_ADMIN
+would hand it access to xRush's clients and ledger, which is exactly the
+separation this split exists to create.
+
+**Done in the safe order**, with the old account's access never interrupted:
+the new account was created first, proven to sign in **through the real login
+form with the real password** (not an injected session) and reach `/platform`,
+and only then was the flag removed from the original account. The removal
+script refused to run unless the new account was already a platform admin, so
+the platform could not be left with none.
+
+**Verified both directions.** `rush@xrush.online`: lands on
+`/platform/organizations`, sees both agencies and all 34 pool accounts, and
+`/admin` redirects away with no agency data rendered.
+`mehedi.h.prantoz@gmail.com`: lands on `/admin`, sees its dashboard and all 34
+ad accounts, has no platform nav, and `/platform/organizations` redirects to
+`/admin` without leaking Arrow Solutions. Zero console errors on either.
+
+**Closed a dead end this exposed**: a platform-only account holds no agency
+role, so `/admin`'s role check bounced it to `/portal` — where it has no client
+membership and every query would have failed. `/portal` now redirects platform
+admins to `/platform`. Deliberately *not* added to `/admin`'s guard: that would
+lock a dual-hat account out of its own agency, which is a migration hazard
+rather than a rule worth enforcing.
+
+---
+
+## 2026-09-14 (15)
+
+**Agency offboarding, and the test suite is green for the first time.**
+
+**Delete an agency** — `deleteOrganizationFn` plus a "Delete agency" action on
+the agency profile. This is the most destructive action in the app, so it is
+guarded in four ways: never your own organization, never the platform's own
+(org zero owns the pool credentials and every platform login), the subscription
+must already be **Cancelled**, and the platform admin must retype the agency's
+exact name. The name is used rather than a fixed phrase because every agency's
+screen looks identical — a fixed phrase is easy to type confidently on the
+wrong one.
+
+**Why teardown order exists at all:** all 17 multi-tenant tables reference
+`organizations(id)` with no `ON DELETE` clause, so the organization row cannot
+be removed until its data is gone. `OFFBOARD_ORDER` satisfies those keys; it is
+deliberately a superset of "Clear all data"'s `WIPE_ORDER`, which keeps an
+agency running.
+
+**Platform-pool accounts survive offboarding.** A customer leaving must not
+destroy an account the platform owns and merely lent them — the account returns
+to the pool unassigned, its grant removed by cascade. Asserted directly.
+
+**Cancel subscription** is now settable from the UI. It is an end state,
+distinct from Suspend's temporary lock-out, and it is the required step before
+deletion. Kept on the profile page rather than the list, so terminal actions
+sit where the counts of what will be destroyed are visible.
+
+The confirmation dialog states exactly what will go: clients and their ledger
+history, owned ad accounts, staff and portal logins — with real counts — plus
+the note that pool accounts do not.
+
+**Fixed the long-standing failing test.** `permissions.test.ts` asserted four
+sensitive permissions; `finance.view` and `finance.manage` were added back in
+commit `0e3e8fe` and the expectation was never updated. It stays an exact
+allow-list on purpose — marking a permission sensitive restricts it to
+SUPER_ADMIN, and un-marking one quietly widens access, so adding one *should*
+fail this test until it is listed deliberately. The count is out of the test
+title, which is what let it go stale.
+
+**Verified**: a new gated integration test (`offboarding.test.ts`, 6 tests)
+proves the organization cannot be deleted while its data references it, that
+`OFFBOARD_ORDER` then satisfies every foreign key, that the agency's own ad
+account goes while the granted pool account survives with its grant released,
+and that nothing is left behind. The full flow was also driven through the real
+UI: Delete blocked while Active with the name field hidden, blocked again on a
+mismatched name, then a real deletion that removed the agency and redirected to
+the list. Throwaway agency cleaned up; zero console errors.
+
+**`npm test`: 72/72.** First fully green run in this project.
+
+---
+
+## 2026-09-14 (14)
+
+**Platform-owned ad account pool.** A second ownership model for ad accounts:
+the platform (the vendor layer, not a customer) owns a central pool and grants
+individual accounts to agencies. An agency's accounts are now the union of what
+it connected itself and what it has been granted. The
+agency-connects-its-own-Meta-credentials flow is untouched. Migration
+`20260723000035`, **applied to the live project**.
+
+**Two things in the request could not be built as written, and both were
+confirmed before anything was changed:**
+
+- **`ad_account_assignments` already exists** — it is the Phase-2 ad account ->
+  *client* table, with 18 live ACTIVE rows, its own RPCs, history UI and ledger
+  interaction. The new platform -> agency table is `platform_account_grants`,
+  using a deliberately different verb so the two can never be confused.
+- **There were no Meta credential rows to re-tag.** Credentials live in
+  `app_settings`, a key/value table keyed `(organization_id, key)`, and xRush
+  had zero rows there — its credentials are the `META_*` env vars. Those env
+  vars are now the platform pool's credential, which is what they already were
+  in everything but name.
+
+**All 34 of xRush's ad accounts moved into the pool and were granted straight
+back to org zero in the same migration**, so nothing changed for its day-to-day
+work — verified in the browser afterwards: all 34 still listed with live Meta
+data, clients, balances and alerts intact.
+
+**The union is defined once**, in `src/server/ad-accounts/scope.server.ts`, and
+every ad-account read/write routes through it — list, detail, update, rename,
+status, dashboard counts, assignable accounts, global search, the usage report
+and the Meta functions. The multi-tenant pass had spread
+`.eq('organization_id', …)` across ten files by hand; a union repeated that many
+times would drift. Mutations now authorize once and act by id, because a granted
+account's `organization_id` is NULL and the old double-`.eq()` silently matched
+nothing.
+
+**Meta credentials now resolve per account, not per "the current
+organization"** — a pool account lives in the platform's Business Portfolio, so
+an agency's own token cannot read or write it. The daily cron's unit of work
+changed with it: it syncs *credential sets* (each agency's own portfolio, plus
+the pool once) rather than agencies. Comparing a portfolio against rows it does
+not contain would have reported every one of them as "new to import" and never
+renamed any of them.
+
+**Behaviour change worth knowing:** pool accounts survive an agency's
+Settings -> "Clear all data". An agency clearing its own data must not destroy
+an account the platform merely granted it.
+
+**Panel:** `/platform/ad-accounts` — grant and revoke, one agency at a time per
+account (enforced by a UNIQUE constraint, not application code), audited as
+`PLATFORM_ACCOUNT_GRANTED` / `PLATFORM_ACCOUNT_REVOKED`. Granting is push-only.
+Agency account rows carry an "Own" vs "Platform assigned" badge.
+
+**Verified** with a real integration test against the live project
+(`pool-isolation.test.ts`, 8 tests): two seeded agencies, a pool account granted
+to A only, and B proven never to see it — not in the scoped list, not by id
+(where it is indistinguishable from a missing row) — while still seeing the
+account it owns outright; plus revoke/re-grant, the double-grant constraint, and
+a regression test that org zero sees exactly its 34 accounts. Full suite 65/66,
+the one failure being the long-standing unrelated `permissions.test.ts` one.
+
+**Rate limits, noted not addressed** (out of scope): the pool runs through one
+shared Meta app. At 34 accounts the cron makes 2 Graph calls for the whole pool
+— nowhere near a concern yet.
+
+---
+
+## 2026-09-14 (13)
+
+**Meta credentials are now per-agency.** This closes the largest open gap
+from the multi-tenant conversion — the one Phase 1B explicitly deferred,
+because `getMetaConfig()` took no parameters and scoping the table without
+redesigning the Meta call graph would have shipped a Settings screen that
+looked per-agency and silently wasn't.
+
+xRush Agency keeps everything configured to date. A new agency starts with
+nothing and connects its own Business Portfolio from its own Settings
+screen. Migration `20260723000034_app_settings_per_organization.sql`
+(**applied to the live project**) re-keys `app_settings` from `key` to
+`(organization_id, key)`, backfilling every existing row to xRush.
+
+**The rule that makes this isolation real:** `META_SYSTEM_USER_TOKEN` and
+`META_BUSINESS_ID` in the environment are **org zero's credentials only**.
+They're set on the deployment by the deployment's owner and point at xRush's
+portfolio. Had the env fallback stayed global, a new agency with no
+credentials would have silently fallen back to them — seeing xRush's ad
+accounts, and able to write spend caps to them. An agency with no
+credentials of its own now has no Meta integration, which is the correct
+answer rather than a degraded one. (The Graph API *version* is not a
+credential and is still shared.)
+
+Threaded `organizationId` through `fetchMetaAdAccount`,
+`listMetaBusinessAdAccounts` and `updateMetaAdAccountSpendCap`, and their
+callers. The account-level paths take it from the `ad_accounts` row's own
+`organization_id`, so an account can only ever be pushed to the portfolio of
+the agency that owns it. No client-side code changed — every UI path already
+went through a guarded server fn.
+
+**The nightly cron was rewritten to iterate agencies**, each synced against
+its own portfolio with its own credentials. One agency's expired token no
+longer stops everyone else's sync. Two things fixed along the way:
+- **Suspended agencies are now skipped** (both the sync and the pending
+  spend-cap retry) — previously they'd keep being acted on nightly despite
+  their users being locked out. This was an open item from the gap audit.
+- **Telegram alerts fire for org zero only.** There is one chat configured
+  on the deployment and it belongs to xRush; sending another agency's
+  account names and balances there would leak their data. Other agencies get
+  the in-app notification, which is correctly scoped. Per-agency Telegram is
+  a separate feature, deliberately not guessed at here.
+
+**Also fixed, found during verification**: the "Import from Meta" dialog
+swallowed a failed fetch and fell through to its empty state, so an agency
+with no portfolio connected was told *"everything in the Business Portfolio
+is already linked"* — confidently wrong, and it hid the one action they
+needed to take. It now shows the error, which names the fix.
+
+Verified live against the real project with a throwaway second agency:
+xRush's 34 ad accounts and Meta data still load exactly as before (no
+regression), the second agency's Settings shows token and Portfolio ID "Not
+set" with its own copy, and its "Import from Meta" returns the
+not-configured message with **zero of xRush's accounts leaking**. The cron
+endpoint was invoked for real: xRush synced (36 checked), Arrow Solutions
+and the throwaway both skipped as `not_configured`. Throwaway agency deleted
+afterwards; zero console errors.
+
+---
+
+## 2026-09-14 (12)
+
+**Row actions on the agency profile's admin list: Deactivate/Activate and
+Delete login.** Requested as a delete button; it ships as two actions
+because a delete alone would fail for most real admins.
+
+**Why:** every FK to `auth.users` in this schema (`reviewed_by`,
+`created_by`, `assigned_by`, `actor_user_id`, …) was declared with no ON
+DELETE clause, so Postgres itself refuses to delete an account that
+approved a limit request, verified a payment or wrote an audit row — those
+records must keep naming a real person. Delete is therefore only possible
+for an account that has never done anything, which is exactly the case
+worth supporting (added by mistake, or a duplicate).
+
+- **Deactivate** (`setOrganizationAdminStatusFn`) is the action for
+  everyone else: an inactive profile fails `loadSessionUser()`, so access
+  is revoked immediately while every record they touched stays intact.
+  Reversible from the same menu.
+- **Delete** (`deleteOrganizationAdminFn`) checks the audit trail first and
+  refuses with a message naming the number of recorded actions and pointing
+  at deactivation, rather than letting a raw FK violation surface as a
+  database error. If something outside the audit trail still holds a
+  reference, that error is translated to the same advice.
+- Both are scoped to the (organization, user) pair with a double `.eq()`,
+  refuse your own account, and refuse accounts flagged `is_platform_admin`
+  — the platform's own access shouldn't be revocable from an agency's
+  contact card. Audited as `ORGANIZATION_ADMIN_STATUS_CHANGED` /
+  `ORGANIZATION_ADMIN_DELETED`.
+- **Deleting an agency's last admin is warned about, not blocked** — the
+  dialog says the agency won't be able to sign in until another is added.
+  Cleaning up a mistake is legitimate, and "Add admin" on the same card
+  makes it recoverable.
+
+Verified live against a throwaway agency with two seeded admins, one given
+a recorded action: deactivate → `INACTIVE`, reactivate → `ACTIVE`, delete
+refused for the one with history (account untouched), delete succeeded for
+the clean one (profile row cascaded away), the last-admin warning renders,
+and the platform admin's own row correctly shows no actions menu at all.
+Audit rows correct for all three writes. Throwaway agency, users and audit
+rows deleted afterwards; zero console errors.
+
+---
+
+## 2026-09-14 (11)
+
+**An agency's first Super Admin can now be created from the platform panel**
+— "Add admin" in the agency profile's "Who to contact" card, and a matching
+button in that card's empty state, which previously said "No admin logins —
+this agency can't sign in" and offered no way to fix it. That case had no
+route back other than hand-written SQL, which is exactly what the "New
+agency" onboarding flow was built to eliminate.
+
+- New `createOrganizationAdminFn` (`requirePlatformAdmin`). The
+  user-provisioning half of `createOrganizationFn` was extracted into a
+  shared `provisionOrganizationSuperAdmin()` so both paths create an admin
+  identically — including the two fields that matter most
+  (`organization_id`, `role_id`), since `handle_new_user()` lands every new
+  account in org zero as a CLIENT. Never `is_platform_admin`.
+- The email is checked before anything is created, and a failed profile
+  update deletes the half-created auth user — the auth API and Postgres
+  aren't one transaction.
+- Audited as `ORGANIZATION_ADMIN_CREATED`, naming the platform admin, the
+  agency, and the email granted access.
+
+**This is a real privilege, and it's stated plainly in the dialog**: the
+login it creates can see that agency's own clients and ledger, which no
+platform screen can. It is deliberately not restricted to agencies with
+zero admins — an agency whose only admin is locked out still has a row and
+would otherwise be stranded — so the audit trail is what makes it
+accountable rather than a hard gate.
+
+**Also fixed while verifying**: the "Who to contact" table had four columns
+in a half-width card and clipped the Status badge off the right edge. Email
+now sits under the name, so the table fits.
+
+**Build-time gotcha worth remembering**: `type X = ReturnType<typeof
+getSupabaseAdminClient>` in a `.fns.ts` file fails the client build —
+a type alias referencing that binding keeps the `*.server` import alive
+after the handler bodies are stripped, and import protection rejects it.
+Type the parameter as `SupabaseClient` from the package instead.
+
+Verified live through the real UI against a throwaway organization: the
+empty-state button, the created admin's profile (correct `organization_id`,
+`SUPER_ADMIN`, `is_platform_admin` false), the audit row, and the
+duplicate-email refusal (no second auth user created). Throwaway
+organization, user and audit row all deleted afterwards; zero console
+errors.
+
+---
+
+## 2026-09-14 (10)
+
+**Platform and agency are now fully separate entities, and each agency has
+a profile page.** Owner's direction: the platform panel is not a section of
+the agency app, and the two should not cross-link.
+
+- Removed "Back to agency" from the platform sidebar and the "Platform"
+  doorway from the agency sidebar, along with the `platformAdminOnly`
+  nav-filtering machinery that existed only to serve it.
+- **A platform admin now lands on `/platform` when they sign in.**
+  `homePathForUser()` previously routed purely by role, so a platform
+  account would have been dropped into the agency app — which was fine
+  while one person wore both hats and wrong as soon as they don't. Covered
+  by a test.
+- Nothing else in the agency app changed.
+
+**New: an agency profile at `/platform/organizations/$organizationId`**,
+reached by clicking the agency name in the list. Shows what they're using
+(clients, ad accounts, staff logins, portal logins), the subscription
+record (plan, status, created, suspended-at, notes), and who to contact —
+the agency's own admins with names, emails and roles. Suspend/activate and
+edit both work from the profile as well as the list.
+
+This closes the "no usage metrics per org" gap from the earlier audit:
+there was previously no way to see how much of the product an agency
+actually used, which is what you'd price a plan on.
+
+**Deliberately aggregate-only.** The profile shows counts and contacts,
+never the agency's own clients, ledger or account data. A platform admin
+manages subscriptions; reading a customer's books is a different power and
+isn't granted here. The page says so in a footnote, so the boundary is
+visible rather than assumed.
+
+Verified in-browser against the live database: the profile renders real
+figures for xRush Agency (6 clients, 34 ad accounts, 4 staff, 9 portal
+logins) and lists all four of its admins. Zero console errors; typecheck
+and build clean; tests 49/50 passing (one added, same pre-existing
+unrelated failure).
+
+---
+
+## 2026-09-14 (9)
+
+**"New agency" onboarding — the last thing that required hand-written SQL.**
+Adding a customer previously meant creating a user in the Supabase dashboard
+and running two UPDATE statements; now it's a dialog on the platform panel.
+
+`createOrganizationFn` creates the organization **and** its first
+SUPER_ADMIN login together, because half of that job is useless on its own:
+an organization with no login can't be reached, and a new admin without an
+explicit `organization_id`/`role_id` lands in **org zero as a CLIENT** —
+the signup trigger's defaults. Those two fields are exactly what the manual
+SQL was for.
+
+Guards against the ways it can go wrong:
+- The email is checked **before** the organization row is created, so a
+  duplicate doesn't leave an empty agency behind.
+- Postgres and the auth API aren't one transaction, so anything failing
+  after the org exists rolls it back (and deletes the half-created user)
+  rather than orphaning it.
+- The new admin is never `is_platform_admin` — they own their agency, not
+  the platform.
+
+Verified end-to-end against the live database, driving the real UI: created
+an agency through the dialog, confirmed in the DB that the org was active
+with its plan and that the admin's profile pointed at the **new** org with
+SUPER_ADMIN and no platform flag, then signed in as that admin through the
+real login form with the password set in the dialog. They landed on
+`/admin` with a completely empty workspace — no Platform nav item, no sight
+of xRush's six clients, their own clients list empty. Test agency and user
+deleted afterwards, along with the audit rows; xRush Agency confirmed the
+only organization remaining. Zero console errors, build clean, tests 48/49
+(same pre-existing unrelated failure).
+
+---
+
+## 2026-09-14 (8)
+
+**Platform management split into its own panel at `/platform`.** Owner's
+call, ahead of adding more platform-level features: the vendor plane
+shouldn't sit inside one agency's admin area.
+
+- New `/platform` layout with its own sidebar (`PLATFORM_NAV`) and guard.
+  Organizations moved from `/admin/organizations` to
+  `/platform/organizations`; `/platform` redirects there until there's more
+  than one screen to show.
+- **The guard checks only `isPlatformAdmin`, never the agency role.** While
+  the panel lived under `/admin` it inherited that route's role check, so a
+  platform admin also had to hold ADMIN/SUPER_ADMIN somewhere just to reach
+  it — a platform-only account would have been bounced to `/portal` and
+  never seen it. Splitting the areas removes that coupling entirely.
+- Two-way doorways: the agency sidebar shows a "Platform" item (platform
+  admins only), the platform sidebar has "Back to agency".
+- The header's global search is suppressed in the platform panel — it
+  searches one agency's own clients and accounts, which is the wrong scope
+  in a cross-org area. New `showSearch` prop on AppShell/Header.
+
+`/admin` and `/portal` are untouched; no existing URL changed except the
+organizations page itself.
+
+**Also fixed a bug introduced by the design pass earlier today**: StatCard
+wrapped its value in a `<p>`, but the loading Skeleton renders a `<div>` —
+invalid HTML, and React logged a hydration error on every dashboard load.
+Caught by watching the browser console during this verification, not by
+typecheck. Now a `<div>`.
+
+Verified in-browser for all three user types: platform admin reaches the
+panel, an agency ADMIN hitting `/platform/organizations` is bounced to
+`/admin` and never sees the nav item, a client user is bounced to
+`/portal`. Zero console errors. Typecheck/build clean; tests 48/49 (same
+pre-existing unrelated failure).
+
+---
+
+## 2026-09-14 (7)
+
+**Visual design pass — KPI tiles unified, ledger made readable.** Driven by
+screenshotting every admin and portal screen in both themes plus mobile
+width, rather than reading the code, so the findings are things actually
+visible on screen.
+
+**One `StatCard` replaces three drifted copies** (admin dashboard, portal
+dashboard, `FinancialSummary`). Two real bugs fixed in the process:
+
+- *Dead space under every figure.* All three rendered an empty
+  `<CardContent />`, which still cost the card's `gap-6` plus `py-6` —
+  roughly 60px of nothing under each number. Tiles are ~25% shorter now,
+  which on the admin dashboard lifts two more sections above the fold.
+- *Numbers didn't share a baseline.* Any label that wrapped to two lines
+  ("Pending Payment Verifications", "Total Outstanding Due (BDT)") pushed
+  its figure down while its neighbours stayed put, so a row of tiles read
+  as ragged. The value is now bottom-anchored, and hints sit above the
+  number rather than below it, so figures line up regardless of label or
+  hint length.
+
+**Portal grid: 4 columns → 3.** With 7–9 tiles (the two Meta ones are
+conditional) a 4-up grid always stranded one card alone on the last row;
+9 tiles now fill a clean 3×3.
+
+**Portal figures were not tabular.** The portal never got the `.num`
+mono/tabular treatment the admin side has, so the same app rendered money
+two different ways depending on which side you were on. Now consistent.
+
+**Ledger debit vs credit were visually identical** — same weight, same
+colour, on the one screen whose entire job is showing which direction
+money moved. Credits now read in `--success`, debits in neutral bold, and
+the empty-side em-dash is dimmed so the eye lands on the real figure.
+
+Verified across light and dark themes and at 390px width. `npm run
+typecheck` / `npm run build` clean; `npm test` 48/49 (same pre-existing
+unrelated failure).
+
+---
+
 ## 2026-09-14 (6)
 
 **Review pass over Phases 2–3 — found and fixed a critical bug that made

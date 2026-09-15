@@ -1,5 +1,5 @@
 import { formatBdt, formatUsd } from '@/lib/money/money'
-import { Card, CardContent, CardDescription } from '@/components/ui/card'
+import { StatCard } from '@/components/shared/stat-card'
 import type { ClientFinancials } from '@/types/domain'
 
 /** Client financial summary cards (spec §34, §66, §69). Ledger-derived. */
@@ -63,25 +63,7 @@ export function FinancialSummary({
       className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-3 ${cards.length >= 6 ? 'xl:grid-cols-6' : 'xl:grid-cols-5'}`}
     >
       {cards.map((c) => (
-        <Card key={c.label}>
-          <CardContent className="py-4">
-            <CardDescription>{c.label}</CardDescription>
-            <div
-              className={
-                c.emphasize
-                  ? 'mt-1 text-2xl font-semibold text-foreground'
-                  : 'mt-1 text-2xl font-semibold'
-              }
-            >
-              {c.value}
-            </div>
-            {c.subValue && (
-              <div className="mt-0.5 text-xs text-muted-foreground">
-                {c.subValue}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <StatCard key={c.label} label={c.label} hint={c.subValue} value={c.value} />
       ))}
     </div>
   )

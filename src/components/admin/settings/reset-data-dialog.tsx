@@ -68,7 +68,7 @@ export function ResetDataDialog({
               <p>
                 This permanently deletes <strong>every</strong> client, ad
                 account, limit request, ledger entry, payment, adjustment,
-                notification, audit log, proof file, and employee — and
+                notification, audit log, and proof file — and
                 removes all client logins. Your admin logins, roles and
                 permissions are kept.
               </p>

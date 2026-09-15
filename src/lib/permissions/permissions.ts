@@ -34,8 +34,6 @@ export const PERMISSIONS = {
 
   AUDIT_LOGS_VIEW: 'audit_logs.view',
 
-  EMPLOYEES_VIEW: 'employees.view',
-  EMPLOYEES_MANAGE: 'employees.manage',
 
   INTEGRATIONS_MANAGE: 'integrations.manage',
 
@@ -80,8 +78,6 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
   'users.view': 'View users',
   'users.manage': 'Manage users / roles / permissions',
   'audit_logs.view': 'View audit logs',
-  'employees.view': 'View employees',
-  'employees.manage': 'Manage employees',
   'integrations.manage': 'Manage integration credentials',
   'finance.view': 'View USD buy/sell margin data',
   'finance.manage': 'Record USD rates and margin entries',

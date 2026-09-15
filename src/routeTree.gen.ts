@@ -11,42 +11,47 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteRouteImport } from './routes/_auth/route'
-import { Route as AdminRouteRouteImport } from './routes/admin/route'
-import { Route as PortalRouteRouteImport } from './routes/portal/route'
+import { Route as AgencyRouteRouteImport } from './routes/agency/route'
+import { Route as ClientRouteRouteImport } from './routes/client/route'
+import { Route as PlatformRouteRouteImport } from './routes/platform/route'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SubscriptionSuspendedRouteImport } from './routes/subscription-suspended'
 import { Route as AuthForgotPasswordRouteImport } from './routes/_auth/forgot-password'
 import { Route as AuthLoginRouteImport } from './routes/_auth/login'
-import { Route as AdminIndexRouteImport } from './routes/admin/index'
-import { Route as PortalIndexRouteImport } from './routes/portal/index'
-import { Route as AdminAdAccountsIndexRouteImport } from './routes/admin/ad-accounts/index'
-import { Route as AdminAdAccountsAccountIdRouteImport } from './routes/admin/ad-accounts/$accountId'
-import { Route as AdminAdjustmentsIndexRouteImport } from './routes/admin/adjustments/index'
-import { Route as AdminAuditIndexRouteImport } from './routes/admin/audit/index'
-import { Route as AdminClientsIndexRouteImport } from './routes/admin/clients/index'
-import { Route as AdminClientsClientIdRouteImport } from './routes/admin/clients/$clientId'
-import { Route as AdminEmployeesIndexRouteImport } from './routes/admin/employees/index'
-import { Route as AdminFinanceIndexRouteImport } from './routes/admin/finance/index'
-import { Route as AdminLedgerIndexRouteImport } from './routes/admin/ledger/index'
-import { Route as AdminLimitRequestsIndexRouteImport } from './routes/admin/limit-requests/index'
-import { Route as AdminLimitRequestsRequestIdRouteImport } from './routes/admin/limit-requests/$requestId'
-import { Route as AdminOrganizationsIndexRouteImport } from './routes/admin/organizations/index'
-import { Route as AdminPaymentRequestsIndexRouteImport } from './routes/admin/payment-requests/index'
-import { Route as AdminPaymentsIndexRouteImport } from './routes/admin/payments/index'
-import { Route as AdminPaymentsPaymentIdRouteImport } from './routes/admin/payments/$paymentId'
-import { Route as AdminReportsIndexRouteImport } from './routes/admin/reports/index'
-import { Route as AdminSearchIndexRouteImport } from './routes/admin/search/index'
-import { Route as AdminSettingsIndexRouteImport } from './routes/admin/settings/index'
-import { Route as AdminUsersIndexRouteImport } from './routes/admin/users/index'
+import { Route as AgencyIndexRouteImport } from './routes/agency/index'
+import { Route as ClientIndexRouteImport } from './routes/client/index'
+import { Route as PlatformIndexRouteImport } from './routes/platform/index'
+import { Route as AgencyAdAccountsIndexRouteImport } from './routes/agency/ad-accounts/index'
+import { Route as AgencyAdAccountsAccountIdRouteImport } from './routes/agency/ad-accounts/$accountId'
+import { Route as AgencyAdjustmentsIndexRouteImport } from './routes/agency/adjustments/index'
+import { Route as AgencyAuditIndexRouteImport } from './routes/agency/audit/index'
+import { Route as AgencyClientsIndexRouteImport } from './routes/agency/clients/index'
+import { Route as AgencyClientsClientIdRouteImport } from './routes/agency/clients/$clientId'
+import { Route as AgencyFinanceIndexRouteImport } from './routes/agency/finance/index'
+import { Route as AgencyLedgerIndexRouteImport } from './routes/agency/ledger/index'
+import { Route as AgencyLimitRequestsIndexRouteImport } from './routes/agency/limit-requests/index'
+import { Route as AgencyLimitRequestsRequestIdRouteImport } from './routes/agency/limit-requests/$requestId'
+import { Route as AgencyPaymentRequestsIndexRouteImport } from './routes/agency/payment-requests/index'
+import { Route as AgencyPaymentsIndexRouteImport } from './routes/agency/payments/index'
+import { Route as AgencyPaymentsPaymentIdRouteImport } from './routes/agency/payments/$paymentId'
+import { Route as AgencyReportsIndexRouteImport } from './routes/agency/reports/index'
+import { Route as AgencySearchIndexRouteImport } from './routes/agency/search/index'
+import { Route as AgencySettingsIndexRouteImport } from './routes/agency/settings/index'
+import { Route as AgencyUsersIndexRouteImport } from './routes/agency/users/index'
 import { Route as ApiCronMetaSyncRouteImport } from './routes/api/cron/meta-sync'
-import { Route as PortalAdAccountsIndexRouteImport } from './routes/portal/ad-accounts/index'
-import { Route as PortalDueIndexRouteImport } from './routes/portal/due/index'
-import { Route as PortalLimitRequestsIndexRouteImport } from './routes/portal/limit-requests/index'
-import { Route as PortalNotificationsIndexRouteImport } from './routes/portal/notifications/index'
-import { Route as PortalPaymentRequestsIndexRouteImport } from './routes/portal/payment-requests/index'
-import { Route as PortalProfileIndexRouteImport } from './routes/portal/profile/index'
-import { Route as PortalStatementIndexRouteImport } from './routes/portal/statement/index'
-import { Route as PortalTeamIndexRouteImport } from './routes/portal/team/index'
+import { Route as ClientAdAccountsIndexRouteImport } from './routes/client/ad-accounts/index'
+import { Route as ClientDueIndexRouteImport } from './routes/client/due/index'
+import { Route as ClientLimitRequestsIndexRouteImport } from './routes/client/limit-requests/index'
+import { Route as ClientNotificationsIndexRouteImport } from './routes/client/notifications/index'
+import { Route as ClientPaymentRequestsIndexRouteImport } from './routes/client/payment-requests/index'
+import { Route as ClientProfileIndexRouteImport } from './routes/client/profile/index'
+import { Route as ClientStatementIndexRouteImport } from './routes/client/statement/index'
+import { Route as ClientTeamIndexRouteImport } from './routes/client/team/index'
+import { Route as PlatformAdAccountsIndexRouteImport } from './routes/platform/ad-accounts/index'
+import { Route as PlatformOrganizationsIndexRouteImport } from './routes/platform/organizations/index'
+import { Route as PlatformSettingsIndexRouteImport } from './routes/platform/settings/index'
+import { Route as PlatformOrganizationsOrganizationIdIndexRouteImport } from './routes/platform/organizations/$organizationId.index'
+import { Route as PlatformOrganizationsOrganizationIdDataRouteImport } from './routes/platform/organizations/$organizationId.data'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -57,14 +62,19 @@ const AuthRouteRoute = AuthRouteRouteImport.update({
   id: '/_auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminRouteRoute = AdminRouteRouteImport.update({
-  id: '/admin',
-  path: '/admin',
+const AgencyRouteRoute = AgencyRouteRouteImport.update({
+  id: '/agency',
+  path: '/agency',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PortalRouteRoute = PortalRouteRouteImport.update({
-  id: '/portal',
-  path: '/portal',
+const ClientRouteRoute = ClientRouteRouteImport.update({
+  id: '/client',
+  path: '/client',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlatformRouteRoute = PlatformRouteRouteImport.update({
+  id: '/platform',
+  path: '/platform',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -87,201 +97,230 @@ const AuthLoginRoute = AuthLoginRouteImport.update({
   path: '/login',
   getParentRoute: () => AuthRouteRoute,
 } as any)
-const AdminIndexRoute = AdminIndexRouteImport.update({
+const AgencyIndexRoute = AgencyIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AdminRouteRoute,
+  getParentRoute: () => AgencyRouteRoute,
 } as any)
-const PortalIndexRoute = PortalIndexRouteImport.update({
+const ClientIndexRoute = ClientIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => PortalRouteRoute,
+  getParentRoute: () => ClientRouteRoute,
 } as any)
-const AdminAdAccountsIndexRoute = AdminAdAccountsIndexRouteImport.update({
+const PlatformIndexRoute = PlatformIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PlatformRouteRoute,
+} as any)
+const AgencyAdAccountsIndexRoute = AgencyAdAccountsIndexRouteImport.update({
   id: '/ad-accounts/',
   path: '/ad-accounts/',
-  getParentRoute: () => AdminRouteRoute,
+  getParentRoute: () => AgencyRouteRoute,
 } as any)
-const AdminAdAccountsAccountIdRoute =
-  AdminAdAccountsAccountIdRouteImport.update({
+const AgencyAdAccountsAccountIdRoute =
+  AgencyAdAccountsAccountIdRouteImport.update({
     id: '/ad-accounts/$accountId',
     path: '/ad-accounts/$accountId',
-    getParentRoute: () => AdminRouteRoute,
+    getParentRoute: () => AgencyRouteRoute,
   } as any)
-const AdminAdjustmentsIndexRoute = AdminAdjustmentsIndexRouteImport.update({
+const AgencyAdjustmentsIndexRoute = AgencyAdjustmentsIndexRouteImport.update({
   id: '/adjustments/',
   path: '/adjustments/',
-  getParentRoute: () => AdminRouteRoute,
+  getParentRoute: () => AgencyRouteRoute,
 } as any)
-const AdminAuditIndexRoute = AdminAuditIndexRouteImport.update({
+const AgencyAuditIndexRoute = AgencyAuditIndexRouteImport.update({
   id: '/audit/',
   path: '/audit/',
-  getParentRoute: () => AdminRouteRoute,
+  getParentRoute: () => AgencyRouteRoute,
 } as any)
-const AdminClientsIndexRoute = AdminClientsIndexRouteImport.update({
+const AgencyClientsIndexRoute = AgencyClientsIndexRouteImport.update({
   id: '/clients/',
   path: '/clients/',
-  getParentRoute: () => AdminRouteRoute,
+  getParentRoute: () => AgencyRouteRoute,
 } as any)
-const AdminClientsClientIdRoute = AdminClientsClientIdRouteImport.update({
+const AgencyClientsClientIdRoute = AgencyClientsClientIdRouteImport.update({
   id: '/clients/$clientId',
   path: '/clients/$clientId',
-  getParentRoute: () => AdminRouteRoute,
+  getParentRoute: () => AgencyRouteRoute,
 } as any)
-const AdminEmployeesIndexRoute = AdminEmployeesIndexRouteImport.update({
-  id: '/employees/',
-  path: '/employees/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminFinanceIndexRoute = AdminFinanceIndexRouteImport.update({
+const AgencyFinanceIndexRoute = AgencyFinanceIndexRouteImport.update({
   id: '/finance/',
   path: '/finance/',
-  getParentRoute: () => AdminRouteRoute,
+  getParentRoute: () => AgencyRouteRoute,
 } as any)
-const AdminLedgerIndexRoute = AdminLedgerIndexRouteImport.update({
+const AgencyLedgerIndexRoute = AgencyLedgerIndexRouteImport.update({
   id: '/ledger/',
   path: '/ledger/',
-  getParentRoute: () => AdminRouteRoute,
+  getParentRoute: () => AgencyRouteRoute,
 } as any)
-const AdminLimitRequestsIndexRoute = AdminLimitRequestsIndexRouteImport.update({
-  id: '/limit-requests/',
-  path: '/limit-requests/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminLimitRequestsRequestIdRoute =
-  AdminLimitRequestsRequestIdRouteImport.update({
+const AgencyLimitRequestsIndexRoute =
+  AgencyLimitRequestsIndexRouteImport.update({
+    id: '/limit-requests/',
+    path: '/limit-requests/',
+    getParentRoute: () => AgencyRouteRoute,
+  } as any)
+const AgencyLimitRequestsRequestIdRoute =
+  AgencyLimitRequestsRequestIdRouteImport.update({
     id: '/limit-requests/$requestId',
     path: '/limit-requests/$requestId',
-    getParentRoute: () => AdminRouteRoute,
+    getParentRoute: () => AgencyRouteRoute,
   } as any)
-const AdminOrganizationsIndexRoute = AdminOrganizationsIndexRouteImport.update({
-  id: '/organizations/',
-  path: '/organizations/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminPaymentRequestsIndexRoute =
-  AdminPaymentRequestsIndexRouteImport.update({
+const AgencyPaymentRequestsIndexRoute =
+  AgencyPaymentRequestsIndexRouteImport.update({
     id: '/payment-requests/',
     path: '/payment-requests/',
-    getParentRoute: () => AdminRouteRoute,
+    getParentRoute: () => AgencyRouteRoute,
   } as any)
-const AdminPaymentsIndexRoute = AdminPaymentsIndexRouteImport.update({
+const AgencyPaymentsIndexRoute = AgencyPaymentsIndexRouteImport.update({
   id: '/payments/',
   path: '/payments/',
-  getParentRoute: () => AdminRouteRoute,
+  getParentRoute: () => AgencyRouteRoute,
 } as any)
-const AdminPaymentsPaymentIdRoute = AdminPaymentsPaymentIdRouteImport.update({
+const AgencyPaymentsPaymentIdRoute = AgencyPaymentsPaymentIdRouteImport.update({
   id: '/payments/$paymentId',
   path: '/payments/$paymentId',
-  getParentRoute: () => AdminRouteRoute,
+  getParentRoute: () => AgencyRouteRoute,
 } as any)
-const AdminReportsIndexRoute = AdminReportsIndexRouteImport.update({
+const AgencyReportsIndexRoute = AgencyReportsIndexRouteImport.update({
   id: '/reports/',
   path: '/reports/',
-  getParentRoute: () => AdminRouteRoute,
+  getParentRoute: () => AgencyRouteRoute,
 } as any)
-const AdminSearchIndexRoute = AdminSearchIndexRouteImport.update({
+const AgencySearchIndexRoute = AgencySearchIndexRouteImport.update({
   id: '/search/',
   path: '/search/',
-  getParentRoute: () => AdminRouteRoute,
+  getParentRoute: () => AgencyRouteRoute,
 } as any)
-const AdminSettingsIndexRoute = AdminSettingsIndexRouteImport.update({
+const AgencySettingsIndexRoute = AgencySettingsIndexRouteImport.update({
   id: '/settings/',
   path: '/settings/',
-  getParentRoute: () => AdminRouteRoute,
+  getParentRoute: () => AgencyRouteRoute,
 } as any)
-const AdminUsersIndexRoute = AdminUsersIndexRouteImport.update({
+const AgencyUsersIndexRoute = AgencyUsersIndexRouteImport.update({
   id: '/users/',
   path: '/users/',
-  getParentRoute: () => AdminRouteRoute,
+  getParentRoute: () => AgencyRouteRoute,
 } as any)
 const ApiCronMetaSyncRoute = ApiCronMetaSyncRouteImport.update({
   id: '/api/cron/meta-sync',
   path: '/api/cron/meta-sync',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PortalAdAccountsIndexRoute = PortalAdAccountsIndexRouteImport.update({
+const ClientAdAccountsIndexRoute = ClientAdAccountsIndexRouteImport.update({
   id: '/ad-accounts/',
   path: '/ad-accounts/',
-  getParentRoute: () => PortalRouteRoute,
+  getParentRoute: () => ClientRouteRoute,
 } as any)
-const PortalDueIndexRoute = PortalDueIndexRouteImport.update({
+const ClientDueIndexRoute = ClientDueIndexRouteImport.update({
   id: '/due/',
   path: '/due/',
-  getParentRoute: () => PortalRouteRoute,
+  getParentRoute: () => ClientRouteRoute,
 } as any)
-const PortalLimitRequestsIndexRoute =
-  PortalLimitRequestsIndexRouteImport.update({
+const ClientLimitRequestsIndexRoute =
+  ClientLimitRequestsIndexRouteImport.update({
     id: '/limit-requests/',
     path: '/limit-requests/',
-    getParentRoute: () => PortalRouteRoute,
+    getParentRoute: () => ClientRouteRoute,
   } as any)
-const PortalNotificationsIndexRoute =
-  PortalNotificationsIndexRouteImport.update({
+const ClientNotificationsIndexRoute =
+  ClientNotificationsIndexRouteImport.update({
     id: '/notifications/',
     path: '/notifications/',
-    getParentRoute: () => PortalRouteRoute,
+    getParentRoute: () => ClientRouteRoute,
   } as any)
-const PortalPaymentRequestsIndexRoute =
-  PortalPaymentRequestsIndexRouteImport.update({
+const ClientPaymentRequestsIndexRoute =
+  ClientPaymentRequestsIndexRouteImport.update({
     id: '/payment-requests/',
     path: '/payment-requests/',
-    getParentRoute: () => PortalRouteRoute,
+    getParentRoute: () => ClientRouteRoute,
   } as any)
-const PortalProfileIndexRoute = PortalProfileIndexRouteImport.update({
+const ClientProfileIndexRoute = ClientProfileIndexRouteImport.update({
   id: '/profile/',
   path: '/profile/',
-  getParentRoute: () => PortalRouteRoute,
+  getParentRoute: () => ClientRouteRoute,
 } as any)
-const PortalStatementIndexRoute = PortalStatementIndexRouteImport.update({
+const ClientStatementIndexRoute = ClientStatementIndexRouteImport.update({
   id: '/statement/',
   path: '/statement/',
-  getParentRoute: () => PortalRouteRoute,
+  getParentRoute: () => ClientRouteRoute,
 } as any)
-const PortalTeamIndexRoute = PortalTeamIndexRouteImport.update({
+const ClientTeamIndexRoute = ClientTeamIndexRouteImport.update({
   id: '/team/',
   path: '/team/',
-  getParentRoute: () => PortalRouteRoute,
+  getParentRoute: () => ClientRouteRoute,
 } as any)
+const PlatformAdAccountsIndexRoute = PlatformAdAccountsIndexRouteImport.update({
+  id: '/ad-accounts/',
+  path: '/ad-accounts/',
+  getParentRoute: () => PlatformRouteRoute,
+} as any)
+const PlatformOrganizationsIndexRoute =
+  PlatformOrganizationsIndexRouteImport.update({
+    id: '/organizations/',
+    path: '/organizations/',
+    getParentRoute: () => PlatformRouteRoute,
+  } as any)
+const PlatformSettingsIndexRoute = PlatformSettingsIndexRouteImport.update({
+  id: '/settings/',
+  path: '/settings/',
+  getParentRoute: () => PlatformRouteRoute,
+} as any)
+const PlatformOrganizationsOrganizationIdIndexRoute =
+  PlatformOrganizationsOrganizationIdIndexRouteImport.update({
+    id: '/organizations/$organizationId/',
+    path: '/organizations/$organizationId/',
+    getParentRoute: () => PlatformRouteRoute,
+  } as any)
+const PlatformOrganizationsOrganizationIdDataRoute =
+  PlatformOrganizationsOrganizationIdDataRouteImport.update({
+    id: '/organizations/$organizationId/data',
+    path: '/organizations/$organizationId/data',
+    getParentRoute: () => PlatformRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRouteRouteWithChildren
-  '/portal': typeof PortalRouteRouteWithChildren
+  '/agency': typeof AgencyRouteRouteWithChildren
+  '/client': typeof ClientRouteRouteWithChildren
+  '/platform': typeof PlatformRouteRouteWithChildren
   '/reset-password': typeof ResetPasswordRoute
   '/subscription-suspended': typeof SubscriptionSuspendedRoute
   '/forgot-password': typeof AuthForgotPasswordRoute
   '/login': typeof AuthLoginRoute
-  '/admin/': typeof AdminIndexRoute
-  '/portal/': typeof PortalIndexRoute
-  '/admin/ad-accounts/$accountId': typeof AdminAdAccountsAccountIdRoute
-  '/admin/clients/$clientId': typeof AdminClientsClientIdRoute
-  '/admin/limit-requests/$requestId': typeof AdminLimitRequestsRequestIdRoute
-  '/admin/payments/$paymentId': typeof AdminPaymentsPaymentIdRoute
+  '/agency/': typeof AgencyIndexRoute
+  '/client/': typeof ClientIndexRoute
+  '/platform/': typeof PlatformIndexRoute
+  '/agency/ad-accounts/$accountId': typeof AgencyAdAccountsAccountIdRoute
+  '/agency/clients/$clientId': typeof AgencyClientsClientIdRoute
+  '/agency/limit-requests/$requestId': typeof AgencyLimitRequestsRequestIdRoute
+  '/agency/payments/$paymentId': typeof AgencyPaymentsPaymentIdRoute
   '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
-  '/admin/ad-accounts/': typeof AdminAdAccountsIndexRoute
-  '/admin/adjustments/': typeof AdminAdjustmentsIndexRoute
-  '/admin/audit/': typeof AdminAuditIndexRoute
-  '/admin/clients/': typeof AdminClientsIndexRoute
-  '/admin/employees/': typeof AdminEmployeesIndexRoute
-  '/admin/finance/': typeof AdminFinanceIndexRoute
-  '/admin/ledger/': typeof AdminLedgerIndexRoute
-  '/admin/limit-requests/': typeof AdminLimitRequestsIndexRoute
-  '/admin/organizations/': typeof AdminOrganizationsIndexRoute
-  '/admin/payment-requests/': typeof AdminPaymentRequestsIndexRoute
-  '/admin/payments/': typeof AdminPaymentsIndexRoute
-  '/admin/reports/': typeof AdminReportsIndexRoute
-  '/admin/search/': typeof AdminSearchIndexRoute
-  '/admin/settings/': typeof AdminSettingsIndexRoute
-  '/admin/users/': typeof AdminUsersIndexRoute
-  '/portal/ad-accounts/': typeof PortalAdAccountsIndexRoute
-  '/portal/due/': typeof PortalDueIndexRoute
-  '/portal/limit-requests/': typeof PortalLimitRequestsIndexRoute
-  '/portal/notifications/': typeof PortalNotificationsIndexRoute
-  '/portal/payment-requests/': typeof PortalPaymentRequestsIndexRoute
-  '/portal/profile/': typeof PortalProfileIndexRoute
-  '/portal/statement/': typeof PortalStatementIndexRoute
-  '/portal/team/': typeof PortalTeamIndexRoute
+  '/agency/ad-accounts/': typeof AgencyAdAccountsIndexRoute
+  '/agency/adjustments/': typeof AgencyAdjustmentsIndexRoute
+  '/agency/audit/': typeof AgencyAuditIndexRoute
+  '/agency/clients/': typeof AgencyClientsIndexRoute
+  '/agency/finance/': typeof AgencyFinanceIndexRoute
+  '/agency/ledger/': typeof AgencyLedgerIndexRoute
+  '/agency/limit-requests/': typeof AgencyLimitRequestsIndexRoute
+  '/agency/payment-requests/': typeof AgencyPaymentRequestsIndexRoute
+  '/agency/payments/': typeof AgencyPaymentsIndexRoute
+  '/agency/reports/': typeof AgencyReportsIndexRoute
+  '/agency/search/': typeof AgencySearchIndexRoute
+  '/agency/settings/': typeof AgencySettingsIndexRoute
+  '/agency/users/': typeof AgencyUsersIndexRoute
+  '/client/ad-accounts/': typeof ClientAdAccountsIndexRoute
+  '/client/due/': typeof ClientDueIndexRoute
+  '/client/limit-requests/': typeof ClientLimitRequestsIndexRoute
+  '/client/notifications/': typeof ClientNotificationsIndexRoute
+  '/client/payment-requests/': typeof ClientPaymentRequestsIndexRoute
+  '/client/profile/': typeof ClientProfileIndexRoute
+  '/client/statement/': typeof ClientStatementIndexRoute
+  '/client/team/': typeof ClientTeamIndexRoute
+  '/platform/ad-accounts/': typeof PlatformAdAccountsIndexRoute
+  '/platform/organizations/': typeof PlatformOrganizationsIndexRoute
+  '/platform/settings/': typeof PlatformSettingsIndexRoute
+  '/platform/organizations/$organizationId/data': typeof PlatformOrganizationsOrganizationIdDataRoute
+  '/platform/organizations/$organizationId/': typeof PlatformOrganizationsOrganizationIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -289,118 +328,132 @@ export interface FileRoutesByTo {
   '/subscription-suspended': typeof SubscriptionSuspendedRoute
   '/forgot-password': typeof AuthForgotPasswordRoute
   '/login': typeof AuthLoginRoute
-  '/admin': typeof AdminIndexRoute
-  '/portal': typeof PortalIndexRoute
-  '/admin/ad-accounts/$accountId': typeof AdminAdAccountsAccountIdRoute
-  '/admin/clients/$clientId': typeof AdminClientsClientIdRoute
-  '/admin/limit-requests/$requestId': typeof AdminLimitRequestsRequestIdRoute
-  '/admin/payments/$paymentId': typeof AdminPaymentsPaymentIdRoute
+  '/agency': typeof AgencyIndexRoute
+  '/client': typeof ClientIndexRoute
+  '/platform': typeof PlatformIndexRoute
+  '/agency/ad-accounts/$accountId': typeof AgencyAdAccountsAccountIdRoute
+  '/agency/clients/$clientId': typeof AgencyClientsClientIdRoute
+  '/agency/limit-requests/$requestId': typeof AgencyLimitRequestsRequestIdRoute
+  '/agency/payments/$paymentId': typeof AgencyPaymentsPaymentIdRoute
   '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
-  '/admin/ad-accounts': typeof AdminAdAccountsIndexRoute
-  '/admin/adjustments': typeof AdminAdjustmentsIndexRoute
-  '/admin/audit': typeof AdminAuditIndexRoute
-  '/admin/clients': typeof AdminClientsIndexRoute
-  '/admin/employees': typeof AdminEmployeesIndexRoute
-  '/admin/finance': typeof AdminFinanceIndexRoute
-  '/admin/ledger': typeof AdminLedgerIndexRoute
-  '/admin/limit-requests': typeof AdminLimitRequestsIndexRoute
-  '/admin/organizations': typeof AdminOrganizationsIndexRoute
-  '/admin/payment-requests': typeof AdminPaymentRequestsIndexRoute
-  '/admin/payments': typeof AdminPaymentsIndexRoute
-  '/admin/reports': typeof AdminReportsIndexRoute
-  '/admin/search': typeof AdminSearchIndexRoute
-  '/admin/settings': typeof AdminSettingsIndexRoute
-  '/admin/users': typeof AdminUsersIndexRoute
-  '/portal/ad-accounts': typeof PortalAdAccountsIndexRoute
-  '/portal/due': typeof PortalDueIndexRoute
-  '/portal/limit-requests': typeof PortalLimitRequestsIndexRoute
-  '/portal/notifications': typeof PortalNotificationsIndexRoute
-  '/portal/payment-requests': typeof PortalPaymentRequestsIndexRoute
-  '/portal/profile': typeof PortalProfileIndexRoute
-  '/portal/statement': typeof PortalStatementIndexRoute
-  '/portal/team': typeof PortalTeamIndexRoute
+  '/agency/ad-accounts': typeof AgencyAdAccountsIndexRoute
+  '/agency/adjustments': typeof AgencyAdjustmentsIndexRoute
+  '/agency/audit': typeof AgencyAuditIndexRoute
+  '/agency/clients': typeof AgencyClientsIndexRoute
+  '/agency/finance': typeof AgencyFinanceIndexRoute
+  '/agency/ledger': typeof AgencyLedgerIndexRoute
+  '/agency/limit-requests': typeof AgencyLimitRequestsIndexRoute
+  '/agency/payment-requests': typeof AgencyPaymentRequestsIndexRoute
+  '/agency/payments': typeof AgencyPaymentsIndexRoute
+  '/agency/reports': typeof AgencyReportsIndexRoute
+  '/agency/search': typeof AgencySearchIndexRoute
+  '/agency/settings': typeof AgencySettingsIndexRoute
+  '/agency/users': typeof AgencyUsersIndexRoute
+  '/client/ad-accounts': typeof ClientAdAccountsIndexRoute
+  '/client/due': typeof ClientDueIndexRoute
+  '/client/limit-requests': typeof ClientLimitRequestsIndexRoute
+  '/client/notifications': typeof ClientNotificationsIndexRoute
+  '/client/payment-requests': typeof ClientPaymentRequestsIndexRoute
+  '/client/profile': typeof ClientProfileIndexRoute
+  '/client/statement': typeof ClientStatementIndexRoute
+  '/client/team': typeof ClientTeamIndexRoute
+  '/platform/ad-accounts': typeof PlatformAdAccountsIndexRoute
+  '/platform/organizations': typeof PlatformOrganizationsIndexRoute
+  '/platform/settings': typeof PlatformSettingsIndexRoute
+  '/platform/organizations/$organizationId/data': typeof PlatformOrganizationsOrganizationIdDataRoute
+  '/platform/organizations/$organizationId': typeof PlatformOrganizationsOrganizationIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_auth': typeof AuthRouteRouteWithChildren
-  '/admin': typeof AdminRouteRouteWithChildren
-  '/portal': typeof PortalRouteRouteWithChildren
+  '/agency': typeof AgencyRouteRouteWithChildren
+  '/client': typeof ClientRouteRouteWithChildren
+  '/platform': typeof PlatformRouteRouteWithChildren
   '/reset-password': typeof ResetPasswordRoute
   '/subscription-suspended': typeof SubscriptionSuspendedRoute
   '/_auth/forgot-password': typeof AuthForgotPasswordRoute
   '/_auth/login': typeof AuthLoginRoute
-  '/admin/': typeof AdminIndexRoute
-  '/portal/': typeof PortalIndexRoute
-  '/admin/ad-accounts/$accountId': typeof AdminAdAccountsAccountIdRoute
-  '/admin/clients/$clientId': typeof AdminClientsClientIdRoute
-  '/admin/limit-requests/$requestId': typeof AdminLimitRequestsRequestIdRoute
-  '/admin/payments/$paymentId': typeof AdminPaymentsPaymentIdRoute
+  '/agency/': typeof AgencyIndexRoute
+  '/client/': typeof ClientIndexRoute
+  '/platform/': typeof PlatformIndexRoute
+  '/agency/ad-accounts/$accountId': typeof AgencyAdAccountsAccountIdRoute
+  '/agency/clients/$clientId': typeof AgencyClientsClientIdRoute
+  '/agency/limit-requests/$requestId': typeof AgencyLimitRequestsRequestIdRoute
+  '/agency/payments/$paymentId': typeof AgencyPaymentsPaymentIdRoute
   '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
-  '/admin/ad-accounts/': typeof AdminAdAccountsIndexRoute
-  '/admin/adjustments/': typeof AdminAdjustmentsIndexRoute
-  '/admin/audit/': typeof AdminAuditIndexRoute
-  '/admin/clients/': typeof AdminClientsIndexRoute
-  '/admin/employees/': typeof AdminEmployeesIndexRoute
-  '/admin/finance/': typeof AdminFinanceIndexRoute
-  '/admin/ledger/': typeof AdminLedgerIndexRoute
-  '/admin/limit-requests/': typeof AdminLimitRequestsIndexRoute
-  '/admin/organizations/': typeof AdminOrganizationsIndexRoute
-  '/admin/payment-requests/': typeof AdminPaymentRequestsIndexRoute
-  '/admin/payments/': typeof AdminPaymentsIndexRoute
-  '/admin/reports/': typeof AdminReportsIndexRoute
-  '/admin/search/': typeof AdminSearchIndexRoute
-  '/admin/settings/': typeof AdminSettingsIndexRoute
-  '/admin/users/': typeof AdminUsersIndexRoute
-  '/portal/ad-accounts/': typeof PortalAdAccountsIndexRoute
-  '/portal/due/': typeof PortalDueIndexRoute
-  '/portal/limit-requests/': typeof PortalLimitRequestsIndexRoute
-  '/portal/notifications/': typeof PortalNotificationsIndexRoute
-  '/portal/payment-requests/': typeof PortalPaymentRequestsIndexRoute
-  '/portal/profile/': typeof PortalProfileIndexRoute
-  '/portal/statement/': typeof PortalStatementIndexRoute
-  '/portal/team/': typeof PortalTeamIndexRoute
+  '/agency/ad-accounts/': typeof AgencyAdAccountsIndexRoute
+  '/agency/adjustments/': typeof AgencyAdjustmentsIndexRoute
+  '/agency/audit/': typeof AgencyAuditIndexRoute
+  '/agency/clients/': typeof AgencyClientsIndexRoute
+  '/agency/finance/': typeof AgencyFinanceIndexRoute
+  '/agency/ledger/': typeof AgencyLedgerIndexRoute
+  '/agency/limit-requests/': typeof AgencyLimitRequestsIndexRoute
+  '/agency/payment-requests/': typeof AgencyPaymentRequestsIndexRoute
+  '/agency/payments/': typeof AgencyPaymentsIndexRoute
+  '/agency/reports/': typeof AgencyReportsIndexRoute
+  '/agency/search/': typeof AgencySearchIndexRoute
+  '/agency/settings/': typeof AgencySettingsIndexRoute
+  '/agency/users/': typeof AgencyUsersIndexRoute
+  '/client/ad-accounts/': typeof ClientAdAccountsIndexRoute
+  '/client/due/': typeof ClientDueIndexRoute
+  '/client/limit-requests/': typeof ClientLimitRequestsIndexRoute
+  '/client/notifications/': typeof ClientNotificationsIndexRoute
+  '/client/payment-requests/': typeof ClientPaymentRequestsIndexRoute
+  '/client/profile/': typeof ClientProfileIndexRoute
+  '/client/statement/': typeof ClientStatementIndexRoute
+  '/client/team/': typeof ClientTeamIndexRoute
+  '/platform/ad-accounts/': typeof PlatformAdAccountsIndexRoute
+  '/platform/organizations/': typeof PlatformOrganizationsIndexRoute
+  '/platform/settings/': typeof PlatformSettingsIndexRoute
+  '/platform/organizations/$organizationId/data': typeof PlatformOrganizationsOrganizationIdDataRoute
+  '/platform/organizations/$organizationId/': typeof PlatformOrganizationsOrganizationIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/admin'
-    | '/portal'
+    | '/agency'
+    | '/client'
+    | '/platform'
     | '/reset-password'
     | '/subscription-suspended'
     | '/forgot-password'
     | '/login'
-    | '/admin/'
-    | '/portal/'
-    | '/admin/ad-accounts/$accountId'
-    | '/admin/clients/$clientId'
-    | '/admin/limit-requests/$requestId'
-    | '/admin/payments/$paymentId'
+    | '/agency/'
+    | '/client/'
+    | '/platform/'
+    | '/agency/ad-accounts/$accountId'
+    | '/agency/clients/$clientId'
+    | '/agency/limit-requests/$requestId'
+    | '/agency/payments/$paymentId'
     | '/api/cron/meta-sync'
-    | '/admin/ad-accounts/'
-    | '/admin/adjustments/'
-    | '/admin/audit/'
-    | '/admin/clients/'
-    | '/admin/employees/'
-    | '/admin/finance/'
-    | '/admin/ledger/'
-    | '/admin/limit-requests/'
-    | '/admin/organizations/'
-    | '/admin/payment-requests/'
-    | '/admin/payments/'
-    | '/admin/reports/'
-    | '/admin/search/'
-    | '/admin/settings/'
-    | '/admin/users/'
-    | '/portal/ad-accounts/'
-    | '/portal/due/'
-    | '/portal/limit-requests/'
-    | '/portal/notifications/'
-    | '/portal/payment-requests/'
-    | '/portal/profile/'
-    | '/portal/statement/'
-    | '/portal/team/'
+    | '/agency/ad-accounts/'
+    | '/agency/adjustments/'
+    | '/agency/audit/'
+    | '/agency/clients/'
+    | '/agency/finance/'
+    | '/agency/ledger/'
+    | '/agency/limit-requests/'
+    | '/agency/payment-requests/'
+    | '/agency/payments/'
+    | '/agency/reports/'
+    | '/agency/search/'
+    | '/agency/settings/'
+    | '/agency/users/'
+    | '/client/ad-accounts/'
+    | '/client/due/'
+    | '/client/limit-requests/'
+    | '/client/notifications/'
+    | '/client/payment-requests/'
+    | '/client/profile/'
+    | '/client/statement/'
+    | '/client/team/'
+    | '/platform/ad-accounts/'
+    | '/platform/organizations/'
+    | '/platform/settings/'
+    | '/platform/organizations/$organizationId/data'
+    | '/platform/organizations/$organizationId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -408,83 +461,93 @@ export interface FileRouteTypes {
     | '/subscription-suspended'
     | '/forgot-password'
     | '/login'
-    | '/admin'
-    | '/portal'
-    | '/admin/ad-accounts/$accountId'
-    | '/admin/clients/$clientId'
-    | '/admin/limit-requests/$requestId'
-    | '/admin/payments/$paymentId'
+    | '/agency'
+    | '/client'
+    | '/platform'
+    | '/agency/ad-accounts/$accountId'
+    | '/agency/clients/$clientId'
+    | '/agency/limit-requests/$requestId'
+    | '/agency/payments/$paymentId'
     | '/api/cron/meta-sync'
-    | '/admin/ad-accounts'
-    | '/admin/adjustments'
-    | '/admin/audit'
-    | '/admin/clients'
-    | '/admin/employees'
-    | '/admin/finance'
-    | '/admin/ledger'
-    | '/admin/limit-requests'
-    | '/admin/organizations'
-    | '/admin/payment-requests'
-    | '/admin/payments'
-    | '/admin/reports'
-    | '/admin/search'
-    | '/admin/settings'
-    | '/admin/users'
-    | '/portal/ad-accounts'
-    | '/portal/due'
-    | '/portal/limit-requests'
-    | '/portal/notifications'
-    | '/portal/payment-requests'
-    | '/portal/profile'
-    | '/portal/statement'
-    | '/portal/team'
+    | '/agency/ad-accounts'
+    | '/agency/adjustments'
+    | '/agency/audit'
+    | '/agency/clients'
+    | '/agency/finance'
+    | '/agency/ledger'
+    | '/agency/limit-requests'
+    | '/agency/payment-requests'
+    | '/agency/payments'
+    | '/agency/reports'
+    | '/agency/search'
+    | '/agency/settings'
+    | '/agency/users'
+    | '/client/ad-accounts'
+    | '/client/due'
+    | '/client/limit-requests'
+    | '/client/notifications'
+    | '/client/payment-requests'
+    | '/client/profile'
+    | '/client/statement'
+    | '/client/team'
+    | '/platform/ad-accounts'
+    | '/platform/organizations'
+    | '/platform/settings'
+    | '/platform/organizations/$organizationId/data'
+    | '/platform/organizations/$organizationId'
   id:
     | '__root__'
     | '/'
     | '/_auth'
-    | '/admin'
-    | '/portal'
+    | '/agency'
+    | '/client'
+    | '/platform'
     | '/reset-password'
     | '/subscription-suspended'
     | '/_auth/forgot-password'
     | '/_auth/login'
-    | '/admin/'
-    | '/portal/'
-    | '/admin/ad-accounts/$accountId'
-    | '/admin/clients/$clientId'
-    | '/admin/limit-requests/$requestId'
-    | '/admin/payments/$paymentId'
+    | '/agency/'
+    | '/client/'
+    | '/platform/'
+    | '/agency/ad-accounts/$accountId'
+    | '/agency/clients/$clientId'
+    | '/agency/limit-requests/$requestId'
+    | '/agency/payments/$paymentId'
     | '/api/cron/meta-sync'
-    | '/admin/ad-accounts/'
-    | '/admin/adjustments/'
-    | '/admin/audit/'
-    | '/admin/clients/'
-    | '/admin/employees/'
-    | '/admin/finance/'
-    | '/admin/ledger/'
-    | '/admin/limit-requests/'
-    | '/admin/organizations/'
-    | '/admin/payment-requests/'
-    | '/admin/payments/'
-    | '/admin/reports/'
-    | '/admin/search/'
-    | '/admin/settings/'
-    | '/admin/users/'
-    | '/portal/ad-accounts/'
-    | '/portal/due/'
-    | '/portal/limit-requests/'
-    | '/portal/notifications/'
-    | '/portal/payment-requests/'
-    | '/portal/profile/'
-    | '/portal/statement/'
-    | '/portal/team/'
+    | '/agency/ad-accounts/'
+    | '/agency/adjustments/'
+    | '/agency/audit/'
+    | '/agency/clients/'
+    | '/agency/finance/'
+    | '/agency/ledger/'
+    | '/agency/limit-requests/'
+    | '/agency/payment-requests/'
+    | '/agency/payments/'
+    | '/agency/reports/'
+    | '/agency/search/'
+    | '/agency/settings/'
+    | '/agency/users/'
+    | '/client/ad-accounts/'
+    | '/client/due/'
+    | '/client/limit-requests/'
+    | '/client/notifications/'
+    | '/client/payment-requests/'
+    | '/client/profile/'
+    | '/client/statement/'
+    | '/client/team/'
+    | '/platform/ad-accounts/'
+    | '/platform/organizations/'
+    | '/platform/settings/'
+    | '/platform/organizations/$organizationId/data'
+    | '/platform/organizations/$organizationId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRouteRoute: typeof AuthRouteRouteWithChildren
-  AdminRouteRoute: typeof AdminRouteRouteWithChildren
-  PortalRouteRoute: typeof PortalRouteRouteWithChildren
+  AgencyRouteRoute: typeof AgencyRouteRouteWithChildren
+  ClientRouteRoute: typeof ClientRouteRouteWithChildren
+  PlatformRouteRoute: typeof PlatformRouteRouteWithChildren
   ResetPasswordRoute: typeof ResetPasswordRoute
   SubscriptionSuspendedRoute: typeof SubscriptionSuspendedRoute
   ApiCronMetaSyncRoute: typeof ApiCronMetaSyncRoute
@@ -506,18 +569,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin': {
-      id: '/admin'
-      path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof AdminRouteRouteImport
+    '/agency': {
+      id: '/agency'
+      path: '/agency'
+      fullPath: '/agency'
+      preLoaderRoute: typeof AgencyRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/portal': {
-      id: '/portal'
-      path: '/portal'
-      fullPath: '/portal'
-      preLoaderRoute: typeof PortalRouteRouteImport
+    '/client': {
+      id: '/client'
+      path: '/client'
+      fullPath: '/client'
+      preLoaderRoute: typeof ClientRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/platform': {
+      id: '/platform'
+      path: '/platform'
+      fullPath: '/platform'
+      preLoaderRoute: typeof PlatformRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -548,152 +618,145 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthLoginRouteImport
       parentRoute: typeof AuthRouteRoute
     }
-    '/admin/': {
-      id: '/admin/'
+    '/agency/': {
+      id: '/agency/'
       path: '/'
-      fullPath: '/admin/'
-      preLoaderRoute: typeof AdminIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+      fullPath: '/agency/'
+      preLoaderRoute: typeof AgencyIndexRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
-    '/portal/': {
-      id: '/portal/'
+    '/client/': {
+      id: '/client/'
       path: '/'
-      fullPath: '/portal/'
-      preLoaderRoute: typeof PortalIndexRouteImport
-      parentRoute: typeof PortalRouteRoute
+      fullPath: '/client/'
+      preLoaderRoute: typeof ClientIndexRouteImport
+      parentRoute: typeof ClientRouteRoute
     }
-    '/admin/ad-accounts/': {
-      id: '/admin/ad-accounts/'
+    '/platform/': {
+      id: '/platform/'
+      path: '/'
+      fullPath: '/platform/'
+      preLoaderRoute: typeof PlatformIndexRouteImport
+      parentRoute: typeof PlatformRouteRoute
+    }
+    '/agency/ad-accounts/': {
+      id: '/agency/ad-accounts/'
       path: '/ad-accounts'
-      fullPath: '/admin/ad-accounts/'
-      preLoaderRoute: typeof AdminAdAccountsIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+      fullPath: '/agency/ad-accounts/'
+      preLoaderRoute: typeof AgencyAdAccountsIndexRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
-    '/admin/ad-accounts/$accountId': {
-      id: '/admin/ad-accounts/$accountId'
+    '/agency/ad-accounts/$accountId': {
+      id: '/agency/ad-accounts/$accountId'
       path: '/ad-accounts/$accountId'
-      fullPath: '/admin/ad-accounts/$accountId'
-      preLoaderRoute: typeof AdminAdAccountsAccountIdRouteImport
-      parentRoute: typeof AdminRouteRoute
+      fullPath: '/agency/ad-accounts/$accountId'
+      preLoaderRoute: typeof AgencyAdAccountsAccountIdRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
-    '/admin/adjustments/': {
-      id: '/admin/adjustments/'
+    '/agency/adjustments/': {
+      id: '/agency/adjustments/'
       path: '/adjustments'
-      fullPath: '/admin/adjustments/'
-      preLoaderRoute: typeof AdminAdjustmentsIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+      fullPath: '/agency/adjustments/'
+      preLoaderRoute: typeof AgencyAdjustmentsIndexRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
-    '/admin/audit/': {
-      id: '/admin/audit/'
+    '/agency/audit/': {
+      id: '/agency/audit/'
       path: '/audit'
-      fullPath: '/admin/audit/'
-      preLoaderRoute: typeof AdminAuditIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+      fullPath: '/agency/audit/'
+      preLoaderRoute: typeof AgencyAuditIndexRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
-    '/admin/clients/': {
-      id: '/admin/clients/'
+    '/agency/clients/': {
+      id: '/agency/clients/'
       path: '/clients'
-      fullPath: '/admin/clients/'
-      preLoaderRoute: typeof AdminClientsIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+      fullPath: '/agency/clients/'
+      preLoaderRoute: typeof AgencyClientsIndexRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
-    '/admin/clients/$clientId': {
-      id: '/admin/clients/$clientId'
+    '/agency/clients/$clientId': {
+      id: '/agency/clients/$clientId'
       path: '/clients/$clientId'
-      fullPath: '/admin/clients/$clientId'
-      preLoaderRoute: typeof AdminClientsClientIdRouteImport
-      parentRoute: typeof AdminRouteRoute
+      fullPath: '/agency/clients/$clientId'
+      preLoaderRoute: typeof AgencyClientsClientIdRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
-    '/admin/employees/': {
-      id: '/admin/employees/'
-      path: '/employees'
-      fullPath: '/admin/employees/'
-      preLoaderRoute: typeof AdminEmployeesIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/finance/': {
-      id: '/admin/finance/'
+    '/agency/finance/': {
+      id: '/agency/finance/'
       path: '/finance'
-      fullPath: '/admin/finance/'
-      preLoaderRoute: typeof AdminFinanceIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+      fullPath: '/agency/finance/'
+      preLoaderRoute: typeof AgencyFinanceIndexRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
-    '/admin/ledger/': {
-      id: '/admin/ledger/'
+    '/agency/ledger/': {
+      id: '/agency/ledger/'
       path: '/ledger'
-      fullPath: '/admin/ledger/'
-      preLoaderRoute: typeof AdminLedgerIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+      fullPath: '/agency/ledger/'
+      preLoaderRoute: typeof AgencyLedgerIndexRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
-    '/admin/limit-requests/': {
-      id: '/admin/limit-requests/'
+    '/agency/limit-requests/': {
+      id: '/agency/limit-requests/'
       path: '/limit-requests'
-      fullPath: '/admin/limit-requests/'
-      preLoaderRoute: typeof AdminLimitRequestsIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+      fullPath: '/agency/limit-requests/'
+      preLoaderRoute: typeof AgencyLimitRequestsIndexRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
-    '/admin/limit-requests/$requestId': {
-      id: '/admin/limit-requests/$requestId'
+    '/agency/limit-requests/$requestId': {
+      id: '/agency/limit-requests/$requestId'
       path: '/limit-requests/$requestId'
-      fullPath: '/admin/limit-requests/$requestId'
-      preLoaderRoute: typeof AdminLimitRequestsRequestIdRouteImport
-      parentRoute: typeof AdminRouteRoute
+      fullPath: '/agency/limit-requests/$requestId'
+      preLoaderRoute: typeof AgencyLimitRequestsRequestIdRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
-    '/admin/organizations/': {
-      id: '/admin/organizations/'
-      path: '/organizations'
-      fullPath: '/admin/organizations/'
-      preLoaderRoute: typeof AdminOrganizationsIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/payment-requests/': {
-      id: '/admin/payment-requests/'
+    '/agency/payment-requests/': {
+      id: '/agency/payment-requests/'
       path: '/payment-requests'
-      fullPath: '/admin/payment-requests/'
-      preLoaderRoute: typeof AdminPaymentRequestsIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+      fullPath: '/agency/payment-requests/'
+      preLoaderRoute: typeof AgencyPaymentRequestsIndexRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
-    '/admin/payments/': {
-      id: '/admin/payments/'
+    '/agency/payments/': {
+      id: '/agency/payments/'
       path: '/payments'
-      fullPath: '/admin/payments/'
-      preLoaderRoute: typeof AdminPaymentsIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+      fullPath: '/agency/payments/'
+      preLoaderRoute: typeof AgencyPaymentsIndexRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
-    '/admin/payments/$paymentId': {
-      id: '/admin/payments/$paymentId'
+    '/agency/payments/$paymentId': {
+      id: '/agency/payments/$paymentId'
       path: '/payments/$paymentId'
-      fullPath: '/admin/payments/$paymentId'
-      preLoaderRoute: typeof AdminPaymentsPaymentIdRouteImport
-      parentRoute: typeof AdminRouteRoute
+      fullPath: '/agency/payments/$paymentId'
+      preLoaderRoute: typeof AgencyPaymentsPaymentIdRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
-    '/admin/reports/': {
-      id: '/admin/reports/'
+    '/agency/reports/': {
+      id: '/agency/reports/'
       path: '/reports'
-      fullPath: '/admin/reports/'
-      preLoaderRoute: typeof AdminReportsIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+      fullPath: '/agency/reports/'
+      preLoaderRoute: typeof AgencyReportsIndexRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
-    '/admin/search/': {
-      id: '/admin/search/'
+    '/agency/search/': {
+      id: '/agency/search/'
       path: '/search'
-      fullPath: '/admin/search/'
-      preLoaderRoute: typeof AdminSearchIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+      fullPath: '/agency/search/'
+      preLoaderRoute: typeof AgencySearchIndexRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
-    '/admin/settings/': {
-      id: '/admin/settings/'
+    '/agency/settings/': {
+      id: '/agency/settings/'
       path: '/settings'
-      fullPath: '/admin/settings/'
-      preLoaderRoute: typeof AdminSettingsIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+      fullPath: '/agency/settings/'
+      preLoaderRoute: typeof AgencySettingsIndexRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
-    '/admin/users/': {
-      id: '/admin/users/'
+    '/agency/users/': {
+      id: '/agency/users/'
       path: '/users'
-      fullPath: '/admin/users/'
-      preLoaderRoute: typeof AdminUsersIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+      fullPath: '/agency/users/'
+      preLoaderRoute: typeof AgencyUsersIndexRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
     '/api/cron/meta-sync': {
       id: '/api/cron/meta-sync'
@@ -702,61 +765,96 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCronMetaSyncRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/portal/ad-accounts/': {
-      id: '/portal/ad-accounts/'
+    '/client/ad-accounts/': {
+      id: '/client/ad-accounts/'
       path: '/ad-accounts'
-      fullPath: '/portal/ad-accounts/'
-      preLoaderRoute: typeof PortalAdAccountsIndexRouteImport
-      parentRoute: typeof PortalRouteRoute
+      fullPath: '/client/ad-accounts/'
+      preLoaderRoute: typeof ClientAdAccountsIndexRouteImport
+      parentRoute: typeof ClientRouteRoute
     }
-    '/portal/due/': {
-      id: '/portal/due/'
+    '/client/due/': {
+      id: '/client/due/'
       path: '/due'
-      fullPath: '/portal/due/'
-      preLoaderRoute: typeof PortalDueIndexRouteImport
-      parentRoute: typeof PortalRouteRoute
+      fullPath: '/client/due/'
+      preLoaderRoute: typeof ClientDueIndexRouteImport
+      parentRoute: typeof ClientRouteRoute
     }
-    '/portal/limit-requests/': {
-      id: '/portal/limit-requests/'
+    '/client/limit-requests/': {
+      id: '/client/limit-requests/'
       path: '/limit-requests'
-      fullPath: '/portal/limit-requests/'
-      preLoaderRoute: typeof PortalLimitRequestsIndexRouteImport
-      parentRoute: typeof PortalRouteRoute
+      fullPath: '/client/limit-requests/'
+      preLoaderRoute: typeof ClientLimitRequestsIndexRouteImport
+      parentRoute: typeof ClientRouteRoute
     }
-    '/portal/notifications/': {
-      id: '/portal/notifications/'
+    '/client/notifications/': {
+      id: '/client/notifications/'
       path: '/notifications'
-      fullPath: '/portal/notifications/'
-      preLoaderRoute: typeof PortalNotificationsIndexRouteImport
-      parentRoute: typeof PortalRouteRoute
+      fullPath: '/client/notifications/'
+      preLoaderRoute: typeof ClientNotificationsIndexRouteImport
+      parentRoute: typeof ClientRouteRoute
     }
-    '/portal/payment-requests/': {
-      id: '/portal/payment-requests/'
+    '/client/payment-requests/': {
+      id: '/client/payment-requests/'
       path: '/payment-requests'
-      fullPath: '/portal/payment-requests/'
-      preLoaderRoute: typeof PortalPaymentRequestsIndexRouteImport
-      parentRoute: typeof PortalRouteRoute
+      fullPath: '/client/payment-requests/'
+      preLoaderRoute: typeof ClientPaymentRequestsIndexRouteImport
+      parentRoute: typeof ClientRouteRoute
     }
-    '/portal/profile/': {
-      id: '/portal/profile/'
+    '/client/profile/': {
+      id: '/client/profile/'
       path: '/profile'
-      fullPath: '/portal/profile/'
-      preLoaderRoute: typeof PortalProfileIndexRouteImport
-      parentRoute: typeof PortalRouteRoute
+      fullPath: '/client/profile/'
+      preLoaderRoute: typeof ClientProfileIndexRouteImport
+      parentRoute: typeof ClientRouteRoute
     }
-    '/portal/statement/': {
-      id: '/portal/statement/'
+    '/client/statement/': {
+      id: '/client/statement/'
       path: '/statement'
-      fullPath: '/portal/statement/'
-      preLoaderRoute: typeof PortalStatementIndexRouteImport
-      parentRoute: typeof PortalRouteRoute
+      fullPath: '/client/statement/'
+      preLoaderRoute: typeof ClientStatementIndexRouteImport
+      parentRoute: typeof ClientRouteRoute
     }
-    '/portal/team/': {
-      id: '/portal/team/'
+    '/client/team/': {
+      id: '/client/team/'
       path: '/team'
-      fullPath: '/portal/team/'
-      preLoaderRoute: typeof PortalTeamIndexRouteImport
-      parentRoute: typeof PortalRouteRoute
+      fullPath: '/client/team/'
+      preLoaderRoute: typeof ClientTeamIndexRouteImport
+      parentRoute: typeof ClientRouteRoute
+    }
+    '/platform/ad-accounts/': {
+      id: '/platform/ad-accounts/'
+      path: '/ad-accounts'
+      fullPath: '/platform/ad-accounts/'
+      preLoaderRoute: typeof PlatformAdAccountsIndexRouteImport
+      parentRoute: typeof PlatformRouteRoute
+    }
+    '/platform/organizations/': {
+      id: '/platform/organizations/'
+      path: '/organizations'
+      fullPath: '/platform/organizations/'
+      preLoaderRoute: typeof PlatformOrganizationsIndexRouteImport
+      parentRoute: typeof PlatformRouteRoute
+    }
+    '/platform/settings/': {
+      id: '/platform/settings/'
+      path: '/settings'
+      fullPath: '/platform/settings/'
+      preLoaderRoute: typeof PlatformSettingsIndexRouteImport
+      parentRoute: typeof PlatformRouteRoute
+    }
+    '/platform/organizations/$organizationId/': {
+      id: '/platform/organizations/$organizationId/'
+      path: '/organizations/$organizationId'
+      fullPath: '/platform/organizations/$organizationId/'
+      preLoaderRoute: typeof PlatformOrganizationsOrganizationIdIndexRouteImport
+      parentRoute: typeof PlatformRouteRoute
+    }
+    '/platform/organizations/$organizationId/data': {
+      id: '/platform/organizations/$organizationId/data'
+      path: '/organizations/$organizationId/data'
+      fullPath: '/platform/organizations/$organizationId/data'
+      preLoaderRoute: typeof PlatformOrganizationsOrganizationIdDataRouteImport
+      parentRoute: typeof PlatformRouteRoute
     }
   }
 }
@@ -775,89 +873,110 @@ const AuthRouteRouteWithChildren = AuthRouteRoute._addFileChildren(
   AuthRouteRouteChildren,
 )
 
-interface AdminRouteRouteChildren {
-  AdminIndexRoute: typeof AdminIndexRoute
-  AdminAdAccountsAccountIdRoute: typeof AdminAdAccountsAccountIdRoute
-  AdminClientsClientIdRoute: typeof AdminClientsClientIdRoute
-  AdminLimitRequestsRequestIdRoute: typeof AdminLimitRequestsRequestIdRoute
-  AdminPaymentsPaymentIdRoute: typeof AdminPaymentsPaymentIdRoute
-  AdminAdAccountsIndexRoute: typeof AdminAdAccountsIndexRoute
-  AdminAdjustmentsIndexRoute: typeof AdminAdjustmentsIndexRoute
-  AdminAuditIndexRoute: typeof AdminAuditIndexRoute
-  AdminClientsIndexRoute: typeof AdminClientsIndexRoute
-  AdminEmployeesIndexRoute: typeof AdminEmployeesIndexRoute
-  AdminFinanceIndexRoute: typeof AdminFinanceIndexRoute
-  AdminLedgerIndexRoute: typeof AdminLedgerIndexRoute
-  AdminLimitRequestsIndexRoute: typeof AdminLimitRequestsIndexRoute
-  AdminOrganizationsIndexRoute: typeof AdminOrganizationsIndexRoute
-  AdminPaymentRequestsIndexRoute: typeof AdminPaymentRequestsIndexRoute
-  AdminPaymentsIndexRoute: typeof AdminPaymentsIndexRoute
-  AdminReportsIndexRoute: typeof AdminReportsIndexRoute
-  AdminSearchIndexRoute: typeof AdminSearchIndexRoute
-  AdminSettingsIndexRoute: typeof AdminSettingsIndexRoute
-  AdminUsersIndexRoute: typeof AdminUsersIndexRoute
+interface AgencyRouteRouteChildren {
+  AgencyIndexRoute: typeof AgencyIndexRoute
+  AgencyAdAccountsAccountIdRoute: typeof AgencyAdAccountsAccountIdRoute
+  AgencyClientsClientIdRoute: typeof AgencyClientsClientIdRoute
+  AgencyLimitRequestsRequestIdRoute: typeof AgencyLimitRequestsRequestIdRoute
+  AgencyPaymentsPaymentIdRoute: typeof AgencyPaymentsPaymentIdRoute
+  AgencyAdAccountsIndexRoute: typeof AgencyAdAccountsIndexRoute
+  AgencyAdjustmentsIndexRoute: typeof AgencyAdjustmentsIndexRoute
+  AgencyAuditIndexRoute: typeof AgencyAuditIndexRoute
+  AgencyClientsIndexRoute: typeof AgencyClientsIndexRoute
+  AgencyFinanceIndexRoute: typeof AgencyFinanceIndexRoute
+  AgencyLedgerIndexRoute: typeof AgencyLedgerIndexRoute
+  AgencyLimitRequestsIndexRoute: typeof AgencyLimitRequestsIndexRoute
+  AgencyPaymentRequestsIndexRoute: typeof AgencyPaymentRequestsIndexRoute
+  AgencyPaymentsIndexRoute: typeof AgencyPaymentsIndexRoute
+  AgencyReportsIndexRoute: typeof AgencyReportsIndexRoute
+  AgencySearchIndexRoute: typeof AgencySearchIndexRoute
+  AgencySettingsIndexRoute: typeof AgencySettingsIndexRoute
+  AgencyUsersIndexRoute: typeof AgencyUsersIndexRoute
 }
 
-const AdminRouteRouteChildren: AdminRouteRouteChildren = {
-  AdminIndexRoute: AdminIndexRoute,
-  AdminAdAccountsAccountIdRoute: AdminAdAccountsAccountIdRoute,
-  AdminClientsClientIdRoute: AdminClientsClientIdRoute,
-  AdminLimitRequestsRequestIdRoute: AdminLimitRequestsRequestIdRoute,
-  AdminPaymentsPaymentIdRoute: AdminPaymentsPaymentIdRoute,
-  AdminAdAccountsIndexRoute: AdminAdAccountsIndexRoute,
-  AdminAdjustmentsIndexRoute: AdminAdjustmentsIndexRoute,
-  AdminAuditIndexRoute: AdminAuditIndexRoute,
-  AdminClientsIndexRoute: AdminClientsIndexRoute,
-  AdminEmployeesIndexRoute: AdminEmployeesIndexRoute,
-  AdminFinanceIndexRoute: AdminFinanceIndexRoute,
-  AdminLedgerIndexRoute: AdminLedgerIndexRoute,
-  AdminLimitRequestsIndexRoute: AdminLimitRequestsIndexRoute,
-  AdminOrganizationsIndexRoute: AdminOrganizationsIndexRoute,
-  AdminPaymentRequestsIndexRoute: AdminPaymentRequestsIndexRoute,
-  AdminPaymentsIndexRoute: AdminPaymentsIndexRoute,
-  AdminReportsIndexRoute: AdminReportsIndexRoute,
-  AdminSearchIndexRoute: AdminSearchIndexRoute,
-  AdminSettingsIndexRoute: AdminSettingsIndexRoute,
-  AdminUsersIndexRoute: AdminUsersIndexRoute,
+const AgencyRouteRouteChildren: AgencyRouteRouteChildren = {
+  AgencyIndexRoute: AgencyIndexRoute,
+  AgencyAdAccountsAccountIdRoute: AgencyAdAccountsAccountIdRoute,
+  AgencyClientsClientIdRoute: AgencyClientsClientIdRoute,
+  AgencyLimitRequestsRequestIdRoute: AgencyLimitRequestsRequestIdRoute,
+  AgencyPaymentsPaymentIdRoute: AgencyPaymentsPaymentIdRoute,
+  AgencyAdAccountsIndexRoute: AgencyAdAccountsIndexRoute,
+  AgencyAdjustmentsIndexRoute: AgencyAdjustmentsIndexRoute,
+  AgencyAuditIndexRoute: AgencyAuditIndexRoute,
+  AgencyClientsIndexRoute: AgencyClientsIndexRoute,
+  AgencyFinanceIndexRoute: AgencyFinanceIndexRoute,
+  AgencyLedgerIndexRoute: AgencyLedgerIndexRoute,
+  AgencyLimitRequestsIndexRoute: AgencyLimitRequestsIndexRoute,
+  AgencyPaymentRequestsIndexRoute: AgencyPaymentRequestsIndexRoute,
+  AgencyPaymentsIndexRoute: AgencyPaymentsIndexRoute,
+  AgencyReportsIndexRoute: AgencyReportsIndexRoute,
+  AgencySearchIndexRoute: AgencySearchIndexRoute,
+  AgencySettingsIndexRoute: AgencySettingsIndexRoute,
+  AgencyUsersIndexRoute: AgencyUsersIndexRoute,
 }
 
-const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
-  AdminRouteRouteChildren,
+const AgencyRouteRouteWithChildren = AgencyRouteRoute._addFileChildren(
+  AgencyRouteRouteChildren,
 )
 
-interface PortalRouteRouteChildren {
-  PortalIndexRoute: typeof PortalIndexRoute
-  PortalAdAccountsIndexRoute: typeof PortalAdAccountsIndexRoute
-  PortalDueIndexRoute: typeof PortalDueIndexRoute
-  PortalLimitRequestsIndexRoute: typeof PortalLimitRequestsIndexRoute
-  PortalNotificationsIndexRoute: typeof PortalNotificationsIndexRoute
-  PortalPaymentRequestsIndexRoute: typeof PortalPaymentRequestsIndexRoute
-  PortalProfileIndexRoute: typeof PortalProfileIndexRoute
-  PortalStatementIndexRoute: typeof PortalStatementIndexRoute
-  PortalTeamIndexRoute: typeof PortalTeamIndexRoute
+interface ClientRouteRouteChildren {
+  ClientIndexRoute: typeof ClientIndexRoute
+  ClientAdAccountsIndexRoute: typeof ClientAdAccountsIndexRoute
+  ClientDueIndexRoute: typeof ClientDueIndexRoute
+  ClientLimitRequestsIndexRoute: typeof ClientLimitRequestsIndexRoute
+  ClientNotificationsIndexRoute: typeof ClientNotificationsIndexRoute
+  ClientPaymentRequestsIndexRoute: typeof ClientPaymentRequestsIndexRoute
+  ClientProfileIndexRoute: typeof ClientProfileIndexRoute
+  ClientStatementIndexRoute: typeof ClientStatementIndexRoute
+  ClientTeamIndexRoute: typeof ClientTeamIndexRoute
 }
 
-const PortalRouteRouteChildren: PortalRouteRouteChildren = {
-  PortalIndexRoute: PortalIndexRoute,
-  PortalAdAccountsIndexRoute: PortalAdAccountsIndexRoute,
-  PortalDueIndexRoute: PortalDueIndexRoute,
-  PortalLimitRequestsIndexRoute: PortalLimitRequestsIndexRoute,
-  PortalNotificationsIndexRoute: PortalNotificationsIndexRoute,
-  PortalPaymentRequestsIndexRoute: PortalPaymentRequestsIndexRoute,
-  PortalProfileIndexRoute: PortalProfileIndexRoute,
-  PortalStatementIndexRoute: PortalStatementIndexRoute,
-  PortalTeamIndexRoute: PortalTeamIndexRoute,
+const ClientRouteRouteChildren: ClientRouteRouteChildren = {
+  ClientIndexRoute: ClientIndexRoute,
+  ClientAdAccountsIndexRoute: ClientAdAccountsIndexRoute,
+  ClientDueIndexRoute: ClientDueIndexRoute,
+  ClientLimitRequestsIndexRoute: ClientLimitRequestsIndexRoute,
+  ClientNotificationsIndexRoute: ClientNotificationsIndexRoute,
+  ClientPaymentRequestsIndexRoute: ClientPaymentRequestsIndexRoute,
+  ClientProfileIndexRoute: ClientProfileIndexRoute,
+  ClientStatementIndexRoute: ClientStatementIndexRoute,
+  ClientTeamIndexRoute: ClientTeamIndexRoute,
 }
 
-const PortalRouteRouteWithChildren = PortalRouteRoute._addFileChildren(
-  PortalRouteRouteChildren,
+const ClientRouteRouteWithChildren = ClientRouteRoute._addFileChildren(
+  ClientRouteRouteChildren,
+)
+
+interface PlatformRouteRouteChildren {
+  PlatformIndexRoute: typeof PlatformIndexRoute
+  PlatformAdAccountsIndexRoute: typeof PlatformAdAccountsIndexRoute
+  PlatformOrganizationsIndexRoute: typeof PlatformOrganizationsIndexRoute
+  PlatformSettingsIndexRoute: typeof PlatformSettingsIndexRoute
+  PlatformOrganizationsOrganizationIdDataRoute: typeof PlatformOrganizationsOrganizationIdDataRoute
+  PlatformOrganizationsOrganizationIdIndexRoute: typeof PlatformOrganizationsOrganizationIdIndexRoute
+}
+
+const PlatformRouteRouteChildren: PlatformRouteRouteChildren = {
+  PlatformIndexRoute: PlatformIndexRoute,
+  PlatformAdAccountsIndexRoute: PlatformAdAccountsIndexRoute,
+  PlatformOrganizationsIndexRoute: PlatformOrganizationsIndexRoute,
+  PlatformSettingsIndexRoute: PlatformSettingsIndexRoute,
+  PlatformOrganizationsOrganizationIdDataRoute:
+    PlatformOrganizationsOrganizationIdDataRoute,
+  PlatformOrganizationsOrganizationIdIndexRoute:
+    PlatformOrganizationsOrganizationIdIndexRoute,
+}
+
+const PlatformRouteRouteWithChildren = PlatformRouteRoute._addFileChildren(
+  PlatformRouteRouteChildren,
 )
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRouteRoute: AuthRouteRouteWithChildren,
-  AdminRouteRoute: AdminRouteRouteWithChildren,
-  PortalRouteRoute: PortalRouteRouteWithChildren,
+  AgencyRouteRoute: AgencyRouteRouteWithChildren,
+  ClientRouteRoute: ClientRouteRouteWithChildren,
+  PlatformRouteRoute: PlatformRouteRouteWithChildren,
   ResetPasswordRoute: ResetPasswordRoute,
   SubscriptionSuspendedRoute: SubscriptionSuspendedRoute,
   ApiCronMetaSyncRoute: ApiCronMetaSyncRoute,

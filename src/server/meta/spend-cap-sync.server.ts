@@ -2,6 +2,9 @@ import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { writeAudit } from '@/server/audit/audit.service'
 import { notifyAdmins } from '@/server/notifications/notification.service'
 import { decideSpendCapSync } from '@/lib/meta/spend-cap-sync-decision'
+import { metaCredentialScopeFor } from '@/lib/meta/credential-scope'
+import { DEPLOYMENT_ORGANIZATION_ID } from '@/lib/organizations/deployment-org'
+import { operatingOrganizationId } from '@/server/ad-accounts/scope.server'
 import { fetchMetaAdAccount, updateMetaAdAccountSpendCap } from './meta.server'
 import type { AdAccount } from '@/types/domain'
 
@@ -48,13 +51,27 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 export async function syncAdAccountSpendCap(
-  account: Pick<AdAccount, 'external_account_id' | 'current_limit_usd'>,
+  // organization_id isn't on the AdAccount domain type (the multi-tenant
+  // pass added the column, not the TS field), so it's required explicitly
+  // here rather than widening AdAccount across the whole app.
+  account: Pick<AdAccount, 'external_account_id' | 'current_limit_usd'> & {
+    organization_id: string | null
+    is_platform: boolean
+  },
 ): Promise<SpendCapSyncOutcome> {
   const externalAccountId = account.external_account_id
   if (!externalAccountId) return { status: 'not_applicable' }
 
+  // The account's OWN owner decides which Meta credentials are used — never an
+  // ambient/global config, and never the operating agency's: a platform-pool
+  // account lives in the platform's Business Portfolio, so an agency's own
+  // token could not write to it.
+  const credentials = metaCredentialScopeFor(account)
+
   try {
-    const meta = await withRetry(() => fetchMetaAdAccount(externalAccountId))
+    const meta = await withRetry(() =>
+      fetchMetaAdAccount(externalAccountId, credentials),
+    )
     const decision = decideSpendCapSync({
       externalAccountId,
       liveCurrency: meta.currency,
@@ -75,7 +92,11 @@ export async function syncAdAccountSpendCap(
         }
       case 'write':
         await withRetry(() =>
-          updateMetaAdAccountSpendCap(externalAccountId, decision.targetUsd),
+          updateMetaAdAccountSpendCap(
+            externalAccountId,
+            decision.targetUsd,
+            credentials,
+          ),
         )
         return { status: 'synced' }
     }
@@ -95,7 +116,9 @@ export async function syncAndPersistAdAccountSpendCap(
     const admin = getSupabaseAdminClient()
     const { data: account, error } = await admin
       .from('ad_accounts')
-      .select('id, name, account_code, external_account_id, current_limit_usd, organization_id')
+      .select(
+        'id, name, account_code, external_account_id, current_limit_usd, organization_id, is_platform',
+      )
       .eq('id', adAccountId)
       .maybeSingle()
     if (error || !account) {
@@ -105,6 +128,10 @@ export async function syncAndPersistAdAccountSpendCap(
 
     const outcome = await syncAdAccountSpendCap(account)
     const now = new Date().toISOString()
+    // Who this account belongs to operationally — a granted pool account's own
+    // organization_id is NULL, but audit rows and admin notifications both
+    // require a real organization.
+    const operatingOrg = await operatingOrganizationId(admin, account)
 
     if (outcome.status === 'synced' || outcome.status === 'already_synced') {
       await admin
@@ -129,7 +156,7 @@ export async function syncAndPersistAdAccountSpendCap(
             meta_spend_cap: account.current_limit_usd,
           },
           metadata: { source: opts.source },
-          organizationId: account.organization_id,
+          organizationId: operatingOrg ?? DEPLOYMENT_ORGANIZATION_ID,
         })
       }
       return outcome.status
@@ -161,7 +188,7 @@ export async function syncAndPersistAdAccountSpendCap(
       message: `${account.account_code}: ${outcome.error ?? 'Meta sync failed'}`,
       entityType: 'AD_ACCOUNT',
       entityId: adAccountId,
-      organizationId: account.organization_id,
+      organizationId: operatingOrg ?? DEPLOYMENT_ORGANIZATION_ID,
     })
     return 'failed'
   } catch (err) {
@@ -177,10 +204,39 @@ export async function retryPendingMetaSpendCapSyncs(): Promise<{
   stillFailed: number
 }> {
   const admin = getSupabaseAdminClient()
-  const { data: pending, error } = await admin
+
+  // Only agencies with a live subscription. A suspended agency's users are
+  // locked out of the app entirely, so continuing to push their limits to
+  // Meta on their behalf would be acting for a customer who no longer has
+  // access — and would burn Graph API calls against their token daily.
+  const { data: activeOrgs, error: orgError } = await admin
+    .from('organizations')
+    .select('id')
+    .eq('subscription_status', 'active')
+  if (orgError) throw new Error(orgError.message)
+  const activeOrgIds = (activeOrgs ?? []).map((o) => o.id as string)
+  if (activeOrgIds.length === 0) return { retried: 0, stillFailed: 0 }
+
+  const { data: grants } = await admin
+    .from('platform_account_grants')
+    .select('ad_account_id')
+    .in('organization_id', activeOrgIds)
+  const grantedIds = (grants ?? []).map((g) => g.ad_account_id as string)
+
+  // Owned-by-an-active-agency OR granted-to-one. A pool account's own
+  // organization_id is NULL, so the previous `.in('organization_id', …)`
+  // alone would have silently skipped every granted account.
+  let pendingQuery = admin
     .from('ad_accounts')
     .select('id')
     .eq('meta_sync_pending', true)
+  pendingQuery =
+    grantedIds.length > 0
+      ? pendingQuery.or(
+          `organization_id.in.(${activeOrgIds.join(',')}),id.in.(${grantedIds.join(',')})`,
+        )
+      : pendingQuery.in('organization_id', activeOrgIds)
+  const { data: pending, error } = await pendingQuery
   if (error) throw new Error(error.message)
 
   let stillFailed = 0

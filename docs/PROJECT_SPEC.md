@@ -3954,3 +3954,76 @@ Cross-client authorization denial
 > **[TRUNCATED]** — The original document continued past this point (remainder of Section 85
 > and any later sections) but was cut off in transmission. Replace this file with the full
 > original specification.
+
+---
+
+# Addendum A — Platform-owned ad account pool
+
+*Added 2026-09-14. This section documents behaviour introduced after the
+original specification was written; it does not amend any numbered section
+above. Where it touches existing rules (§14 assignment, §19 account status,
+§20 limit baselines) those rules are unchanged — this adds a layer above them.*
+
+## A1. Two ownership models
+
+An ad account is owned either by **an agency** or by **the platform**:
+
+- **Agency-owned** — the agency connected its own Meta credentials and imported
+  the account. `is_platform = false`, `organization_id = <the agency>`.
+- **Platform-owned (the pool)** — the platform holds the account centrally.
+  `is_platform = true`, `organization_id IS NULL`.
+
+The two are mutually exclusive, enforced by `ad_accounts_ownership_ck`.
+
+## A2. Grants
+
+A pool account reaches an agency through a row in `platform_account_grants`
+(`ad_account_id` UNIQUE, `organization_id`, `granted_at`, `granted_by`). One
+agency at a time per account; the uniqueness is a database constraint, not an
+application check.
+
+Granting is **push-only**: only a platform admin can grant or revoke, from
+`/platform/ad-accounts`. An agency has no way to browse or request pool
+accounts. Both actions are audited (`PLATFORM_ACCOUNT_GRANTED` /
+`PLATFORM_ACCOUNT_REVOKED`).
+
+A granted account is operable by the holding agency exactly as an owned one is —
+assignable to its clients, subject to limit requests, spend-cap pushes and
+edits. Ownership differs in one respect only: the platform can revoke the grant,
+which removes the account from that agency immediately.
+
+## A3. The union rule
+
+Everywhere the application asks "which ad accounts may this agency use?", the
+answer is the union of:
+
+1. accounts where `organization_id = <the agency>`, and
+2. accounts where `is_platform = true` and a `platform_account_grants` row ties
+   them to that agency.
+
+This rule is implemented once, in `src/server/ad-accounts/scope.server.ts`, and
+every read and write path routes through it. It must not be re-derived
+per-query.
+
+## A4. Credential resolution
+
+Meta credentials resolve from the **account's own owner**, never from "the
+current organization":
+
+- agency-owned -> that agency's credentials (`app_settings`)
+- platform-owned -> the platform's credentials (the deployment's `META_*`
+  environment variables)
+
+A pool account lives in the platform's Business Portfolio, so an agency's own
+token cannot read or write it. One client may hold accounts from both
+portfolios; each set is fetched with its own credentials.
+
+## A5. Consequences
+
+- The daily Meta sync iterates **credential sets** (each agency's own portfolio,
+  plus the pool once), not agencies.
+- Audit rows and admin notifications for a pool account are attributed to the
+  agency currently holding the grant, since `audit_logs.organization_id` is NOT
+  NULL while a pool account's own organization is not.
+- Pool accounts survive an agency's "Clear all data": an agency clearing its own
+  data must not destroy an account the platform merely granted it.

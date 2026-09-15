@@ -1,6 +1,11 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
+import {
+  adAccountScope,
+  applyAdAccountScope,
+  loadAccessibleAdAccount,
+} from '@/server/ad-accounts/scope.server'
 import { requireAdmin } from '@/server/auth/guards.server'
 import { writeAudit } from '@/server/audit/audit.service'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
@@ -85,11 +90,12 @@ export const listAdAccountsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Array<AdAccountWithClient>> => {
     const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_VIEW)
     const admin = getSupabaseAdminClient()
-    const { data, error } = await admin
-      .from('ad_accounts')
-      .select('*')
-      .eq('organization_id', actor.organizationId)
-      .order('created_at', { ascending: false })
+    // Owned accounts plus platform-pool accounts granted to this agency.
+    const scope = await adAccountScope(admin, actor.organizationId)
+    const { data, error } = await applyAdAccountScope(
+      admin.from('ad_accounts').select('*'),
+      scope,
+    ).order('created_at', { ascending: false })
     if (error) throw new Error(error.message)
 
     const accounts = data as Array<AdAccount>
@@ -109,15 +115,14 @@ export const getAdAccountFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<AdAccountWithClient> => {
     const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_VIEW)
     const admin = getSupabaseAdminClient()
-    const { data: account, error } = await admin
-      .from('ad_accounts')
-      .select('*')
-      .eq('id', data.id)
-      .eq('organization_id', actor.organizationId)
-      .single()
-    if (error) throw new Error(error.message)
+    const account = await loadAccessibleAdAccount(
+      admin,
+      data.id,
+      actor.organizationId,
+      '*',
+    )
     const clients = await currentClientMap([data.id], actor.organizationId)
-    return { ...(account as AdAccount), current_client: clients.get(data.id) ?? null }
+    return { ...(account as unknown as AdAccount), current_client: clients.get(data.id) ?? null }
   })
 
 export const listAssignmentHistoryFn = createServerFn({ method: 'GET' })
@@ -178,13 +183,15 @@ export const updateAdAccountFn = createServerFn({ method: 'POST' })
     const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
     const admin = getSupabaseAdminClient()
 
-    const { data: before } = await admin
-      .from('ad_accounts')
-      .select('*')
-      .eq('id', data.id)
-      .eq('organization_id', actor.organizationId)
-      .single()
-    if (!before) throw new Error('Ad account not found')
+    // Authorize once (owned or granted), then act by id — a granted
+    // account's organization_id is NULL, so the old double-.eq() would
+    // silently match nothing.
+    const before = await loadAccessibleAdAccount(
+      admin,
+      data.id,
+      actor.organizationId,
+      '*',
+    )
 
     const { data: account, error } = await admin
       .from('ad_accounts')
@@ -196,7 +203,6 @@ export const updateAdAccountFn = createServerFn({ method: 'POST' })
         threshold_usd: data.threshold_usd,
       })
       .eq('id', data.id)
-      .eq('organization_id', actor.organizationId)
       .select('*')
       .single()
     if (error) throw new Error(error.message)
@@ -219,12 +225,12 @@ export const renameAdAccountFn = createServerFn({ method: 'POST' })
     const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
     const admin = getSupabaseAdminClient()
 
-    const { data: before } = await admin
-      .from('ad_accounts')
-      .select('name')
-      .eq('id', data.id)
-      .eq('organization_id', actor.organizationId)
-      .single()
+    const before = await loadAccessibleAdAccount(
+      admin,
+      data.id,
+      actor.organizationId,
+      'id, is_platform, organization_id, name',
+    )
 
     // Only `name` changes — id and account_code stay stable so all historical
     // references remain intact (spec §18, Rule 25).
@@ -232,7 +238,6 @@ export const renameAdAccountFn = createServerFn({ method: 'POST' })
       .from('ad_accounts')
       .update({ name: data.name })
       .eq('id', data.id)
-      .eq('organization_id', actor.organizationId)
       .select('*')
       .single()
     if (error) throw new Error(error.message)
@@ -243,7 +248,7 @@ export const renameAdAccountFn = createServerFn({ method: 'POST' })
       action: 'AD_ACCOUNT_RENAMED',
       entityType: 'AD_ACCOUNT',
       entityId: data.id,
-      oldValues: { name: (before as { name: string } | null)?.name },
+      oldValues: { name: (before as unknown as { name: string }).name },
       newValues: { name: data.name },
     })
     return account as AdAccount
@@ -255,11 +260,11 @@ export const setAdAccountStatusFn = createServerFn({ method: 'POST' })
     const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
     const admin = getSupabaseAdminClient()
 
+    await loadAccessibleAdAccount(admin, data.id, actor.organizationId)
     const { data: account, error } = await admin
       .from('ad_accounts')
       .update({ status: data.status })
       .eq('id', data.id)
-      .eq('organization_id', actor.organizationId)
       .select('*')
       .single()
     if (error) throw new Error(error.message)

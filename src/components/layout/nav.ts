@@ -10,7 +10,6 @@ import {
   Megaphone,
   ScrollText,
   Settings,
-  Shield,
   SlidersHorizontal,
   TrendingUp,
   UserCog,
@@ -27,45 +26,46 @@ export interface NavItem {
   to?: string
   /** Development phase that delivers this screen (for disabled items). */
   phase?: number
-  /** Only shown to user.isPlatformAdmin — filtered out for everyone else
-   * in admin/route.tsx (distinct from the per-org ADMIN/SUPER_ADMIN role;
-   * see the multi-tenant migration's notes). */
-  platformAdminOnly?: boolean
 }
 
 /** Admin navigation (spec §61). Items unlock as their phase is delivered. */
 export const ADMIN_NAV: Array<NavItem> = [
-  { label: 'Dashboard', icon: LayoutDashboard, to: '/admin' },
-  { label: 'Clients', icon: Building2, to: '/admin/clients' },
-  { label: 'Employees', icon: Users, to: '/admin/employees' },
-  { label: 'Ad Accounts', icon: Megaphone, to: '/admin/ad-accounts' },
-  { label: 'Limit Requests', icon: Gauge, to: '/admin/limit-requests' },
-  { label: 'Payments', icon: Wallet, to: '/admin/payments' },
-  { label: 'Payment Requests', icon: HandCoins, to: '/admin/payment-requests' },
-  { label: 'Ledger', icon: BookText, to: '/admin/ledger' },
-  { label: 'Adjustments', icon: SlidersHorizontal, to: '/admin/adjustments' },
-  { label: 'Reports', icon: BarChart3, to: '/admin/reports' },
-  { label: 'Finance', icon: TrendingUp, to: '/admin/finance' },
-  { label: 'Audit Log', icon: ScrollText, to: '/admin/audit' },
-  { label: 'Users', icon: UserCog, to: '/admin/users' },
-  { label: 'Settings', icon: Settings, to: '/admin/settings' },
-  {
-    label: 'Organizations',
-    icon: Shield,
-    to: '/admin/organizations',
-    platformAdminOnly: true,
-  },
+  { label: 'Dashboard', icon: LayoutDashboard, to: '/agency' },
+  { label: 'Clients', icon: Building2, to: '/agency/clients' },
+  { label: 'Ad Accounts', icon: Megaphone, to: '/agency/ad-accounts' },
+  { label: 'Limit Requests', icon: Gauge, to: '/agency/limit-requests' },
+  { label: 'Payments', icon: Wallet, to: '/agency/payments' },
+  { label: 'Payment Requests', icon: HandCoins, to: '/agency/payment-requests' },
+  { label: 'Ledger', icon: BookText, to: '/agency/ledger' },
+  { label: 'Adjustments', icon: SlidersHorizontal, to: '/agency/adjustments' },
+  { label: 'Reports', icon: BarChart3, to: '/agency/reports' },
+  { label: 'Finance', icon: TrendingUp, to: '/agency/finance' },
+  { label: 'Audit Log', icon: ScrollText, to: '/agency/audit' },
+  { label: 'Users', icon: UserCog, to: '/agency/users' },
+  { label: 'Settings', icon: Settings, to: '/agency/settings' },
+]
+
+/**
+ * Platform owner's navigation — a separate entity from the agency app, not
+ * a section of it. There is deliberately no cross-link in either direction:
+ * a platform account manages subscriptions and never operates an agency,
+ * and an agency account has no platform access at all.
+ */
+export const PLATFORM_NAV: Array<NavItem> = [
+  { label: 'Organizations', icon: Building2, to: '/platform/organizations' },
+  { label: 'Ad Account Pool', icon: Megaphone, to: '/platform/ad-accounts' },
+  { label: 'Settings', icon: Settings, to: '/platform/settings' },
 ]
 
 /** Client portal navigation (spec §61). */
 export const CLIENT_NAV: Array<NavItem> = [
-  { label: 'Dashboard', icon: LayoutDashboard, to: '/portal' },
-  { label: 'My Ad Accounts', icon: Megaphone, to: '/portal/ad-accounts' },
-  { label: 'Limit Requests', icon: Gauge, to: '/portal/limit-requests' },
-  { label: 'Due & Payments', icon: Wallet, to: '/portal/due' },
-  { label: 'Payment Requests', icon: HandCoins, to: '/portal/payment-requests' },
-  { label: 'Statement', icon: FileText, to: '/portal/statement' },
-  { label: 'Team', icon: Users, to: '/portal/team' },
-  { label: 'Notifications', icon: Bell, to: '/portal/notifications' },
-  { label: 'Profile', icon: UserRound, to: '/portal/profile' },
+  { label: 'Dashboard', icon: LayoutDashboard, to: '/client' },
+  { label: 'My Ad Accounts', icon: Megaphone, to: '/client/ad-accounts' },
+  { label: 'Limit Requests', icon: Gauge, to: '/client/limit-requests' },
+  { label: 'Due & Payments', icon: Wallet, to: '/client/due' },
+  { label: 'Payment Requests', icon: HandCoins, to: '/client/payment-requests' },
+  { label: 'Statement', icon: FileText, to: '/client/statement' },
+  { label: 'Team', icon: Users, to: '/client/team' },
+  { label: 'Notifications', icon: Bell, to: '/client/notifications' },
+  { label: 'Profile', icon: UserRound, to: '/client/profile' },
 ]

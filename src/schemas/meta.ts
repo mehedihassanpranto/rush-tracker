@@ -30,6 +30,24 @@ export const importMetaAdAccountsSchema = z.object({
   usd_rate: usdRate,
 })
 
+/** Pool import: same account list, but no usd_rate. A pool account has no
+ * client and no billing relationship until an agency is granted it and assigns
+ * it, and the rate that governs billing is resolved then (the account's own
+ * rate falling back to the client's — see rate.service.ts). Setting one at
+ * import would pin every pool account to a number chosen by the platform, for
+ * agencies whose clients it knows nothing about. */
+export const importPoolAccountsSchema = z.object({
+  accounts: z
+    .array(
+      z.object({
+        external_account_id: z.string().trim().min(1),
+        name: z.string().trim().min(1).max(200),
+      }),
+    )
+    .min(1, 'Select at least one account')
+    .max(50, 'Import at most 50 accounts at a time'),
+})
+
 export const applyMetaSpendCapSchema = z.object({
   id: z.uuid(),
 })
@@ -64,6 +82,7 @@ export type FetchMetaAdAccountInput = z.infer<typeof fetchMetaAdAccountSchema>
 export type ImportMetaAdAccountsInput = z.infer<
   typeof importMetaAdAccountsSchema
 >
+export type ImportPoolAccountsInput = z.infer<typeof importPoolAccountsSchema>
 export type ApplyMetaSpendCapInput = z.infer<typeof applyMetaSpendCapSchema>
 export type UpdateMetaSpendCapInput = z.infer<typeof updateMetaSpendCapSchema>
 export type RetryMetaSpendCapSyncInput = z.infer<

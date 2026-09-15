@@ -80,7 +80,7 @@ export function MetaSpendCapDialog({
       void queryClient.invalidateQueries({ queryKey: ['ad-account', accountId] })
       void queryClient.invalidateQueries({ queryKey: ['ad-accounts'] })
       void queryClient.invalidateQueries({ queryKey: ['meta-live', externalAccountId] })
-      void queryClient.invalidateQueries({ queryKey: ['meta-business-ad-accounts'] })
+      void queryClient.invalidateQueries({ queryKey: ['meta-usable-ad-accounts'] })
       onOpenChange(false)
     },
     onError: (err) =>

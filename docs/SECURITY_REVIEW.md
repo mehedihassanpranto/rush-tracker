@@ -62,7 +62,7 @@ that path stays client-scoped.
 
 Every business server function calls a guard from
 `server/auth/guards.server.ts` **before** doing work. Route guards
-(`routes/admin/route.tsx`, `routes/portal/route.tsx`) are UX-only and are not
+(`routes/agency/route.tsx`, `routes/client/route.tsx`) are UX-only and are not
 relied upon for security.
 
 | Module | Guard(s) | Notes |

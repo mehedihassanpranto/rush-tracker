@@ -1,6 +1,10 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
+import {
+  adAccountScope,
+  applyAdAccountScope,
+} from '@/server/ad-accounts/scope.server'
 import { requireAdmin, requireClientMembership } from '@/server/auth/guards.server'
 import { notifyClientMembers } from '@/server/notifications/notification.service'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
@@ -34,12 +38,11 @@ export const listAssignableAccountsFn = createServerFn({ method: 'GET' }).handle
   async (): Promise<Array<AdAccount>> => {
     const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_ASSIGN)
     const admin = getSupabaseAdminClient()
-    const { data, error } = await admin
-      .from('ad_accounts')
-      .select('*')
-      .eq('status', 'AVAILABLE')
-      .eq('organization_id', actor.organizationId)
-      .order('name')
+    const scope = await adAccountScope(admin, actor.organizationId)
+    const { data, error } = await applyAdAccountScope(
+      admin.from('ad_accounts').select('*').eq('status', 'AVAILABLE'),
+      scope,
+    ).order('name')
     if (error) throw new Error(error.message)
     return data as Array<AdAccount>
   },
@@ -98,12 +101,11 @@ function rpcErrorMessage(message: string): string {
 
 async function accountLabel(accountId: string, organizationId: string): Promise<string> {
   const admin = getSupabaseAdminClient()
-  const { data } = await admin
-    .from('ad_accounts')
-    .select('name, account_code')
-    .eq('id', accountId)
-    .eq('organization_id', organizationId)
-    .maybeSingle()
+  const scope = await adAccountScope(admin, organizationId)
+  const { data } = await applyAdAccountScope(
+    admin.from('ad_accounts').select('name, account_code').eq('id', accountId),
+    scope,
+  ).maybeSingle()
   const a = data as { name: string; account_code: string } | null
   return a ? `${a.name} (${a.account_code})` : 'an ad account'
 }

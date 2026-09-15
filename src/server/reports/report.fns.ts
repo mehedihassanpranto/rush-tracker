@@ -1,6 +1,10 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
+import {
+  adAccountScope,
+  applyAdAccountScope,
+} from '@/server/ad-accounts/scope.server'
 import { requireAdmin } from '@/server/auth/guards.server'
 import { dec } from '@/lib/money/money'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
@@ -209,13 +213,13 @@ export const accountUsageReportFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Array<AccountUsageRow>> => {
     const actor = await requireAdmin(PERMISSIONS.REPORTS_VIEW)
     const admin = getSupabaseAdminClient()
-    const { data: accounts, error } = await admin
-      .from('ad_accounts')
-      .select(
-        'id, account_code, name, platform, status, current_limit_usd',
-      )
-      .eq('organization_id', actor.organizationId)
-      .order('name')
+    const scope = await adAccountScope(admin, actor.organizationId)
+    const { data: accounts, error } = await applyAdAccountScope(
+      admin
+        .from('ad_accounts')
+        .select('id, account_code, name, platform, status, current_limit_usd'),
+      scope,
+    ).order('name')
     if (error) throw new Error(error.message)
     const rows = (accounts ?? []) as Array<Omit<AccountUsageRow, 'current_client'>>
 

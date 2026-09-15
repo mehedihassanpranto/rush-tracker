@@ -1,6 +1,10 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
+import {
+  adAccountScope,
+  applyAdAccountScope,
+} from '@/server/ad-accounts/scope.server'
 import { requireAdmin } from '@/server/auth/guards.server'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 
@@ -49,6 +53,7 @@ export const globalSearchFn = createServerFn({ method: 'GET' })
     const admin = getSupabaseAdminClient()
     const like = `%${term}%`
     const orgId = actor.organizationId
+    const accountScope = await adAccountScope(admin, orgId)
 
     const [clients, accounts, limitRequests, payments, paymentRequests] =
       await Promise.all([
@@ -58,10 +63,12 @@ export const globalSearchFn = createServerFn({ method: 'GET' })
           .eq('organization_id', orgId)
           .or(`name.ilike.${like},client_code.ilike.${like}`)
           .limit(10),
-        admin
-          .from('ad_accounts')
-          .select('id, account_code, name, external_account_id')
-          .eq('organization_id', orgId)
+        applyAdAccountScope(
+          admin
+            .from('ad_accounts')
+            .select('id, account_code, name, external_account_id'),
+          accountScope,
+        )
           .or(
             `name.ilike.${like},account_code.ilike.${like},external_account_id.ilike.${like}`,
           )

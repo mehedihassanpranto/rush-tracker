@@ -75,22 +75,27 @@ export interface MetaAdAccountSummary {
   meta_balance: string | null
 }
 
+import type { MetaCredentialScope } from '@/lib/meta/credential-scope'
+
 interface MetaConfig {
   token: string
   businessId: string
   apiVersion: string
 }
 
-class MetaNotConfiguredError extends Error {
-  constructor() {
+export class MetaNotConfiguredError extends Error {
+  constructor(scope: MetaCredentialScope) {
     super(
-      'Meta integration is not configured. Set META_SYSTEM_USER_TOKEN and META_BUSINESS_ID.',
+      scope.kind === 'platform'
+        ? 'The platform has no Meta Business Portfolio connected. Set META_SYSTEM_USER_TOKEN and META_BUSINESS_ID, or configure them in Platform → Settings → Meta integration.'
+        : 'This agency has no Meta Business Portfolio connected yet. Add a System User token and Business Portfolio ID in Settings → Meta integration.',
     )
     this.name = 'MetaNotConfiguredError'
   }
 }
 
-/** app_settings keys — must match src/server/settings/settings.fns.ts. */
+/** Setting keys, shared by `app_settings` (per agency) and `platform_settings`
+ * (the platform's own) — must match src/server/settings/*.fns.ts. */
 const SETTING_KEYS = {
   TOKEN: 'META_SYSTEM_USER_TOKEN',
   BUSINESS_ID: 'META_BUSINESS_ID',
@@ -98,39 +103,85 @@ const SETTING_KEYS = {
 } as const
 
 /**
- * Resolves Meta config from the database first (see the app_settings admin
- * Settings screen, `settings.fns.ts`), falling back to env vars per-field
- * when a key has no row. DB-backed so an admin can update credentials
- * without a redeploy — env vars alone can't be live-updated on Vercel
- * (baked in per-deployment). Queried fresh on every call rather than
- * process-lifetime cached (unlike getServerEnv()) since the whole point is
- * picking up a change immediately; callers resolve this once per operation
- * and thread the result through, rather than re-querying per Graph API call.
+ * Resolves ONE credential set's Meta credentials.
+ *
+ * There are two kinds, and keeping them apart IS the isolation boundary:
+ *
+ *   - `{ kind: 'organization' }` — an agency that connected its own Business
+ *     Portfolio. Rows live in `app_settings`, keyed by (organization_id, key),
+ *     so two agencies' tokens never mix. **No credential env fallback**: an
+ *     agency with nothing configured has no Meta integration, which is the
+ *     correct answer, not a degraded one.
+ *   - `{ kind: 'platform' }` — Rush Tracker itself, whose portfolio holds the
+ *     platform-owned ad account pool. Rows live in `platform_settings`, which
+ *     has no organization_id at all, falling back to the META_* env vars.
+ *
+ * **The META_* env vars are the PLATFORM's credentials, not org zero's.** They
+ * point at the portfolio containing the pool, and before migration 000037 they
+ * were reachable as xRush Agency's own — which meant xRush's Settings screen
+ * could rotate the token for a portfolio the platform owns, and every other
+ * agency was one missing guard away from borrowing it. Now nothing an agency
+ * can edit reaches them.
+ *
+ * The value is read fresh on every call rather than process-lifetime cached
+ * (unlike getServerEnv()) — the whole point of DB-backed credentials is that a
+ * change takes effect without a redeploy. Callers resolve this once per
+ * operation and thread the result through, not per Graph API call.
  */
-const getMetaConfig = createServerOnlyFn(async (): Promise<MetaConfig> => {
-  const env = getServerEnv()
-  const admin = getSupabaseAdminClient()
-  const { data, error } = await admin
-    .from('app_settings')
-    .select('key, value')
-    .in('key', Object.values(SETTING_KEYS))
-  // Best-effort: a query failure (e.g. the app_settings migration hasn't
-  // been applied to this project yet) falls back to env vars rather than
-  // breaking every Meta feature — but still log it, since a genuine DB
-  // outage should be visible somewhere.
-  if (error) console.error('[meta] app_settings lookup failed, falling back to env vars:', error.message)
-  const db = new Map((data ?? []).map((r) => [r.key as string, r.value as string | null]))
+const getMetaConfig = createServerOnlyFn(
+  async (scope: MetaCredentialScope): Promise<MetaConfig> => {
+    const admin = getSupabaseAdminClient()
+    const isPlatform = scope.kind === 'platform'
 
-  const token = db.get(SETTING_KEYS.TOKEN) || env.META_SYSTEM_USER_TOKEN
-  const businessId = db.get(SETTING_KEYS.BUSINESS_ID) || env.META_BUSINESS_ID
-  const apiVersion =
-    db.get(SETTING_KEYS.API_VERSION) || env.META_API_VERSION
+    const query = isPlatform
+      ? admin.from('platform_settings').select('key, value')
+      : admin
+          .from('app_settings')
+          .select('key, value')
+          .eq('organization_id', scope.organizationId)
+    const { data, error } = await query.in('key', Object.values(SETTING_KEYS))
+    // Best-effort on a query failure: the platform still falls through to the
+    // env vars rather than breaking every pool Meta feature, but it's logged,
+    // since a genuine DB outage should be visible somewhere. An agency has
+    // nothing to fall back to, so it surfaces as "not configured" —
+    // deliberately, rather than borrowing the platform's.
+    if (error) {
+      console.error('[meta] settings lookup failed:', error.message)
+    }
+    const db = new Map(
+      (data ?? []).map((r) => [r.key as string, r.value as string | null]),
+    )
 
-  if (!token || !businessId) {
-    throw new MetaNotConfiguredError()
+    const env = getServerEnv()
+
+    // Only the two CREDENTIALS are gated on the platform scope. The Graph API
+    // version is a protocol version, not tenant data — every agency may use
+    // the deployment's configured default unless they pin their own.
+    const token = db.get(SETTING_KEYS.TOKEN) || (isPlatform ? env.META_SYSTEM_USER_TOKEN : undefined)
+    const businessId =
+      db.get(SETTING_KEYS.BUSINESS_ID) || (isPlatform ? env.META_BUSINESS_ID : undefined)
+    const apiVersion = db.get(SETTING_KEYS.API_VERSION) || env.META_API_VERSION
+
+    if (!token || !businessId) {
+      throw new MetaNotConfiguredError(scope)
+    }
+    return { token, businessId, apiVersion }
+  },
+)
+
+/** True when this credential set resolves (an agency that connected its own
+ * portfolio, or the platform's own credentials) — used by the cron to skip
+ * agencies that haven't connected one, without treating that as an error. */
+export async function isMetaConfigured(
+  scope: MetaCredentialScope,
+): Promise<boolean> {
+  try {
+    await getMetaConfig(scope)
+    return true
+  } catch {
+    return false
   }
-  return { token, businessId, apiVersion }
-})
+}
 
 interface GraphErrorBody {
   error?: { message: string; type?: string; code?: number }
@@ -202,8 +253,9 @@ const AD_ACCOUNT_FIELDS =
 /** Fetch a single ad account's live details by its Meta account id. */
 export async function fetchMetaAdAccount(
   externalAccountId: string,
+  scope: MetaCredentialScope,
 ): Promise<MetaAdAccountSummary> {
-  const config = await getMetaConfig()
+  const config = await getMetaConfig(scope)
   const actId = externalAccountId.startsWith('act_')
     ? externalAccountId
     : `act_${externalAccountId}`
@@ -248,10 +300,10 @@ async function listEdge(
  * normal shape for an agency: most managed accounts live here, not in
  * owned_ad_accounts). Deduped by account id in case one shows up in both.
  */
-export async function listMetaBusinessAdAccounts(): Promise<
-  Array<MetaAdAccountSummary>
-> {
-  const config = await getMetaConfig()
+export async function listMetaBusinessAdAccounts(
+  scope: MetaCredentialScope,
+): Promise<Array<MetaAdAccountSummary>> {
+  const config = await getMetaConfig(scope)
   const [owned, client] = await Promise.all([
     listEdge(config.businessId, 'owned_ad_accounts', config),
     listEdge(config.businessId, 'client_ad_accounts', config),
@@ -280,8 +332,9 @@ export async function listMetaBusinessAdAccounts(): Promise<
 export async function updateMetaAdAccountSpendCap(
   externalAccountId: string,
   spendCapMajorUnits: string,
+  scope: MetaCredentialScope,
 ): Promise<void> {
-  const config = await getMetaConfig()
+  const config = await getMetaConfig(scope)
   const actId = externalAccountId.startsWith('act_')
     ? externalAccountId
     : `act_${externalAccountId}`

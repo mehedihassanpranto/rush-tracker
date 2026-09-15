@@ -19,6 +19,17 @@ import {
 } from '@/server/meta/meta.server'
 import { syncAndPersistAdAccountSpendCap } from '@/server/meta/spend-cap-sync.server'
 import { syncAdAccountName } from '@/server/meta/meta-sync.server'
+import {
+  adAccountScope,
+  applyAdAccountScope,
+  loadAccessibleAdAccount,
+} from '@/server/ad-accounts/scope.server'
+import {
+  credentialScopeKey,
+  metaCredentialScopeFor,
+  organizationCredentials,
+} from '@/lib/meta/credential-scope'
+import type { MetaCredentialScope } from '@/lib/meta/credential-scope'
 import type { MetaAdAccountSummary } from '@/server/meta/meta.server'
 import type { AdAccount } from '@/types/domain'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -35,31 +46,60 @@ async function loadUsdLinkedAccount(
   id: string,
   organizationId: string,
 ) {
-  const { data: before, error: fetchError } = await admin
-    .from('ad_accounts')
-    .select('*')
-    .eq('id', id)
-    .eq('organization_id', organizationId)
-    .single()
-  if (fetchError) throw new Error(fetchError.message)
+  const account = await loadAccessibleAdAccount(admin, id, organizationId, '*')
+  const before = account as unknown as AdAccount
   if (!before.external_account_id) {
     throw new Error('This account has no linked Meta external ID')
   }
 
   const externalAccountId: string = before.external_account_id
-  const meta = await fetchMetaAdAccount(externalAccountId)
+  // Credentials come from the account's OWN owner — a granted pool account
+  // lives in the platform's portfolio, not this agency's.
+  const meta = await fetchMetaAdAccount(
+    externalAccountId,
+    metaCredentialScopeFor(account),
+  )
   if (meta.currency !== 'USD') {
     throw new Error(
       `Meta reports this account's currency as ${meta.currency ?? 'unknown'}, not USD — this app can't push/apply a limit for a non-USD account`,
     )
   }
-  return { before: before as AdAccount, externalAccountId, meta }
+  return { before, externalAccountId, meta, account }
 }
 
 export type MetaImportCandidate = MetaAdAccountSummary & {
   already_linked: boolean
   linked_account_id: string | null
   linked_account_code: string | null
+}
+
+/**
+ * Fetches every distinct credential set once and merges the results by Meta
+ * account id.
+ *
+ * An agency's accounts can span two Business Portfolios — the one it connected
+ * itself and the platform's (for granted pool accounts) — and a pool account is
+ * invisible to the agency's own token. Deduping by credential scope keeps this
+ * at one bulk Graph call per portfolio (usually just one), never one per
+ * account. A set that is unconfigured or unreachable contributes nothing rather
+ * than failing the whole read: those rows simply report no live data.
+ */
+async function fetchAcrossCredentialSets(
+  scopes: Array<MetaCredentialScope>,
+): Promise<Map<string, MetaAdAccountSummary>> {
+  const distinct = new Map<string, MetaCredentialScope>()
+  for (const scope of scopes) distinct.set(credentialScopeKey(scope), scope)
+
+  const byExternalId = new Map<string, MetaAdAccountSummary>()
+  for (const scope of distinct.values()) {
+    try {
+      const fetched = await listMetaBusinessAdAccounts(scope)
+      for (const m of fetched) byExternalId.set(m.external_account_id, m)
+    } catch {
+      // Meta not configured / unreachable for that set — graceful degradation.
+    }
+  }
+  return byExternalId
 }
 
 // ===========================================================================
@@ -71,8 +111,34 @@ export type MetaImportCandidate = MetaAdAccountSummary & {
 export const fetchMetaAdAccountFn = createServerFn({ method: 'POST' })
   .validator(fetchMetaAdAccountSchema)
   .handler(async ({ data }): Promise<MetaAdAccountSummary> => {
-    await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
-    return fetchMetaAdAccount(data.external_account_id)
+    const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
+    const admin = getSupabaseAdminClient()
+
+    // Two callers with different needs: the account detail page fetches live
+    // data for an account that already exists here (which may be a granted
+    // pool account, only reachable with the PLATFORM's token), and the create
+    // dialog verifies an id that isn't in our database at all (necessarily the
+    // agency's own portfolio). So the credential set comes from the linked row
+    // when there is one, falling back to the agency's own.
+    //
+    // The lookup is scoped to accounts this agency may already use, so an
+    // arbitrary external id can never be pointed at the platform's token.
+    const scope = await adAccountScope(admin, actor.organizationId)
+    const { data: linked } = await applyAdAccountScope(
+      admin.from('ad_accounts').select('is_platform, organization_id'),
+      scope,
+    )
+      .eq('external_account_id', data.external_account_id)
+      .maybeSingle()
+
+    return fetchMetaAdAccount(
+      data.external_account_id,
+      linked
+        ? metaCredentialScopeFor(
+            linked as { is_platform: boolean; organization_id: string | null },
+          )
+        : organizationCredentials(actor.organizationId),
+    )
   })
 
 /**
@@ -90,17 +156,16 @@ export const syncAdAccountNameFn = createServerFn({ method: 'POST' })
     const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
     const admin = getSupabaseAdminClient()
 
-    const { data: account, error } = await admin
-      .from('ad_accounts')
-      .select('name')
-      .eq('id', data.id)
-      .eq('organization_id', actor.organizationId)
-      .single()
-    if (error || !account) throw new Error('Ad account not found')
+    const account = await loadAccessibleAdAccount(
+      admin,
+      data.id,
+      actor.organizationId,
+      'id, is_platform, organization_id, name',
+    )
 
     const result = await syncAdAccountName(
       data.id,
-      (account as { name: string }).name,
+      (account as unknown as { name: string }).name,
       data.meta_name,
       actor.id,
       'META_MANUAL_SYNC',
@@ -109,23 +174,88 @@ export const syncAdAccountNameFn = createServerFn({ method: 'POST' })
     return { renamed: result.renamed, new_name: result.newName ?? null }
   })
 
+/**
+ * Live Meta data for every ad account this agency can actually operate —
+ * the ones it owns AND the platform-pool accounts granted to it.
+ *
+ * Distinct from listMetaBusinessAdAccountsFn below, which lists an agency's
+ * own Business Portfolio for IMPORT. The two used to be the same call, and
+ * that only worked while org zero's credentials and the platform's were the
+ * same thing: once the platform's portfolio became its own credential scope
+ * (migration 000037), an agency whose whole fleet is granted pool accounts —
+ * xRush, with 34 of 34 — has no portfolio of its own to list, and every
+ * Remaining / Meta Due / low-balance signal on the ad accounts list, the
+ * clients list and the client detail page would have silently gone blank.
+ *
+ * Returns only accounts linked here, in MetaImportCandidate shape so the
+ * display pages keep the `linked_account_id` they use to match rows and to
+ * drive the Refresh button's name sync. Nothing unlinked is returned: the
+ * platform's unimported inventory is not an agency's business.
+ */
+export const listUsableMetaAdAccountsFn = createServerFn({
+  method: 'GET',
+}).handler(async (): Promise<Array<MetaImportCandidate>> => {
+  const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
+  const admin = getSupabaseAdminClient()
+
+  const scope = await adAccountScope(admin, actor.organizationId)
+  const { data: linked, error } = await applyAdAccountScope(
+    admin
+      .from('ad_accounts')
+      .select('id, account_code, external_account_id, is_platform, organization_id'),
+    scope,
+  ).not('external_account_id', 'is', null)
+  if (error) throw new Error(error.message)
+
+  const rows = (linked ?? []) as Array<{
+    id: string
+    account_code: string
+    external_account_id: string
+    is_platform: boolean
+    organization_id: string | null
+  }>
+  if (rows.length === 0) return []
+
+  const byExternalId = await fetchAcrossCredentialSets(
+    rows.map((r) => metaCredentialScopeFor(r)),
+  )
+
+  return rows.flatMap((row) => {
+    const meta = byExternalId.get(row.external_account_id)
+    if (!meta) return []
+    return [
+      {
+        ...meta,
+        already_linked: true,
+        linked_account_id: row.id,
+        linked_account_code: row.account_code,
+      },
+    ]
+  })
+})
+
 /** List every ad account in the connected Business Portfolio, annotated with
  * whether it's already linked to an ad_accounts row here. */
 export const listMetaBusinessAdAccountsFn = createServerFn({
   method: 'GET',
 }).handler(async (): Promise<Array<MetaImportCandidate>> => {
   const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
-  const metaAccounts = await listMetaBusinessAdAccounts()
+  // The agency's OWN portfolio: importing is how an agency adds accounts it
+  // connected itself. Platform-pool accounts arrive by grant, never by import,
+  // so they are deliberately not listed here.
+  const metaAccounts = await listMetaBusinessAdAccounts(
+    organizationCredentials(actor.organizationId),
+  )
 
   const admin = getSupabaseAdminClient()
-  const { data: linked, error } = await admin
-    .from('ad_accounts')
-    .select('id, account_code, external_account_id')
-    .eq('organization_id', actor.organizationId)
-    .in(
-      'external_account_id',
-      metaAccounts.map((a) => a.external_account_id),
-    )
+  const scope = await adAccountScope(admin, actor.organizationId)
+  const { data: linked, error } = await applyAdAccountScope(
+    admin.from('ad_accounts').select('id, account_code, external_account_id'),
+    scope,
+  ).in(
+    'external_account_id',
+    metaAccounts.map((a) => a.external_account_id),
+  )
   if (error) throw new Error(error.message)
 
   const linkedById = new Map(
@@ -248,7 +378,6 @@ export const applyMetaSpendCapFn = createServerFn({ method: 'POST' })
       .from('ad_accounts')
       .update({ current_limit_usd: meta.spend_cap })
       .eq('id', data.id)
-      .eq('organization_id', actor.organizationId)
       .select('*')
       .single()
     if (error) throw new Error(error.message)
@@ -294,11 +423,8 @@ export const updateMetaSpendCapFn = createServerFn({ method: 'POST' })
     const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
     const admin = getSupabaseAdminClient()
 
-    const { before, externalAccountId, meta } = await loadUsdLinkedAccount(
-      admin,
-      data.id,
-      actor.organizationId,
-    )
+    const { before, externalAccountId, meta, account: linkedAccount } =
+      await loadUsdLinkedAccount(admin, data.id, actor.organizationId)
     const amountSpent = dec(meta.amount_spent ?? 0)
     const liveCap = meta.spend_cap != null ? dec(meta.spend_cap) : dec(0)
     const newCap = liveCap.plus(dec(data.increase_by_usd))
@@ -310,13 +436,16 @@ export const updateMetaSpendCapFn = createServerFn({ method: 'POST' })
 
     // Write direction is asymmetric from read (see updateMetaAdAccountSpendCap
     // for the unit trap) — pass the major-unit dollar value straight through.
-    await updateMetaAdAccountSpendCap(externalAccountId, newCap.toFixed(2))
+    await updateMetaAdAccountSpendCap(
+      externalAccountId,
+      newCap.toFixed(2),
+      metaCredentialScopeFor(linkedAccount),
+    )
 
     const { data: account, error } = await admin
       .from('ad_accounts')
       .update({ current_limit_usd: newCap.toFixed(2) })
       .eq('id', data.id)
-      .eq('organization_id', actor.organizationId)
       .select('*')
       .single()
     if (error) throw new Error(error.message)
@@ -359,13 +488,7 @@ export const retryMetaSpendCapSyncFn = createServerFn({ method: 'POST' })
     // the only entry point to syncAndPersistAdAccountSpendCap that's
     // user-reachable with an arbitrary id (the others come from an
     // already-org-validated context).
-    const { data: owned } = await admin
-      .from('ad_accounts')
-      .select('id')
-      .eq('id', data.id)
-      .eq('organization_id', actor.organizationId)
-      .maybeSingle()
-    if (!owned) throw new Error('Ad account not found')
+    await loadAccessibleAdAccount(admin, data.id, actor.organizationId)
 
     await syncAndPersistAdAccountSpendCap(data.id, {
       actorUserId: actor.id,
@@ -378,7 +501,7 @@ export const retryMetaSpendCapSyncFn = createServerFn({ method: 'POST' })
       .eq('id', data.id)
       .single()
     if (error) throw new Error(error.message)
-    return account as AdAccount
+    return account as unknown as AdAccount
   })
 
 // ===========================================================================
@@ -409,34 +532,39 @@ export interface MyAccountRemaining {
 export const listMyAccountsMetaRemainingFn = createServerFn({
   method: 'GET',
 }).handler(async (): Promise<Array<MyAccountRemaining>> => {
-  const { membership } = await requireClientMembership()
+  const { user, membership } = await requireClientMembership()
   const admin = getSupabaseAdminClient()
 
   const { data: assignments, error } = await admin
     .from('ad_account_assignments')
-    .select('ad_account_id, account:ad_accounts(external_account_id)')
+    .select(
+      'ad_account_id, account:ad_accounts(external_account_id, is_platform, organization_id)',
+    )
     .eq('client_id', membership.clientId)
     .eq('status', 'ACTIVE')
   if (error) throw new Error(error.message)
 
   const rows = (assignments ?? []) as unknown as Array<{
     ad_account_id: string
-    account: { external_account_id: string | null } | null
+    account: {
+      external_account_id: string | null
+      is_platform: boolean
+      organization_id: string | null
+    } | null
   }>
   const linkedRows = rows.filter((r) => r.account?.external_account_id)
   if (linkedRows.length === 0) return []
 
-  let metaAccounts: Array<MetaAdAccountSummary>
-  try {
-    metaAccounts = await listMetaBusinessAdAccounts()
-  } catch {
-    // Meta not configured / unreachable — the portal just shows no data,
-    // same graceful degradation as the admin side.
-    return []
-  }
-  const byExternalId = new Map(
-    metaAccounts.map((m) => [m.external_account_id, m]),
+  // One client's accounts can span two Business Portfolios: ones their agency
+  // connected itself, and platform-pool accounts granted to that agency. Each
+  // set is fetched with its own credentials — a pool account is invisible to
+  // the agency's own token. Usually only one set is in play, so this is one
+  // bulk fetch in practice, never one call per account.
+  const byExternalId = await fetchAcrossCredentialSets(
+    linkedRows.map((r) => metaCredentialScopeFor(r.account!)),
   )
+  if (byExternalId.size === 0) return []
+  void user
 
   return linkedRows.map((r) => {
     const externalId = r.account!.external_account_id!

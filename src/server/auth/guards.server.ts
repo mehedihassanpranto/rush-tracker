@@ -32,7 +32,7 @@ async function loadUserOrThrow(): Promise<SessionUser> {
   // Multi-tenant subscription gate (Phase 3): the actual enforcement point
   // for "flipping the toggle takes effect immediately" — organizationSubscriptionStatus
   // is fetched fresh on every session load (auth.fns.ts), never from a
-  // cached JWT claim. This is the real security boundary; the admin/portal
+  // cached JWT claim. This is the real security boundary; the agency/client
   // route guards' redirect to /subscription-suspended is UX only, same as
   // every other route-level check in this app. Platform admins bypass
   // entirely, regardless of their own organization's status.

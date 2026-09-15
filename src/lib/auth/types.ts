@@ -51,13 +51,47 @@ export interface SessionUser {
   isPlatformAdmin: boolean
   /** organizationId's live subscription_status, fetched fresh on every
    * session load (never cached in a JWT claim — see guards.server.ts and
-   * the admin/portal route guards, both of which gate on this). A
+   * the agency/client route guards, both of which gate on this). A
    * platform admin bypasses this entirely regardless of its value. */
   organizationSubscriptionStatus: 'active' | 'suspended' | 'cancelled'
 }
 
-export function homePathForUser(user: Pick<SessionUser, 'role'>): string {
-  return user.role === 'CLIENT' ? '/portal' : '/admin'
+/**
+ * Where a signed-in user belongs. The platform panel and the agency app are
+ * separate entities with separate accounts, so a platform admin goes
+ * straight to /platform and never passes through the agency app — its own
+ * organization_id exists only to satisfy the NOT NULL column and means
+ * nothing for where they land.
+ */
+export function homePathForUser(
+  user: Pick<SessionUser, 'role' | 'isPlatformAdmin'>,
+): string {
+  if (user.isPlatformAdmin) return '/platform'
+  return user.role === 'CLIENT' ? '/client' : '/agency'
+}
+
+/**
+ * What to CALL this account in the UI.
+ *
+ * `role` is the account's AGENCY role — what it may do inside one agency's
+ * app. A platform account has no agency role at all, and since
+ * `handle_new_user()` defaults every new signup to CLIENT, that is the value
+ * sitting in the column. It is not a demotion and it grants nothing (the
+ * platform account holds no client memberships either); it is simply the
+ * absence of agency powers, and it is what keeps /agency closed to it.
+ *
+ * Printing it raw told the platform owner "Role: CLIENT", which reads as a
+ * mistake and invites exactly the wrong fix — promoting the account to
+ * SUPER_ADMIN, which would make it a super admin OF ORGANIZATION ZERO and hand
+ * it xRush Agency's clients and ledger. That is precisely what separating the
+ * platform from the agency removed. So the label is corrected here, in the UI,
+ * and the column is left alone.
+ */
+export function displayRoleFor(
+  user: Pick<SessionUser, 'role' | 'isPlatformAdmin'>,
+): string {
+  if (user.isPlatformAdmin) return 'Platform Owner'
+  return user.role.replace('_', ' ')
 }
 
 export function isAdminRole(role: RoleKey): boolean {

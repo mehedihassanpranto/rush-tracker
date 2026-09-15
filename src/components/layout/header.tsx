@@ -4,7 +4,7 @@ import { useServerFn } from '@tanstack/react-start'
 import { LogOut, Menu, Search } from 'lucide-react'
 
 import { logoutFn } from '@/server/auth/auth.fns'
-import { isAdminRole } from '@/lib/auth/types'
+import { displayRoleFor, isAdminRole } from '@/lib/auth/types'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -42,10 +42,12 @@ export function Header({
   user,
   navItems,
   areaLabel,
+  showSearch = true,
 }: {
   user: SessionUser
   navItems: Array<NavItem>
   areaLabel: string
+  showSearch?: boolean
 }) {
   const router = useRouter()
   const logout = useServerFn(logoutFn)
@@ -63,7 +65,7 @@ export function Header({
     e.preventDefault()
     const q = search.trim()
     if (q.length < 2) return
-    void router.navigate({ to: '/admin/search', search: { q } })
+    void router.navigate({ to: '/agency/search', search: { q } })
   }
 
   return (
@@ -105,7 +107,7 @@ export function Header({
         </span>
       </div>
 
-      {isAdmin && (
+      {isAdmin && showSearch && (
         <form
           onSubmit={onSearch}
           className="relative ml-4 hidden max-w-xs flex-1 md:block"
@@ -149,7 +151,7 @@ export function Header({
                 {user.email}
               </div>
               <div className="mt-1 text-xs text-muted-foreground">
-                Role: {user.role.replace('_', ' ')}
+                Role: {displayRoleFor(user)}
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />

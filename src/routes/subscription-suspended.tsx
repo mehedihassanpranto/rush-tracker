@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/card'
 
 /**
- * Multi-tenant subscription conversion, Phase 3: where the admin/portal
+ * Multi-tenant subscription conversion, Phase 3: where the agency/client
  * route guards redirect a signed-in user whose organization's subscription
  * isn't active. No app data is reachable from here — this route calls no
  * data-loading server fn at all, only logoutFn.
