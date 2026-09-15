@@ -1,5 +1,11 @@
 # Rush Tracker — Deployment (Phase 8)
 
+> **Deploying to Hostinger instead?** See
+> [`DEPLOYMENT-HOSTINGER.md`](./DEPLOYMENT-HOSTINGER.md). Both targets build from
+> the same branch with no config switch — Nitro emits the `vercel` preset only
+> when Vercel's own `VERCEL` env var is set at build time, and a plain
+> `node-server` everywhere else. This document remains valid for Vercel.
+
 Target: **Vercel serverless** via Nitro v3 (spec deployment target). Nitro
 auto-selects its `vercel` preset when the `VERCEL` environment variable is
 present at build time (Vercel sets it automatically), emitting the Vercel Build
@@ -80,10 +86,11 @@ client bundle.
 
 Run against the deployed URL right after the first deploy:
 
-- [ ] **App loads** and unauthenticated `/admin` and `/portal` redirect to
+- [ ] **App loads** and unauthenticated `/agency` and `/client` redirect to
       `/login` (guards active); `/login` returns 200.
-- [ ] **Auth round-trip:** log in as SUPER_ADMIN → lands on `/admin`; log in as
-      a CLIENT → lands on `/portal`. Logout clears the session.
+- [ ] **Auth round-trip:** log in as SUPER_ADMIN → lands on `/agency`; log in as
+      a CLIENT → lands on `/client`; a platform admin → lands on `/platform`.
+      Logout clears the session.
 - [ ] **Server function cold start:** the admin dashboard loads its live cards
       (this exercises a service-role query through a serverless function).
 - [ ] **Env wiring:** no "Invalid server environment configuration" error in the
