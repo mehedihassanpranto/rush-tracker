@@ -1572,8 +1572,8 @@ bug fixes, and anything else that isn't a whole new named feature.
   its admins listed. Zero console errors.
 - **Limit requests on platform-assigned accounts route through the agency to
   the platform for approval (post-Phase-8 addition): done, pending owner
-  review. Migrations `20260723000038`/`20260723000039` NOT YET APPLIED to the
-  live project.** Spec §4.3 of "Mother Platform Account Control." Confirmed
+  review. Migrations `20260723000038`/`20260723000039` confirmed applied to
+  the live project.** Spec §4.3 of "Mother Platform Account Control." Confirmed
   via a clarifying question first — a bare "okay" was ambiguous, and this
   inverts real behavior for all 34 of xRush's live accounts (100% currently
   platform-assigned), so it wasn't assumed from that alone.
@@ -1646,19 +1646,24 @@ bug fixes, and anything else that isn't a whole new named feature.
   "xRush Agency - Azalyn"`, platform-assigned): the agency's approval page
   correctly shows the new Reject/Send-to-Platform card, no amount/rate
   inputs. Platform nav item and pages render correctly, zero console errors.
-  **Full end-to-end verification (actually sending/approving) isn't possible
-  in this dev environment** — no `SUPABASE_ACCESS_TOKEN` for `supabase db
-  push` here — and this was confirmed directly rather than assumed: the
-  platform list's "Awaiting Review"/"Not Yet Sent" tabs currently show empty
-  because the live database is still missing `sent_to_platform_at`
-  (`42703: column does not exist`, confirmed via a direct query); the
-  underlying SELECT is proven correct by running the same query directly
-  against the live project with that column left out of the `ORDER BY`,
-  which returns the real row correctly. `npm test` 83/83, typecheck and
-  build clean.
-  **Owner must apply `20260723000038_limit_request_platform_review_enum.sql`
-  then `20260723000039_limit_request_platform_review.sql`, in that order** —
-  no DB connection or CLI access token is available in this dev environment.
+  **Update, same day: both migrations applied and re-verified.** Initially
+  blocked on no `SUPABASE_ACCESS_TOKEN` — confirmed directly rather than
+  assumed at the time (`42703: column "sent_to_platform_at" does not exist`
+  against the live project), with the underlying query logic separately
+  proven correct minus that column in the `ORDER BY`. The owner supplied a
+  token; `supabase migration list` reported both migrations already applied,
+  which was **not** taken at face value (this project has a documented case
+  of that bookkeeping table drifting from the real schema) — verified
+  directly instead: `sent_to_platform_at`/`sent_to_platform_by` both
+  queryable, `PENDING_PLATFORM_REVIEW` accepted as a real status, and the
+  live `LR-000060` unchanged (`status: 'PENDING'`, `sent_to_platform_at:
+  null`). Re-ran the browser check against the now-real schema:
+  `/platform/limit-requests`'s "Awaiting Review" tab loads cleanly (0
+  results), "Not Yet Sent" correctly lists the real `LR-000060` with its
+  agency name in the new Agency column. **Deliberately did not actually send
+  or approve/reject the real request** as part of verification — that's a
+  real decision on a real client's request, left to whoever actually reviews
+  it. `npm test` 83/83, typecheck and build clean throughout.
 - **Pool account detail page on `/platform/ad-accounts` (post-Phase-8
   addition): done, pending owner review, no migration.** Requested as "shift
   ad account details page, rename and other things and also live data." The

@@ -10,7 +10,7 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 **Limit requests on platform-assigned accounts now route through the agency
 to the platform for approval (spec §4.3). Migrations `20260723000038` and
-`20260723000039` — NOT YET APPLIED to the live project.**
+`20260723000039` — confirmed applied to the live project.**
 
 Requested as the next slice of the "Mother Platform Account Control" spec,
 confirmed via a clarifying question first (a bare "okay" was ambiguous —
@@ -92,21 +92,27 @@ account): the agency's own approval page correctly shows the new
 Reject/Send-to-Platform card with no amount/rate inputs, confirmed against the
 real request rather than a synthetic one. The platform's own `/platform/
 limit-requests` nav item and pages render correctly and error-free.
-**Full end-to-end verification (actually sending/approving) isn't possible
-in this dev environment** — no `SUPABASE_ACCESS_TOKEN` is available here to
-run `supabase db push`, and confirmed directly that the live database is
-still missing `sent_to_platform_at` (`42703: column does not exist`), which
-is why the platform list page's "Not Yet Sent" tab currently shows an empty
-result instead of the one real pending request — the underlying query is
-correct (proven by running the same SELECT directly against the live project,
-minus the not-yet-existing column in the `ORDER BY`, which returns the row
-correctly) but the migration genuinely has to land first. `npm test` 83/83,
-typecheck and build clean.
 
-**Owner must apply both `20260723000038_limit_request_platform_review_enum.sql`
-and `20260723000039_limit_request_platform_review.sql`, in that order,** via
-the SQL editor or `supabase db push` — no DB connection or CLI access token is
-available in this dev environment to apply them directly.
+**Update, same day: both migrations applied and re-verified.** Initially
+reported as blocked — no `SUPABASE_ACCESS_TOKEN` was available in this dev
+environment, and this was confirmed directly rather than assumed (the live
+database was missing `sent_to_platform_at`, `42703: column does not exist`,
+while the underlying query logic was independently proven correct by running
+the same SELECT with that column left out of the `ORDER BY`). The owner
+supplied an access token; `supabase migration list` reported both already
+applied, which was **not** trusted at face value (this project's own history
+has a case of the CLI's bookkeeping table drifting from reality) — confirmed
+against the real schema instead: `sent_to_platform_at`/`sent_to_platform_by`
+both queryable, `PENDING_PLATFORM_REVIEW` accepted as a real status value,
+and the live `LR-000060` unaffected (`status: 'PENDING'`,
+`sent_to_platform_at: null`, exactly as before). Re-ran the browser
+verification against the now-real schema: `/platform/limit-requests`'s
+"Awaiting Review" tab loads cleanly (0 results — nothing escalated yet), and
+"Not Yet Sent" correctly lists the real `LR-000060` with its agency
+("xRush Agency") in the new Agency column. Nothing was actually sent to the
+platform or approved/rejected — that's a real decision on a real client
+request, left to the owner rather than exercised as part of verification.
+`npm test` 83/83, typecheck and build clean throughout.
 
 ---
 
