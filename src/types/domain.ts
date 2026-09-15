@@ -116,6 +116,12 @@ export interface AssignmentWithRefs extends Assignment {
 
 export type LimitRequestStatus =
   | 'PENDING'
+  /** Only reachable for a platform-assigned account (ad_accounts.is_platform):
+   * the agency reviewed the request and sent it to the platform instead of
+   * approving directly — the agency cannot approve a platform-assigned
+   * account's request itself. Resolves to APPROVED/REJECTED like any other
+   * request once the platform reviews it. */
+  | 'PENDING_PLATFORM_REVIEW'
   | 'APPROVED'
   | 'REJECTED'
   | 'CANCELLED'
@@ -151,6 +157,10 @@ export interface LimitRequest {
   requested_at: string
   reviewed_at: string | null
   approved_at: string | null
+  /** Set only when an agency sends a platform-assigned account's request up
+   * for platform review — null for every other request. */
+  sent_to_platform_at: string | null
+  sent_to_platform_by: string | null
   admin_note: string | null
   rejection_reason: string | null
   created_at: string
@@ -159,7 +169,10 @@ export interface LimitRequest {
 /** Limit request joined with client + account display fields. */
 export interface LimitRequestWithRefs extends LimitRequest {
   client: Pick<Client, 'id' | 'client_code' | 'name'> | null
-  ad_account: Pick<AdAccount, 'id' | 'account_code' | 'name'> | null
+  /** is_platform decides whether this request can be approved directly (the
+   * agency's own call) or must be sent to the platform instead — see
+   * canApprovePlatformRequest() in limit-request.fns.ts. */
+  ad_account: Pick<AdAccount, 'id' | 'account_code' | 'name' | 'is_platform'> | null
 }
 
 /** Approval-screen payload: request, live account limit, proof + staleness. */

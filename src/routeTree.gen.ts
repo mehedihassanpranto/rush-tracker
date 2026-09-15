@@ -48,6 +48,9 @@ import { Route as ClientProfileIndexRouteImport } from './routes/client/profile/
 import { Route as ClientStatementIndexRouteImport } from './routes/client/statement/index'
 import { Route as ClientTeamIndexRouteImport } from './routes/client/team/index'
 import { Route as PlatformAdAccountsIndexRouteImport } from './routes/platform/ad-accounts/index'
+import { Route as PlatformAdAccountsAccountIdRouteImport } from './routes/platform/ad-accounts/$accountId'
+import { Route as PlatformLimitRequestsIndexRouteImport } from './routes/platform/limit-requests/index'
+import { Route as PlatformLimitRequestsRequestIdRouteImport } from './routes/platform/limit-requests/$requestId'
 import { Route as PlatformOrganizationsIndexRouteImport } from './routes/platform/organizations/index'
 import { Route as PlatformSettingsIndexRouteImport } from './routes/platform/settings/index'
 import { Route as PlatformOrganizationsOrganizationIdIndexRouteImport } from './routes/platform/organizations/$organizationId.index'
@@ -254,6 +257,24 @@ const PlatformAdAccountsIndexRoute = PlatformAdAccountsIndexRouteImport.update({
   path: '/ad-accounts/',
   getParentRoute: () => PlatformRouteRoute,
 } as any)
+const PlatformAdAccountsAccountIdRoute =
+  PlatformAdAccountsAccountIdRouteImport.update({
+    id: '/ad-accounts/$accountId',
+    path: '/ad-accounts/$accountId',
+    getParentRoute: () => PlatformRouteRoute,
+  } as any)
+const PlatformLimitRequestsIndexRoute =
+  PlatformLimitRequestsIndexRouteImport.update({
+    id: '/limit-requests/',
+    path: '/limit-requests/',
+    getParentRoute: () => PlatformRouteRoute,
+  } as any)
+const PlatformLimitRequestsRequestIdRoute =
+  PlatformLimitRequestsRequestIdRouteImport.update({
+    id: '/limit-requests/$requestId',
+    path: '/limit-requests/$requestId',
+    getParentRoute: () => PlatformRouteRoute,
+  } as any)
 const PlatformOrganizationsIndexRoute =
   PlatformOrganizationsIndexRouteImport.update({
     id: '/organizations/',
@@ -295,6 +316,8 @@ export interface FileRoutesByFullPath {
   '/agency/limit-requests/$requestId': typeof AgencyLimitRequestsRequestIdRoute
   '/agency/payments/$paymentId': typeof AgencyPaymentsPaymentIdRoute
   '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
+  '/platform/ad-accounts/$accountId': typeof PlatformAdAccountsAccountIdRoute
+  '/platform/limit-requests/$requestId': typeof PlatformLimitRequestsRequestIdRoute
   '/agency/ad-accounts/': typeof AgencyAdAccountsIndexRoute
   '/agency/adjustments/': typeof AgencyAdjustmentsIndexRoute
   '/agency/audit/': typeof AgencyAuditIndexRoute
@@ -317,6 +340,7 @@ export interface FileRoutesByFullPath {
   '/client/statement/': typeof ClientStatementIndexRoute
   '/client/team/': typeof ClientTeamIndexRoute
   '/platform/ad-accounts/': typeof PlatformAdAccountsIndexRoute
+  '/platform/limit-requests/': typeof PlatformLimitRequestsIndexRoute
   '/platform/organizations/': typeof PlatformOrganizationsIndexRoute
   '/platform/settings/': typeof PlatformSettingsIndexRoute
   '/platform/organizations/$organizationId/data': typeof PlatformOrganizationsOrganizationIdDataRoute
@@ -336,6 +360,8 @@ export interface FileRoutesByTo {
   '/agency/limit-requests/$requestId': typeof AgencyLimitRequestsRequestIdRoute
   '/agency/payments/$paymentId': typeof AgencyPaymentsPaymentIdRoute
   '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
+  '/platform/ad-accounts/$accountId': typeof PlatformAdAccountsAccountIdRoute
+  '/platform/limit-requests/$requestId': typeof PlatformLimitRequestsRequestIdRoute
   '/agency/ad-accounts': typeof AgencyAdAccountsIndexRoute
   '/agency/adjustments': typeof AgencyAdjustmentsIndexRoute
   '/agency/audit': typeof AgencyAuditIndexRoute
@@ -358,6 +384,7 @@ export interface FileRoutesByTo {
   '/client/statement': typeof ClientStatementIndexRoute
   '/client/team': typeof ClientTeamIndexRoute
   '/platform/ad-accounts': typeof PlatformAdAccountsIndexRoute
+  '/platform/limit-requests': typeof PlatformLimitRequestsIndexRoute
   '/platform/organizations': typeof PlatformOrganizationsIndexRoute
   '/platform/settings': typeof PlatformSettingsIndexRoute
   '/platform/organizations/$organizationId/data': typeof PlatformOrganizationsOrganizationIdDataRoute
@@ -382,6 +409,8 @@ export interface FileRoutesById {
   '/agency/limit-requests/$requestId': typeof AgencyLimitRequestsRequestIdRoute
   '/agency/payments/$paymentId': typeof AgencyPaymentsPaymentIdRoute
   '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
+  '/platform/ad-accounts/$accountId': typeof PlatformAdAccountsAccountIdRoute
+  '/platform/limit-requests/$requestId': typeof PlatformLimitRequestsRequestIdRoute
   '/agency/ad-accounts/': typeof AgencyAdAccountsIndexRoute
   '/agency/adjustments/': typeof AgencyAdjustmentsIndexRoute
   '/agency/audit/': typeof AgencyAuditIndexRoute
@@ -404,6 +433,7 @@ export interface FileRoutesById {
   '/client/statement/': typeof ClientStatementIndexRoute
   '/client/team/': typeof ClientTeamIndexRoute
   '/platform/ad-accounts/': typeof PlatformAdAccountsIndexRoute
+  '/platform/limit-requests/': typeof PlatformLimitRequestsIndexRoute
   '/platform/organizations/': typeof PlatformOrganizationsIndexRoute
   '/platform/settings/': typeof PlatformSettingsIndexRoute
   '/platform/organizations/$organizationId/data': typeof PlatformOrganizationsOrganizationIdDataRoute
@@ -428,6 +458,8 @@ export interface FileRouteTypes {
     | '/agency/limit-requests/$requestId'
     | '/agency/payments/$paymentId'
     | '/api/cron/meta-sync'
+    | '/platform/ad-accounts/$accountId'
+    | '/platform/limit-requests/$requestId'
     | '/agency/ad-accounts/'
     | '/agency/adjustments/'
     | '/agency/audit/'
@@ -450,6 +482,7 @@ export interface FileRouteTypes {
     | '/client/statement/'
     | '/client/team/'
     | '/platform/ad-accounts/'
+    | '/platform/limit-requests/'
     | '/platform/organizations/'
     | '/platform/settings/'
     | '/platform/organizations/$organizationId/data'
@@ -469,6 +502,8 @@ export interface FileRouteTypes {
     | '/agency/limit-requests/$requestId'
     | '/agency/payments/$paymentId'
     | '/api/cron/meta-sync'
+    | '/platform/ad-accounts/$accountId'
+    | '/platform/limit-requests/$requestId'
     | '/agency/ad-accounts'
     | '/agency/adjustments'
     | '/agency/audit'
@@ -491,6 +526,7 @@ export interface FileRouteTypes {
     | '/client/statement'
     | '/client/team'
     | '/platform/ad-accounts'
+    | '/platform/limit-requests'
     | '/platform/organizations'
     | '/platform/settings'
     | '/platform/organizations/$organizationId/data'
@@ -514,6 +550,8 @@ export interface FileRouteTypes {
     | '/agency/limit-requests/$requestId'
     | '/agency/payments/$paymentId'
     | '/api/cron/meta-sync'
+    | '/platform/ad-accounts/$accountId'
+    | '/platform/limit-requests/$requestId'
     | '/agency/ad-accounts/'
     | '/agency/adjustments/'
     | '/agency/audit/'
@@ -536,6 +574,7 @@ export interface FileRouteTypes {
     | '/client/statement/'
     | '/client/team/'
     | '/platform/ad-accounts/'
+    | '/platform/limit-requests/'
     | '/platform/organizations/'
     | '/platform/settings/'
     | '/platform/organizations/$organizationId/data'
@@ -828,6 +867,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlatformAdAccountsIndexRouteImport
       parentRoute: typeof PlatformRouteRoute
     }
+    '/platform/ad-accounts/$accountId': {
+      id: '/platform/ad-accounts/$accountId'
+      path: '/ad-accounts/$accountId'
+      fullPath: '/platform/ad-accounts/$accountId'
+      preLoaderRoute: typeof PlatformAdAccountsAccountIdRouteImport
+      parentRoute: typeof PlatformRouteRoute
+    }
+    '/platform/limit-requests/': {
+      id: '/platform/limit-requests/'
+      path: '/limit-requests'
+      fullPath: '/platform/limit-requests/'
+      preLoaderRoute: typeof PlatformLimitRequestsIndexRouteImport
+      parentRoute: typeof PlatformRouteRoute
+    }
+    '/platform/limit-requests/$requestId': {
+      id: '/platform/limit-requests/$requestId'
+      path: '/limit-requests/$requestId'
+      fullPath: '/platform/limit-requests/$requestId'
+      preLoaderRoute: typeof PlatformLimitRequestsRequestIdRouteImport
+      parentRoute: typeof PlatformRouteRoute
+    }
     '/platform/organizations/': {
       id: '/platform/organizations/'
       path: '/organizations'
@@ -949,7 +1009,10 @@ const ClientRouteRouteWithChildren = ClientRouteRoute._addFileChildren(
 
 interface PlatformRouteRouteChildren {
   PlatformIndexRoute: typeof PlatformIndexRoute
+  PlatformAdAccountsAccountIdRoute: typeof PlatformAdAccountsAccountIdRoute
+  PlatformLimitRequestsRequestIdRoute: typeof PlatformLimitRequestsRequestIdRoute
   PlatformAdAccountsIndexRoute: typeof PlatformAdAccountsIndexRoute
+  PlatformLimitRequestsIndexRoute: typeof PlatformLimitRequestsIndexRoute
   PlatformOrganizationsIndexRoute: typeof PlatformOrganizationsIndexRoute
   PlatformSettingsIndexRoute: typeof PlatformSettingsIndexRoute
   PlatformOrganizationsOrganizationIdDataRoute: typeof PlatformOrganizationsOrganizationIdDataRoute
@@ -958,7 +1021,10 @@ interface PlatformRouteRouteChildren {
 
 const PlatformRouteRouteChildren: PlatformRouteRouteChildren = {
   PlatformIndexRoute: PlatformIndexRoute,
+  PlatformAdAccountsAccountIdRoute: PlatformAdAccountsAccountIdRoute,
+  PlatformLimitRequestsRequestIdRoute: PlatformLimitRequestsRequestIdRoute,
   PlatformAdAccountsIndexRoute: PlatformAdAccountsIndexRoute,
+  PlatformLimitRequestsIndexRoute: PlatformLimitRequestsIndexRoute,
   PlatformOrganizationsIndexRoute: PlatformOrganizationsIndexRoute,
   PlatformSettingsIndexRoute: PlatformSettingsIndexRoute,
   PlatformOrganizationsOrganizationIdDataRoute:

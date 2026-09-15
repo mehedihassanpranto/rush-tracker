@@ -29,7 +29,14 @@ export const limitRejectSchema = z.object({
 
 export const limitRequestListSchema = z.object({
   status: z
-    .enum(['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED', 'ALL'])
+    .enum([
+      'PENDING',
+      'PENDING_PLATFORM_REVIEW',
+      'APPROVED',
+      'REJECTED',
+      'CANCELLED',
+      'ALL',
+    ])
     .default('PENDING'),
 })
 

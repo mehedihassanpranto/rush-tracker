@@ -9,6 +9,7 @@ const STATUS_STYLES: Record<string, string> = {
   SUSPENDED: 'border-transparent bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300',
   RELEASED: 'border-transparent bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
   PENDING: 'border-transparent bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300',
+  PENDING_PLATFORM_REVIEW: 'border-transparent bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300',
   APPROVED: 'border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
   REJECTED: 'border-transparent bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300',
   CANCELLED: 'border-transparent bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',

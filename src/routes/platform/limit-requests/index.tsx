@@ -4,8 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { Gauge } from 'lucide-react'
 
-import { listLimitRequestsFn } from '@/server/limit-requests/limit-request.fns'
-import { formatBdt, formatUsd } from '@/lib/money/money'
+import { listPlatformLimitRequestsFn } from '@/server/platform/limit-requests.fns'
+import { formatUsd } from '@/lib/money/money'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Button } from '@/components/ui/button'
@@ -29,8 +29,8 @@ type Filter =
   | 'ALL'
 
 const FILTERS: Array<Filter> = [
-  'PENDING',
   'PENDING_PLATFORM_REVIEW',
+  'PENDING',
   'APPROVED',
   'REJECTED',
   'CANCELLED',
@@ -38,16 +38,22 @@ const FILTERS: Array<Filter> = [
 ]
 
 const FILTER_LABELS: Record<Filter, string> = {
-  PENDING: 'Pending',
-  PENDING_PLATFORM_REVIEW: 'Sent to Platform',
+  PENDING: 'Not Yet Sent',
+  PENDING_PLATFORM_REVIEW: 'Awaiting Review',
   APPROVED: 'Approved',
   REJECTED: 'Rejected',
   CANCELLED: 'Cancelled',
   ALL: 'All',
 }
 
-export const Route = createFileRoute('/agency/limit-requests/')({
-  component: LimitRequestsPage,
+/**
+ * Limit requests on platform-assigned accounts, across every agency — the
+ * escalation queue §4.3 of the "Mother Platform Account Control" spec asked
+ * for. Defaults to the actionable "Awaiting Review" tab; the others are
+ * visibility only (a request not yet sent up, or one already resolved).
+ */
+export const Route = createFileRoute('/platform/limit-requests/')({
+  component: PlatformLimitRequestsPage,
 })
 
 function fmtDate(value: string): string {
@@ -58,12 +64,12 @@ function fmtDate(value: string): string {
   })
 }
 
-function LimitRequestsPage() {
-  const listRequests = useServerFn(listLimitRequestsFn)
-  const [filter, setFilter] = useState<Filter>('PENDING')
+function PlatformLimitRequestsPage() {
+  const listRequests = useServerFn(listPlatformLimitRequestsFn)
+  const [filter, setFilter] = useState<Filter>('PENDING_PLATFORM_REVIEW')
 
   const { data: requests, isLoading } = useQuery({
-    queryKey: ['limit-requests', filter],
+    queryKey: ['platform-limit-requests', filter],
     queryFn: () => listRequests({ data: { status: filter } }),
   })
 
@@ -71,7 +77,7 @@ function LimitRequestsPage() {
     <div>
       <PageHeader
         title="Limit Requests"
-        description="Review and approve client limit increase requests."
+        description="Requests against platform-assigned accounts, escalated here by an agency for approval."
       />
 
       <div className="mb-4 flex flex-wrap gap-2">
@@ -92,12 +98,12 @@ function LimitRequestsPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Request</TableHead>
+              <TableHead>Agency</TableHead>
               <TableHead>Client</TableHead>
               <TableHead>Account</TableHead>
               <TableHead className="text-right">Opening</TableHead>
               <TableHead className="text-right">Requested</TableHead>
               <TableHead className="text-right">Approved</TableHead>
-              <TableHead className="text-right">Charge</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Date</TableHead>
             </TableRow>
@@ -117,7 +123,8 @@ function LimitRequestsPage() {
                 <TableCell colSpan={9}>
                   <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
                     <Gauge className="size-8 opacity-40" />
-                    No {filter === 'ALL' ? '' : FILTER_LABELS[filter].toLowerCase() + ' '}requests.
+                    No {filter === 'ALL' ? '' : FILTER_LABELS[filter].toLowerCase() + ' '}
+                    requests.
                   </div>
                 </TableCell>
               </TableRow>
@@ -127,13 +134,14 @@ function LimitRequestsPage() {
               <TableRow key={r.id}>
                 <TableCell className="font-mono text-xs">
                   <Link
-                    to="/agency/limit-requests/$requestId"
+                    to="/platform/limit-requests/$requestId"
                     params={{ requestId: r.id }}
                     className="text-primary underline-offset-4 hover:underline"
                   >
                     {r.request_number}
                   </Link>
                 </TableCell>
+                <TableCell>{r.organization?.name ?? '—'}</TableCell>
                 <TableCell>{r.client?.name ?? '—'}</TableCell>
                 <TableCell>{r.ad_account?.name ?? '—'}</TableCell>
                 <TableCell className="text-right">
@@ -145,14 +153,11 @@ function LimitRequestsPage() {
                 <TableCell className="text-right">
                   {r.approved_amount_usd ? formatUsd(r.approved_amount_usd) : '—'}
                 </TableCell>
-                <TableCell className="text-right">
-                  {r.bdt_charge ? formatBdt(r.bdt_charge) : '—'}
-                </TableCell>
                 <TableCell>
                   <StatusBadge status={r.status} />
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-muted-foreground">
-                  {fmtDate(r.created_at)}
+                  {fmtDate(r.sent_to_platform_at ?? r.created_at)}
                 </TableCell>
               </TableRow>
             ))}

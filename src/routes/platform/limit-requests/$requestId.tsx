@@ -2,23 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import {
-  AlertTriangle,
-  ArrowLeft,
-  CheckCircle2,
-  FileText,
-  Loader2,
-} from 'lucide-react'
+import { AlertTriangle, ArrowLeft, CheckCircle2, FileText, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
-  approveLimitRequestFn,
-  getLimitProofUrlFn,
-  getLimitRequestDetailFn,
-  rebaseLimitRequestFn,
-  rejectLimitRequestFn,
-  sendLimitRequestToPlatformFn,
-} from '@/server/limit-requests/limit-request.fns'
+  approvePlatformLimitRequestFn,
+  getPlatformLimitProofUrlFn,
+  getPlatformLimitRequestFn,
+  rebasePlatformLimitRequestFn,
+  rejectPlatformLimitRequestFn,
+} from '@/server/platform/limit-requests.fns'
 import { addUsd, formatBdt, formatUsd, multiplyUsdByRate } from '@/lib/money/money'
 import { ProofViewerDialog } from '@/components/shared/proof-viewer'
 import { PageHeader } from '@/components/shared/page-header'
@@ -39,8 +32,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 
-export const Route = createFileRoute('/agency/limit-requests/$requestId')({
-  component: ApprovalPage,
+export const Route = createFileRoute('/platform/limit-requests/$requestId')({
+  component: PlatformApprovalPage,
 })
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -52,16 +45,15 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   )
 }
 
-function ApprovalPage() {
+function PlatformApprovalPage() {
   const { requestId } = Route.useParams()
   const queryClient = useQueryClient()
 
-  const getDetail = useServerFn(getLimitRequestDetailFn)
-  const getProofUrl = useServerFn(getLimitProofUrlFn)
-  const approve = useServerFn(approveLimitRequestFn)
-  const reject = useServerFn(rejectLimitRequestFn)
-  const rebase = useServerFn(rebaseLimitRequestFn)
-  const sendToPlatform = useServerFn(sendLimitRequestToPlatformFn)
+  const getDetail = useServerFn(getPlatformLimitRequestFn)
+  const getProofUrl = useServerFn(getPlatformLimitProofUrlFn)
+  const approve = useServerFn(approvePlatformLimitRequestFn)
+  const reject = useServerFn(rejectPlatformLimitRequestFn)
+  const rebase = useServerFn(rebasePlatformLimitRequestFn)
 
   const [amount, setAmount] = useState('')
   const [rate, setRate] = useState('')
@@ -71,14 +63,10 @@ function ApprovalPage() {
   const [proofOpen, setProofOpen] = useState(false)
 
   const { data: detail, isLoading } = useQuery({
-    queryKey: ['limit-request', requestId],
+    queryKey: ['platform-limit-request', requestId],
     queryFn: () => getDetail({ data: { id: requestId } }),
   })
 
-  // Seed the form once the request loads (approved amount defaults to
-  // requested; rate prefills from THIS AD ACCOUNT's configured rate, falling
-  // back to the client's when unset — spec §25, §26; the applied rate is still
-  // editable and snapshotted per approval).
   const seeded = useRef(false)
   useEffect(() => {
     if (detail && !seeded.current) {
@@ -91,9 +79,8 @@ function ApprovalPage() {
   }, [detail])
 
   const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: ['limit-request', requestId] })
-    void queryClient.invalidateQueries({ queryKey: ['limit-requests'] })
-    void queryClient.invalidateQueries({ queryKey: ['admin-dashboard-stats'] })
+    void queryClient.invalidateQueries({ queryKey: ['platform-limit-request', requestId] })
+    void queryClient.invalidateQueries({ queryKey: ['platform-limit-requests'] })
   }
 
   const approveMutation = useMutation({
@@ -132,30 +119,11 @@ function ApprovalPage() {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
   })
 
-  const sendToPlatformMutation = useMutation({
-    mutationFn: () => sendToPlatform({ data: { id: requestId } }),
-    onSuccess: () => {
-      toast.success('Sent to the platform for review')
-      invalidate()
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
-  })
-
-  function viewProof() {
-    setProofOpen(true)
-  }
-
   if (isLoading || !detail) {
     return <Skeleton className="h-96 w-full" />
   }
 
-  const isPending = detail.status === 'PENDING'
-  const isSentToPlatform = detail.status === 'PENDING_PLATFORM_REVIEW'
-  // A platform-assigned account's requests are the platform's decision, not
-  // the agency's (see canMutateSpendCap()'s doc comment for the direct-edit
-  // side of this same rule) — the agency can still reject outright, but can
-  // only send an approval-bound request up rather than approving it here.
-  const isPlatformAccount = detail.ad_account?.is_platform === true
+  const isActionable = detail.status === 'PENDING_PLATFORM_REVIEW'
   const amountNum = Number(amount)
   const rateNum = Number(rate)
   const amountValid = amount !== '' && Number.isFinite(amountNum) && amountNum > 0
@@ -171,7 +139,7 @@ function ApprovalPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <Link
-        to="/agency/limit-requests"
+        to="/platform/limit-requests"
         className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="size-4" />
@@ -189,27 +157,28 @@ function ApprovalPage() {
           </CardHeader>
           <CardContent>
             <Row
-              label="Client"
+              label="Agency"
               value={
-                detail.client ? (
+                detail.organization ? (
                   <Link
-                    to="/agency/clients/$clientId"
-                    params={{ clientId: detail.client.id }}
+                    to="/platform/organizations/$organizationId"
+                    params={{ organizationId: detail.organization.id }}
                     className="text-primary underline-offset-4 hover:underline"
                   >
-                    {detail.client.name}
+                    {detail.organization.name}
                   </Link>
                 ) : (
                   '—'
                 )
               }
             />
+            <Row label="Client" value={detail.client?.name ?? '—'} />
             <Row
               label="Ad account"
               value={
                 detail.ad_account ? (
                   <Link
-                    to="/agency/ad-accounts/$accountId"
+                    to="/platform/ad-accounts/$accountId"
                     params={{ accountId: detail.ad_account.id }}
                     className="text-primary underline-offset-4 hover:underline"
                   >
@@ -228,45 +197,17 @@ function ApprovalPage() {
               label="Requested amount"
               value={formatUsd(detail.requested_amount_usd)}
             />
-            <Row
-              label="Rate at request"
-              value={`৳${detail.default_usd_rate}`}
-            />
-            <Row
-              label="Segment"
-              value={
-                <span
-                  className={
-                    detail.segment === 'prepaid'
-                      ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
-                      : detail.segment === 'partial'
-                        ? 'rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-400'
-                        : 'rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground'
-                  }
-                >
-                  {detail.segment === 'prepaid'
-                    ? 'Prepaid'
-                    : detail.segment === 'partial'
-                      ? 'Partial'
-                      : 'Postpaid'}
-                </span>
-              }
-            />
+            <Row label="Rate at request" value={`৳${detail.default_usd_rate}`} />
             <Row label="Total cost" value={formatBdt(detail.total_cost_bdt)} />
             {detail.segment !== 'postpaid' && (
-              <Row
-                label="Amount paid"
-                value={formatBdt(detail.amount_paid_bdt)}
-              />
+              <Row label="Amount paid" value={formatBdt(detail.amount_paid_bdt)} />
             )}
             <Row
-              label="Due balance"
+              label="Sent to platform"
               value={
-                Number(detail.due_balance_bdt) <= 0 ? (
-                  <span className="text-emerald-600">Fully paid</span>
-                ) : (
-                  formatBdt(detail.due_balance_bdt)
-                )
+                detail.sent_to_platform_at
+                  ? new Date(detail.sent_to_platform_at).toLocaleString()
+                  : '—'
               }
             />
           </CardContent>
@@ -300,35 +241,7 @@ function ApprovalPage() {
           </Alert>
         )}
 
-        {isPending && isPlatformAccount ? (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Approval</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                This account is managed by the platform — you can reject this
-                request outright, but approving it (and setting the amount and
-                rate) is the platform's call. Send it there for review.
-              </p>
-
-              <div className="flex justify-end gap-2 border-t pt-4">
-                <Button variant="outline" onClick={() => setRejectOpen(true)}>
-                  Reject
-                </Button>
-                <Button
-                  disabled={sendToPlatformMutation.isPending}
-                  onClick={() => sendToPlatformMutation.mutate()}
-                >
-                  {sendToPlatformMutation.isPending && (
-                    <Loader2 className="size-4 animate-spin" />
-                  )}
-                  Send to Platform
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ) : isPending ? (
+        {isActionable ? (
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Approval</CardTitle>
@@ -384,7 +297,7 @@ function ApprovalPage() {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => void viewProof()}
+                      onClick={() => setProofOpen(true)}
                     >
                       <FileText className="size-4" />
                       View
@@ -403,10 +316,7 @@ function ApprovalPage() {
               </div>
 
               <div className="flex justify-end gap-2 border-t pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setRejectOpen(true)}
-                >
+                <Button variant="outline" onClick={() => setRejectOpen(true)}>
                   Reject
                 </Button>
                 <Button
@@ -426,19 +336,15 @@ function ApprovalPage() {
               </div>
             </CardContent>
           </Card>
-        ) : isSentToPlatform ? (
+        ) : detail.status === 'PENDING' ? (
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Sent to Platform</CardTitle>
+              <CardTitle className="text-base">Not Yet Sent</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                This request was sent to the platform on{' '}
-                {detail.sent_to_platform_at
-                  ? new Date(detail.sent_to_platform_at).toLocaleString()
-                  : '—'}{' '}
-                and is awaiting their review. You'll see the outcome here once
-                they decide.
+                This request is still with {detail.organization?.name ?? 'the agency'}
+                {' '}— it hasn't been sent here for review yet.
               </p>
             </CardContent>
           </Card>
@@ -454,10 +360,7 @@ function ApprovalPage() {
                     label="Approved amount"
                     value={formatUsd(detail.approved_amount_usd ?? '0')}
                   />
-                  <Row
-                    label="Applied rate"
-                    value={`৳${detail.approved_usd_rate}`}
-                  />
+                  <Row label="Applied rate" value={`৳${detail.approved_usd_rate}`} />
                   <Row
                     label="New current limit"
                     value={formatUsd(detail.approved_new_limit_usd ?? '0')}
@@ -466,9 +369,7 @@ function ApprovalPage() {
                     label="Client charge"
                     value={formatBdt(detail.bdt_charge ?? '0')}
                   />
-                  {detail.admin_note && (
-                    <Row label="Note" value={detail.admin_note} />
-                  )}
+                  {detail.admin_note && <Row label="Note" value={detail.admin_note} />}
                 </>
               )}
               {detail.status === 'REJECTED' && (
@@ -494,11 +395,7 @@ function ApprovalPage() {
           </DialogHeader>
           <div className="space-y-2">
             <Label>Reason</Label>
-            <Textarea
-              rows={3}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-            />
+            <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRejectOpen(false)}>
@@ -509,9 +406,7 @@ function ApprovalPage() {
               disabled={!reason.trim() || rejectMutation.isPending}
               onClick={() => rejectMutation.mutate()}
             >
-              {rejectMutation.isPending && (
-                <Loader2 className="size-4 animate-spin" />
-              )}
+              {rejectMutation.isPending && <Loader2 className="size-4 animate-spin" />}
               Reject request
             </Button>
           </DialogFooter>

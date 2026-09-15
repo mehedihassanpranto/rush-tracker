@@ -42,6 +42,11 @@ export function RevokeGrantDialog({
     onSuccess: () => {
       toast.success(`Revoked from ${grant?.agencyName} — returned to the pool.`)
       void queryClient.invalidateQueries({ queryKey: ['platform-pool-accounts'] })
+      if (grant) {
+        void queryClient.invalidateQueries({
+          queryKey: ['pool-account', grant.adAccountId],
+        })
+      }
       onOpenChange(false)
     },
     onError: (err) =>

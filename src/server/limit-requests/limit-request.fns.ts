@@ -10,8 +10,12 @@ import {
   notifyAdmins,
   notifyClientMembers,
 } from '@/server/notifications/notification.service'
-import { syncAndPersistAdAccountSpendCap } from '@/server/meta/spend-cap-sync.server'
 import { sendTelegramMessage } from '@/server/telegram/telegram.service'
+import {
+  PROOF_ENTITY,
+  finishLimitRequestApproval,
+  proofPathForRequest,
+} from '@/server/limit-requests/limit-request-approval.service'
 import { uploadProof, signProofUrl } from '@/server/storage/storage.service'
 import { adAccountUsdRate } from '@/server/exchange-rates/rate.service'
 import { addUsd, dec, formatBdt, formatUsd, multiplyUsdByRate } from '@/lib/money/money'
@@ -31,9 +35,7 @@ import type {
   LimitRequestWithRefs,
 } from '@/types/domain'
 
-const PROOF_ENTITY = 'LIMIT_APPROVAL_PROOF'
-
-function friendlyRpcError(message: string): string {
+export function friendlyRpcError(message: string): string {
   return message.replace(/^.*?:\s*/, '').trim() || message
 }
 
@@ -96,7 +98,10 @@ export const listMyRequestableAccountsFn = createServerFn({
       .from('limit_requests')
       .select('ad_account_id')
       .eq('client_id', membership.clientId)
-      .eq('status', 'PENDING'),
+      // A request awaiting platform review is still in flight from the
+      // client's point of view — same "has_pending" signal as a plain
+      // PENDING request, so the account doesn't look free to request again.
+      .in('status', ['PENDING', 'PENDING_PLATFORM_REVIEW']),
     Promise.all(
       accounts.map((a) => adAccountUsdRate(a.id, membership.clientId)),
     ),
@@ -293,7 +298,7 @@ export const listMyLimitRequestsFn = createServerFn({ method: 'GET' }).handler(
     const { data, error } = await admin
       .from('limit_requests')
       .select(
-        '*, ad_account:ad_accounts(id, account_code, name)',
+        '*, ad_account:ad_accounts(id, account_code, name, is_platform)',
       )
       .eq('client_id', membership.clientId)
       .order('created_at', { ascending: false })
@@ -357,19 +362,6 @@ export const getMyProofUrlFn = createServerFn({ method: 'POST' })
 // Admin
 // ===========================================================================
 
-async function proofPathForRequest(requestId: string): Promise<string | null> {
-  const admin = getSupabaseAdminClient()
-  const { data } = await admin
-    .from('attachments')
-    .select('storage_path')
-    .eq('entity_type', PROOF_ENTITY)
-    .eq('entity_id', requestId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  return (data as { storage_path: string } | null)?.storage_path ?? null
-}
-
 export const listLimitRequestsFn = createServerFn({ method: 'GET' })
   .validator(limitRequestListSchema)
   .handler(async ({ data }): Promise<Array<LimitRequestWithRefs>> => {
@@ -378,7 +370,7 @@ export const listLimitRequestsFn = createServerFn({ method: 'GET' })
     let query = admin
       .from('limit_requests')
       .select(
-        '*, client:clients(id, client_code, name), ad_account:ad_accounts(id, account_code, name)',
+        '*, client:clients(id, client_code, name), ad_account:ad_accounts(id, account_code, name, is_platform)',
       )
       .eq('organization_id', actor.organizationId)
       .order('created_at', { ascending: false })
@@ -404,7 +396,7 @@ export const listAdAccountUsageFn = createServerFn({ method: 'GET' })
     const { data: rows, error } = await admin
       .from('limit_requests')
       .select(
-        '*, client:clients(id, client_code, name), ad_account:ad_accounts(id, account_code, name)',
+        '*, client:clients(id, client_code, name), ad_account:ad_accounts(id, account_code, name, is_platform)',
       )
       .eq('ad_account_id', data.ad_account_id)
       .eq('status', 'APPROVED')
@@ -427,7 +419,7 @@ export const listClientLimitRequestsFn = createServerFn({ method: 'GET' })
     const { data: rows, error } = await admin
       .from('limit_requests')
       .select(
-        '*, client:clients(id, client_code, name), ad_account:ad_accounts(id, account_code, name)',
+        '*, client:clients(id, client_code, name), ad_account:ad_accounts(id, account_code, name, is_platform)',
       )
       .eq('client_id', data.client_id)
       .eq('status', 'APPROVED')
@@ -446,7 +438,7 @@ export const getLimitRequestDetailFn = createServerFn({ method: 'GET' })
     const { data: req, error } = await admin
       .from('limit_requests')
       .select(
-        '*, client:clients(id, client_code, name), ad_account:ad_accounts(id, account_code, name)',
+        '*, client:clients(id, client_code, name), ad_account:ad_accounts(id, account_code, name, is_platform)',
       )
       .eq('id', data.id)
       .eq('organization_id', actor.organizationId)
@@ -543,6 +535,25 @@ export const approveLimitRequestFn = createServerFn({ method: 'POST' })
     const actor = await requireAdmin(PERMISSIONS.LIMIT_REQUESTS_APPROVE)
     const admin = getSupabaseAdminClient()
 
+    // A platform-assigned account's requests are the platform's call, not the
+    // agency's — same is_platform gate as canMutateSpendCap()'s direct-edit
+    // lock, applied to the request-approval action instead. The agency can
+    // still reject directly (see rejectLimitRequestFn) or send it up via
+    // sendLimitRequestToPlatformFn below.
+    const { data: accountRow } = await admin
+      .from('limit_requests')
+      .select('ad_account:ad_accounts(is_platform)')
+      .eq('id', data.id)
+      .maybeSingle()
+    const isPlatformAccount = (
+      accountRow as unknown as { ad_account: { is_platform: boolean } | null } | null
+    )?.ad_account?.is_platform
+    if (isPlatformAccount) {
+      throw new Error(
+        "This account's limit requests are approved by the platform — send it to the platform for review instead of approving directly.",
+      )
+    }
+
     const { data: result, error } = await admin.rpc('approve_limit_request', {
       p_request_id: data.id,
       p_approved_amount: data.approved_amount_usd,
@@ -558,70 +569,68 @@ export const approveLimitRequestFn = createServerFn({ method: 'POST' })
       payment_ledger_id: string | null
     }
 
-    // Prepaid only (paymentId is null for postpaid — nothing to link).
-    // Link the client's already-uploaded request proof to the auto-created
-    // payment too, so it shows in Payment History with proof like any other
-    // payment — best-effort, never blocks the (already-committed) approval.
-    try {
-      const path = paymentId ? await proofPathForRequest(data.id) : null
-      if (paymentId && path) {
-        const { data: att } = await admin
-          .from('attachments')
-          .select('original_file_name, mime_type, file_size')
-          .eq('entity_type', PROOF_ENTITY)
-          .eq('entity_id', data.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-        await admin.from('attachments').insert({
-          entity_type: 'PAYMENT_PROOF',
-          entity_id: paymentId,
-          storage_bucket: 'proofs',
-          storage_path: path,
-          original_file_name: (att as { original_file_name: string | null } | null)
-            ?.original_file_name,
-          mime_type: (att as { mime_type: string | null } | null)?.mime_type,
-          file_size: (att as { file_size: number | null } | null)?.file_size,
-          uploaded_by: actor.id,
-          organization_id: actor.organizationId,
-        })
-      }
-    } catch (err) {
-      console.error('[limit-request] failed to link proof to auto-payment', data.id, err)
-    }
+    await finishLimitRequestApproval(
+      actor.id,
+      data.id,
+      data.approved_amount_usd,
+      paymentId,
+      actor.organizationId,
+    )
+    return { ledger_id: ledgerId, payment_id: paymentId }
+  })
+
+/**
+ * The agency's alternative to direct approval on a platform-assigned
+ * account's request — hands the decision to the platform instead. Only valid
+ * from PENDING (not already escalated, not terminal) and only for a
+ * platform-assigned account; sending an agency-owned account's request here
+ * would make no sense since the platform has no authority over it at all.
+ */
+export const sendLimitRequestToPlatformFn = createServerFn({ method: 'POST' })
+  .validator(limitRequestIdSchema)
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const actor = await requireAdmin(PERMISSIONS.LIMIT_REQUESTS_APPROVE)
+    const admin = getSupabaseAdminClient()
 
     const { data: req } = await admin
       .from('limit_requests')
-      .select('client_id, request_number, ad_account_id')
+      .select('status, ad_account:ad_accounts(is_platform)')
       .eq('id', data.id)
+      .eq('organization_id', actor.organizationId)
       .maybeSingle()
-    if (req) {
-      const r = req as {
-        client_id: string
-        request_number: string
-        ad_account_id: string
-      }
-      await notifyClientMembers(r.client_id, {
-        type: 'LIMIT_REQUEST_APPROVED',
-        title: 'Limit request approved',
-        message: `${r.request_number}: approved for ${formatUsd(
-          data.approved_amount_usd,
-        )}`,
-        entityType: 'LIMIT_REQUEST',
-        entityId: data.id,
-      })
-
-      // Best-effort: push the new limit to the linked Meta ad account's
-      // spend_cap. Never throws — a Meta-side failure must not roll back
-      // this approval (already committed atomically above); it's flagged
-      // via meta_sync_pending + a notification + retry instead (spec
-      // decision: see the "Auto-push approved limit to Meta spend_cap" plan).
-      await syncAndPersistAdAccountSpendCap(r.ad_account_id, {
-        actorUserId: actor.id,
-        source: 'META_SPEND_CAP_AUTO_SYNC',
-      })
+    if (!req) throw new Error('Request not found')
+    const r = req as unknown as {
+      status: string
+      ad_account: { is_platform: boolean } | null
     }
-    return { ledger_id: ledgerId, payment_id: paymentId }
+    if (!r.ad_account?.is_platform) {
+      throw new Error(
+        "This account isn't platform-assigned — approve or reject it directly.",
+      )
+    }
+    if (r.status !== 'PENDING') {
+      throw new Error('Request is not pending')
+    }
+
+    const { error } = await admin
+      .from('limit_requests')
+      .update({
+        status: 'PENDING_PLATFORM_REVIEW',
+        sent_to_platform_at: new Date().toISOString(),
+        sent_to_platform_by: actor.id,
+      })
+      .eq('id', data.id)
+      .eq('status', 'PENDING')
+    if (error) throw new Error(error.message)
+
+    await writeAudit({
+      actorUserId: actor.id,
+      organizationId: actor.organizationId,
+      action: 'LIMIT_REQUEST_SENT_TO_PLATFORM',
+      entityType: 'LIMIT_REQUEST',
+      entityId: data.id,
+    })
+    return { ok: true }
   })
 
 export const rejectLimitRequestFn = createServerFn({ method: 'POST' })

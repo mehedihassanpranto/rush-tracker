@@ -18,7 +18,7 @@ import type {
 } from '@/types/domain'
 
 const LR_SELECT =
-  '*, client:clients(id, client_code, name), ad_account:ad_accounts(id, account_code, name)'
+  '*, client:clients(id, client_code, name), ad_account:ad_accounts(id, account_code, name, is_platform)'
 const PAY_SELECT =
   'id, payment_number, client_id, payment_request_id, amount_bdt, payment_method, transaction_reference, status, submitted_at, reviewed_at, admin_note, rejection_reason, created_at, client:clients(id, client_code, name)'
 

@@ -7,6 +7,11 @@ import { writeAudit } from '@/server/audit/audit.service'
 import { operatingOrganizationId } from '@/server/ad-accounts/scope.server'
 import { organizationId as organizationIdSchema } from '@/schemas/organization'
 import {
+  adAccountRenameSchema,
+  adAccountStatusSchema,
+  adAccountUpdateSchema,
+} from '@/schemas/ad-account'
+import {
   applyMetaSpendCapSchema,
   importPoolAccountsSchema,
   retryMetaSpendCapSyncSchema,
@@ -22,7 +27,7 @@ import { syncAndPersistAdAccountSpendCap } from '@/server/meta/spend-cap-sync.se
 import { dec } from '@/lib/money/money'
 import { PLATFORM_CREDENTIALS } from '@/lib/meta/credential-scope'
 import { DEPLOYMENT_ORGANIZATION_ID } from '@/lib/organizations/deployment-org'
-import type { AdAccount } from '@/types/domain'
+import type { AdAccount, AssignmentWithRefs, LimitRequestWithRefs } from '@/types/domain'
 
 /**
  * The platform-owned ad account pool: accounts the vendor holds centrally and
@@ -44,6 +49,22 @@ const grantSchema = z.object({
   ad_account_id: z.uuid(),
   organization_id: organizationIdSchema,
 })
+
+/** Loads one pool account by id after verifying it's actually in the pool.
+ * Shared by every fn below that acts on a single account by id. */
+async function loadPoolAccount(admin: SupabaseClient, id: string): Promise<AdAccount> {
+  const { data, error } = await admin
+    .from('ad_accounts')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  const account = data as AdAccount | null
+  if (!account || !(account as unknown as { is_platform: boolean }).is_platform) {
+    throw new Error('Pool account not found')
+  }
+  return account
+}
 
 /** Every pool account, with who currently holds it. */
 export const listPoolAccountsFn = createServerFn({ method: 'GET' }).handler(
@@ -89,6 +110,39 @@ export const listPoolAccountsFn = createServerFn({ method: 'GET' }).handler(
     }))
   },
 )
+
+/** One pool account, with who currently holds it — the detail-page
+ * counterpart of listPoolAccountsFn above. */
+export const getPoolAccountFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ id: z.uuid() }))
+  .handler(async ({ data }): Promise<PoolAccountRow> => {
+    await requirePlatformAdmin()
+    const admin = getSupabaseAdminClient()
+    const account = await loadPoolAccount(admin, data.id)
+
+    const { data: grant, error } = await admin
+      .from('platform_account_grants')
+      .select('organization_id, granted_at, organization:organizations(name)')
+      .eq('ad_account_id', data.id)
+      .maybeSingle()
+    if (error) throw new Error(error.message)
+    const g = grant as unknown as {
+      organization_id: string
+      granted_at: string
+      organization: { name: string } | null
+    } | null
+
+    return {
+      account,
+      granted_to: g
+        ? {
+            organization_id: g.organization_id,
+            name: g.organization?.name ?? '',
+            granted_at: g.granted_at,
+          }
+        : null,
+    }
+  })
 
 /**
  * Grant one pool account to one agency.
@@ -531,4 +585,166 @@ export const retryPoolAccountSpendCapSyncFn = createServerFn({ method: 'POST' })
       .single()
     if (error) throw new Error(error.message)
     return account as unknown as AdAccount
+  })
+
+// ---------------------------------------------------------------------------
+// Detail page — rename, edit details, activate/deactivate, history, usage
+//
+// Platform counterparts of renameAdAccountFn / updateAdAccountFn /
+// setAdAccountStatusFn / listAssignmentHistoryFn / listAdAccountUsageFn
+// (ad-account.fns.ts / limit-request.fns.ts). Same split as the spend-cap
+// block above: is_platform=true only, no organization check — a platform
+// admin manages the whole pool account, not just what's currently granted.
+// Schemas are reused as-is from schemas/ad-account.ts since none of them
+// depend on an organization.
+// ---------------------------------------------------------------------------
+
+/** Platform counterpart of renameAdAccountFn. */
+export const renamePoolAccountFn = createServerFn({ method: 'POST' })
+  .validator(adAccountRenameSchema)
+  .handler(async ({ data }): Promise<AdAccount> => {
+    const actor = await requirePlatformAdmin()
+    const admin = getSupabaseAdminClient()
+    const before = await loadPoolAccount(admin, data.id)
+
+    const { data: account, error } = await admin
+      .from('ad_accounts')
+      .update({ name: data.name })
+      .eq('id', data.id)
+      .select('*')
+      .single()
+    if (error) throw new Error(error.message)
+
+    const operatingOrg = await operatingOrganizationId(admin, before as unknown as {
+      id: string
+      is_platform: boolean
+      organization_id: string | null
+    })
+    await writeAudit({
+      actorUserId: actor.id,
+      organizationId: operatingOrg ?? actor.organizationId,
+      action: 'AD_ACCOUNT_RENAMED',
+      entityType: 'AD_ACCOUNT',
+      entityId: data.id,
+      oldValues: { name: before.name },
+      newValues: { name: data.name },
+    })
+    return account as AdAccount
+  })
+
+/** Platform counterpart of updateAdAccountFn. */
+export const updatePoolAccountDetailsFn = createServerFn({ method: 'POST' })
+  .validator(adAccountUpdateSchema)
+  .handler(async ({ data }): Promise<AdAccount> => {
+    const actor = await requirePlatformAdmin()
+    const admin = getSupabaseAdminClient()
+    const before = await loadPoolAccount(admin, data.id)
+
+    const { data: account, error } = await admin
+      .from('ad_accounts')
+      .update({
+        external_account_id: data.external_account_id ?? null,
+        platform: data.platform,
+        current_limit_usd: data.current_limit_usd,
+        usd_rate: data.usd_rate,
+        threshold_usd: data.threshold_usd,
+      })
+      .eq('id', data.id)
+      .select('*')
+      .single()
+    if (error) throw new Error(error.message)
+
+    const operatingOrg = await operatingOrganizationId(admin, before as unknown as {
+      id: string
+      is_platform: boolean
+      organization_id: string | null
+    })
+    await writeAudit({
+      actorUserId: actor.id,
+      organizationId: operatingOrg ?? actor.organizationId,
+      action: 'AD_ACCOUNT_UPDATED',
+      entityType: 'AD_ACCOUNT',
+      entityId: data.id,
+      oldValues: before as unknown as Record<string, unknown>,
+      newValues: account,
+    })
+    return account as AdAccount
+  })
+
+/** Platform counterpart of setAdAccountStatusFn. */
+export const setPoolAccountStatusFn = createServerFn({ method: 'POST' })
+  .validator(adAccountStatusSchema)
+  .handler(async ({ data }): Promise<AdAccount> => {
+    const actor = await requirePlatformAdmin()
+    const admin = getSupabaseAdminClient()
+    const before = await loadPoolAccount(admin, data.id)
+
+    const { data: account, error } = await admin
+      .from('ad_accounts')
+      .update({ status: data.status })
+      .eq('id', data.id)
+      .select('*')
+      .single()
+    if (error) throw new Error(error.message)
+
+    const operatingOrg = await operatingOrganizationId(admin, before as unknown as {
+      id: string
+      is_platform: boolean
+      organization_id: string | null
+    })
+    await writeAudit({
+      actorUserId: actor.id,
+      organizationId: operatingOrg ?? actor.organizationId,
+      action: 'AD_ACCOUNT_STATUS_CHANGED',
+      entityType: 'AD_ACCOUNT',
+      entityId: data.id,
+      oldValues: { status: before.status },
+      newValues: { status: data.status },
+    })
+    return account as AdAccount
+  })
+
+/** Assignment history for one pool account, across every agency that has
+ * ever held it — not scoped to a single organization the way
+ * listAssignmentHistoryFn is, since the entire point of this view is the
+ * platform seeing the account's full history regardless of who currently
+ * holds the grant. */
+export const listPoolAccountHistoryFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ ad_account_id: z.uuid() }))
+  .handler(async ({ data }): Promise<Array<AssignmentWithRefs>> => {
+    await requirePlatformAdmin()
+    const admin = getSupabaseAdminClient()
+    const { data: rows, error } = await admin
+      .from('ad_account_assignments')
+      .select(
+        'id, ad_account_id, client_id, opening_limit_usd, closing_limit_usd, assigned_at, released_at, status, notes, created_at, client:clients(id, client_code, name)',
+      )
+      .eq('ad_account_id', data.ad_account_id)
+      .order('assigned_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return (rows ?? []).map((r) => ({
+      ...(r as unknown as AssignmentWithRefs),
+      ad_account: null,
+    }))
+  })
+
+/** Usage (approved limit requests) for one pool account, across every
+ * agency/client that has ever held it — the platform counterpart of
+ * listAdAccountUsageFn, same not-organization-scoped reasoning as the
+ * history fn above. */
+export const listPoolAccountUsageFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ ad_account_id: z.uuid() }))
+  .handler(async ({ data }): Promise<Array<LimitRequestWithRefs>> => {
+    await requirePlatformAdmin()
+    const admin = getSupabaseAdminClient()
+    const { data: rows, error } = await admin
+      .from('limit_requests')
+      .select(
+        '*, client:clients(id, client_code, name), ad_account:ad_accounts(id, account_code, name, is_platform)',
+      )
+      .eq('ad_account_id', data.ad_account_id)
+      .eq('status', 'APPROVED')
+      .order('approved_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return rows as unknown as Array<LimitRequestWithRefs>
   })

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { Download, Megaphone, MoreHorizontal, RefreshCw, TriangleAlert } from 'lucide-react'
@@ -184,7 +184,15 @@ function PoolPage() {
                   <TableCell className="pl-6 font-mono text-xs">
                     {row.account.account_code}
                   </TableCell>
-                  <TableCell className="font-medium">{row.account.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link
+                      to="/platform/ad-accounts/$accountId"
+                      params={{ accountId: row.account.id }}
+                      className="text-primary underline-offset-4 hover:underline"
+                    >
+                      {row.account.name}
+                    </Link>
+                  </TableCell>
                   <TableCell className="num">
                     <div className="flex items-center gap-1.5">
                       {formatUsd(row.account.current_limit_usd)}

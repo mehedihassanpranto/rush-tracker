@@ -6,6 +6,172 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-09-16
+
+**Limit requests on platform-assigned accounts now route through the agency
+to the platform for approval (spec §4.3). Migrations `20260723000038` and
+`20260723000039` — NOT YET APPLIED to the live project.**
+
+Requested as the next slice of the "Mother Platform Account Control" spec,
+confirmed via a clarifying question first (a bare "okay" was ambiguous —
+this is a real behavioral change to how every one of xRush's 34 live
+accounts' limit requests gets approved, so it wasn't assumed).
+
+**What changes**: for a request against a `platform_assigned` account, the
+agency can no longer approve it directly at all — only reject it outright, or
+send it to the platform for review. Approving it (and setting the amount and
+rate) becomes the platform's call; agency-owned accounts are completely
+unaffected, and keep working exactly as they do today.
+
+New `limit_requests.status` value `PENDING_PLATFORM_REVIEW` (added in its own
+migration first — Postgres won't let a new enum value be used in the same
+transaction that creates it) plus two new columns, `sent_to_platform_at` /
+`sent_to_platform_by`. The one-pending-per-account unique index now covers
+both in-flight statuses, so a client still can't submit a second request
+while the first is awaiting platform review.
+
+**Gated the same way `canMutateSpendCap()` already gates the direct-edit
+lock** — `ad_accounts.is_platform`, not a copy of that flag on the request
+itself. `approveLimitRequestFn` (agency) now refuses outright when the
+account is platform-assigned; a new `sendLimitRequestToPlatformFn` is the
+agency's alternative action, and a new `server/platform/limit-requests.fns.ts`
+(`listPlatformLimitRequestsFn` / `getPlatformLimitRequestFn` /
+`approvePlatformLimitRequestFn` / `rejectPlatformLimitRequestFn` /
+`rebasePlatformLimitRequestFn` / `getPlatformLimitProofUrlFn`) is where the
+platform actually reviews and decides — all `requirePlatformAdmin`, scoped
+across every agency, not by organization.
+
+**The platform's approval calls the exact same `approve_limit_request` RPC**
+the agency's own approval always has — same ledger debit, same prepaid/
+partial auto-payment, same stale-baseline guard — just with
+`p_organization_id` resolved from the request's own client/agency rather than
+the caller's own org (a platform admin has no agency of their own). Both
+migrations widen that RPC's (and `rebase_limit_request`'s) status check to
+accept `PENDING_PLATFORM_REVIEW` as an alternative starting point — they
+don't need to know about `is_platform` at all, since the TS layer above never
+calls them for the wrong combination.
+
+Everything downstream of approval (linking the client's payment proof,
+notifying the client, pushing the new cap to Meta) is identical either way —
+factored into a shared `finishLimitRequestApproval()`. **That factoring
+caused a real build failure, caught before shipping**: a plain helper
+function that touches a `.server.ts` import is only safe to leave in a
+`.fns.ts` file if every call site is confined to that same file's
+`createServerFn().handler()` bodies, which get specially stripped from the
+client bundle. The moment a second `.fns.ts` file imported it by name, the
+bundler could no longer prove it was dead code, so its body — and the
+`getSupabaseAdminClient()` call inside it — survived into the client bundle,
+and the import-protection plugin correctly refused the build. Same root cause
+as this file's own documented `ReturnType<typeof getSupabaseAdminClient>`
+gotcha, just triggered by a function instead of a type alias. Fixed by moving
+`finishLimitRequestApproval` and `proofPathForRequest` into a plain
+`limit-request-approval.service.ts` — the same shape `audit.service.ts` and
+`notification.service.ts` already use for exactly this reason.
+
+UI: the agency's approval page swaps the amount/rate form for a plain
+Reject-or-Send-to-Platform card on a platform-assigned account's pending
+request, and shows a read-only "awaiting platform review" card once sent — no
+rebase or approve controls remain on the agency's side past that point. New
+`/platform/limit-requests` (list, defaults to the actionable "Awaiting
+Review" tab) and `/platform/limit-requests/$requestId` (review — full
+approve/reject/rebase form, proof viewer, same as the agency's own screen)
+mirror the agency's pages, with an added Agency column/row since requests
+here span every organization. New `PENDING_PLATFORM_REVIEW` `StatusBadge`
+color (indigo) so the state reads clearly everywhere it's shown, including
+the client's own portal list (no code change needed there — it already
+renders whatever status comes back, and the existing Cancel button already
+only shows for literal `PENDING`, so a client correctly can't cancel a
+request once it's under platform review).
+
+**Verified live against the real production database** (temporary Playwright
++ magic-link session, removed after; `package-lock.json`'s only diff is the
+pre-existing `engines` field npm syncs in from `package.json`, unrelated to
+Playwright) — against a real, currently-pending request (`LR-000060`, a
+prepaid $100 request on `ADA-0018 "xRush Agency - Azalyn"`, a platform-assigned
+account): the agency's own approval page correctly shows the new
+Reject/Send-to-Platform card with no amount/rate inputs, confirmed against the
+real request rather than a synthetic one. The platform's own `/platform/
+limit-requests` nav item and pages render correctly and error-free.
+**Full end-to-end verification (actually sending/approving) isn't possible
+in this dev environment** — no `SUPABASE_ACCESS_TOKEN` is available here to
+run `supabase db push`, and confirmed directly that the live database is
+still missing `sent_to_platform_at` (`42703: column does not exist`), which
+is why the platform list page's "Not Yet Sent" tab currently shows an empty
+result instead of the one real pending request — the underlying query is
+correct (proven by running the same SELECT directly against the live project,
+minus the not-yet-existing column in the `ORDER BY`, which returns the row
+correctly) but the migration genuinely has to land first. `npm test` 83/83,
+typecheck and build clean.
+
+**Owner must apply both `20260723000038_limit_request_platform_review_enum.sql`
+and `20260723000039_limit_request_platform_review.sql`, in that order,** via
+the SQL editor or `supabase db push` — no DB connection or CLI access token is
+available in this dev environment to apply them directly.
+
+---
+
+**Pool account detail page on `/platform/ad-accounts` — Rename, Edit
+details, Activate/Deactivate, Grant/Revoke, and a persistent Meta live data
+card.**
+
+Requested as "shift ad account details page, rename and other things and
+also live data" — the platform panel had only the flat pool list (row
+dropdown + on-demand dialogs), never a real detail page the way the agency
+side has one. `/platform/ad-accounts/$accountId` mirrors that agency page's
+structure (header actions, status banner, Overview / Assignment History /
+Usage tabs) for a pool account instead.
+
+Six new `requirePlatformAdmin`-gated fns in `pool.fns.ts` — `getPoolAccountFn`,
+`renamePoolAccountFn`, `updatePoolAccountDetailsFn`, `setPoolAccountStatusFn`,
+`listPoolAccountHistoryFn`, `listPoolAccountUsageFn` — literal platform
+counterparts of `getAdAccountFn`/`renameAdAccountFn`/`updateAdAccountFn`/
+`setAdAccountStatusFn`/`listAssignmentHistoryFn`/`listAdAccountUsageFn`, same
+split rationale as the spend-cap fns from the entry two days ago: `is_platform
+= true` only, no organization check, since a platform admin manages the whole
+pool account regardless of who currently holds the grant. The history/usage
+fns are deliberately **not** organization-scoped either — the entire point is
+seeing an account's full history across every agency that has ever held it,
+not just the current holder. Schemas (`adAccountRenameSchema` etc.) are reused
+as-is from `schemas/ad-account.ts` since none of them depend on an
+organization.
+
+New `PoolRenameDialog` / `PoolEditDialog`
+(`components/platform/ad-accounts/pool-account-dialogs.tsx`) — near-duplicates
+of the agency's `RenameDialog`/`AccountEditDialog` calling the new pool fns
+and invalidating `platform-pool-accounts`/`pool-account` instead of
+`ad-accounts`/`ad-account`. The already-shipped `PoolSpendCapDialog` is reused
+as-is for "Edit spend cap" on the new page rather than building a third
+variant.
+
+The persistent "Meta live data" card is new (previously only reachable via a
+dialog on the list page) — same fields and low-balance red styling as the
+agency page's card, auto-fetched via the existing `fetchPoolAccountMetaFn`.
+Grant/Revoke moved onto the detail page's header dropdown too (reusing the
+existing `grantPoolAccountFn`/`RevokeGrantDialog`), so the page now has full
+parity with the list row's actions plus Rename/Edit/Activate-Deactivate/
+tabs the list never had.
+
+`RevokeGrantDialog` gained one more query invalidation
+(`['pool-account', id]`) so a revoke made from the detail page updates
+"Assigned agency" immediately rather than only on the next full reload — a
+one-line addition, harmless on the list page where that key doesn't exist.
+
+**Verified live** against the real production database (temporary Playwright
++ magic-link session, removed after, package-lock diff is only the
+pre-existing `engines` field npm filled in from `package.json`, unrelated to
+Playwright): opened a real linked account (`ADA-0003 "DF IT Random 01"`) and
+got genuine live Meta data ($4,450.00 cap / $4,359.57 spent) on both the
+persistent card and the "Edit spend cap" dialog opened from it; confirmed
+"Assigned agency" links to xRush Agency; confirmed the header dropdown shows
+Rename/Edit details/Deactivate/Revoke; opened Rename and confirmed it
+prefilled the real account name, then cancelled with nothing saved; confirmed
+tabs show real counts (Assignment History (1), Usage (1)). Confirmed the
+negative case too: xRush's own agency admin hitting the new URL directly
+still redirects to `/agency`. Zero console errors. `npm test` 83/83,
+typecheck and build clean.
+
+---
+
 ## 2026-09-15
 
 **Platform-side Meta spend-cap controls added — closes the gap the entry below

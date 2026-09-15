@@ -54,6 +54,7 @@ export const ADMIN_NAV: Array<NavItem> = [
 export const PLATFORM_NAV: Array<NavItem> = [
   { label: 'Organizations', icon: Building2, to: '/platform/organizations' },
   { label: 'Ad Account Pool', icon: Megaphone, to: '/platform/ad-accounts' },
+  { label: 'Limit Requests', icon: Gauge, to: '/platform/limit-requests' },
   { label: 'Settings', icon: Settings, to: '/platform/settings' },
 ]
 
