@@ -1570,6 +1570,117 @@ bug fixes, and anything else that isn't a whole new named feature.
   Verified in-browser against live data: real figures for xRush Agency
   (6 clients, 34 ad accounts, 4 staff, 9 portal logins) and all four of
   its admins listed. Zero console errors.
+- **Platform-side Meta spend-cap controls added — closes the "known gap"
+  from the entry directly below (post-Phase-8 addition): done, pending owner
+  review, no migration.** Requested as "shift editing options in the platform
+  manager." Without this, the 3 actions just locked to `isPlatformAdmin` had
+  nowhere to be performed at all.
+  New `updatePoolAccountSpendCapFn` / `applyPoolAccountSpendCapFn` /
+  `retryPoolAccountSpendCapSyncFn` / `fetchPoolAccountMetaFn`
+  (`src/server/platform/pool.fns.ts`), all `requirePlatformAdmin`.
+  **Deliberately NOT scoped by grant, unlike every agency-side ad-account fn**:
+  these check only `is_platform = true`, nothing else — a platform admin
+  manages the WHOLE pool regardless of who currently holds a grant, since
+  granting only ever changed who may USE an account, never who owns its Meta
+  connection. Kept as literal near-duplicates of the agency-side handlers
+  (`updateMetaSpendCapFn` etc. in `meta.fns.ts`) rather than one shared
+  helper parameterized on "how do I load the account" — the one line that
+  differs (an organization check vs. none) is exactly the point of the split,
+  and folding it into a shared helper would have obscured that rather than
+  expressed it.
+  Audit rows land in whichever agency currently holds the grant
+  (`operatingOrganizationId()`, same helper the cron already used for this) —
+  same transparency principle as the platform's "View agency data" screen:
+  the holder sees a platform-made change in ITS OWN audit log, falling back
+  to the platform's own organization while a pool account is ungranted.
+  UI: new `PoolSpendCapDialog`
+  (`src/components/platform/ad-accounts/pool-spend-cap-dialog.tsx`) —
+  combines the agency side's two separate dialogs (fetch+apply, edit) into
+  one, since a pool account has no detail page with tabs to spread them
+  across. Wired into `/platform/ad-accounts`'s row dropdown as "Meta spend
+  cap", plus a conditional "Retry sync" item and a `TriangleAlert` next to
+  Current limit when `meta_sync_pending`.
+  **Verified live, including the otherwise-untestable path**: opened the
+  dialog on a real granted account (`ADA-0001`) and got real Meta data
+  ($11,100.00 cap / $11,070.40 spent — same account used to verify the lock
+  itself in the entry below, so both sides of this feature were checked
+  against the same real data). Since 0 of the 34 live accounts are
+  `meta_sync_pending` today, temporarily flagged that same account to
+  exercise "Retry sync" for real — the warning icon rendered, the retry
+  correctly resolved it against live Meta data with no Meta write (already in
+  sync), and the account was confirmed back to its exact original state
+  (`meta_sync_pending: false`, `meta_sync_error: null`,
+  `current_limit_usd: 11100`) immediately after. Confirmed the negative case
+  too: xRush's own agency admin still redirects to `/agency` when hitting
+  `/platform/ad-accounts` directly. `npm test` 83/83.
+- **Manual Meta spend-cap actions restricted to the platform, on
+  platform-assigned accounts only (post-Phase-8 addition): done, pending
+  owner review, no migration.** First slice of a larger "Mother Platform
+  Account Control" spec. Checked every table the spec proposed against the
+  live schema BEFORE writing anything — all 11 were missing (`agencies`,
+  `platform_admins`, `platform_ad_account_pool`, `client_funding_payments`,
+  `subscription_plans`, etc.), because the concepts already exist under this
+  codebase's own names (`organizations`, `is_platform_admin`,
+  `ad_accounts.is_platform` + `platform_account_grants`, `payments` +
+  `ledger_entries`). Nothing here is a rename of that existing machinery —
+  it's the one genuinely new rule the spec asked for.
+  **THE SCOPE DECISION, confirmed explicitly via AskUserQuestion before
+  writing code — do not widen this to "every mutation" without asking
+  again**: locking ALL writes on a `is_platform` account (the spec's literal
+  §3 pseudocode) would have stopped xRush editing any of its own 34 accounts
+  the day this shipped, since 100% of them are currently platform-assigned
+  (the whole fleet moved into the pool and was granted back — see the pool
+  migration entry above). So the lock is narrow: only the 3 actions that
+  reach or pull from the account's OWN Meta connection —
+  `updateMetaSpendCapFn` (push), `applyMetaSpendCapFn` (pull), and
+  `retryMetaSpendCapSyncFn` — require `isPlatformAdmin`. Rename, status
+  change, assign/release/transfer, limit-request approval, and viewing live
+  Meta data (Remaining, Meta Due) are UNCHANGED for every account an agency
+  holds, owned or granted.
+  New `canMutateSpendCap(account, actor)`
+  (`src/lib/meta/credential-scope.ts`, 6 unit tests):
+  `!account.is_platform || actor.isPlatformAdmin`. Applied at
+  `loadUsdLinkedAccount` (the one shared loader behind
+  `updateMetaSpendCapFn`/`applyMetaSpendCapFn`) and separately in
+  `retryMetaSpendCapSyncFn`.
+  **THE ONE THING THAT MUST STAY UNGATED — do not "fix" this later**:
+  `syncAndPersistAdAccountSpendCap`, called from inside
+  `approve_limit_request` with no actor, is NOT gated by this check (verified
+  zero diff on `spend-cap-sync.server.ts` and `limit-request.fns.ts`). That
+  sync is the automatic side effect of an agency approving its OWN client's
+  limit request — a flow that stays fully agency-controlled regardless of
+  who owns the account. Gating it too would silently stall every limit
+  approval on a platform-assigned account, breaking the common path to lock
+  down a rare manual one.
+  UI: `$accountId.tsx` computes `spendCapMutable = canMutateSpendCap(account,
+  user)` once and threads it to all three surfaces — the "Edit spend cap"
+  button and the out-of-sync "Retry sync" banner both swap to a "Managed by
+  the platform" note when locked; `MetaFetchDialog` gained a
+  `canApplySpendCap` prop (default `true`) that does the same to "Apply as
+  current limit" while leaving the read-only fetch itself untouched.
+  **Known gap, flagged not built**: nothing on `/platform` currently exposes
+  these 3 actions to a platform admin, so a `meta_sync_pending` account on
+  the platform side is unreachable by anyone until such a screen exists.
+  Real but rare — 0 of the 34 live accounts are in that state today, and the
+  common path (auto-sync after approval) is unaffected. A natural, small
+  follow-up on `/platform/ad-accounts` if wanted.
+  Verified live against a real granted account (`ADA-0001`, held by xRush):
+  "Edit spend cap" hidden with the note; "Fetch from Meta" still returns real
+  Meta data (spend $11,068.21 / cap $11,100.00, proving the read path is
+  untouched) but "Apply as current limit" is replaced with the note; the
+  actions menu still shows Rename/Edit details/Fetch from Meta/Deactivate/
+  Release exactly as before. `npm test` 83/83.
+  **Explicitly NOT started, and it's real work, not a rename**: the spec's
+  §4 client→agency→platform account-REQUEST escalation (confirmed no
+  "request access to an unassigned account" flow exists — the only requestable
+  thing today, `listMyRequestableAccountsFn`, is a limit INCREASE on an
+  account the client already holds) and §5/§6's funding + subscription
+  ledgers (no `agency_platform_payments`/`ad_account_funding_transactions`/
+  real `subscription_plans` — today's subscription model is
+  `organizations.subscription_status` + a free-text `plan` string). The
+  spec's own §8 open questions (mid-flight reclaim, money-column units,
+  partial-payment UI) are unresolved and need answers before that work
+  starts — flagged to the owner, not guessed at.
 - **"New account" removed from the agency ad accounts page (post-Phase-8
   addition): done, pending owner review, no migration.** Owner: the option is
   not needed. An agency gets ad accounts by grant from the platform pool or via

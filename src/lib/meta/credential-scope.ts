@@ -46,6 +46,42 @@ export function metaCredentialScopeFor(account: {
 }
 
 /**
+ * Whether this actor may manually push, pull, or retry a SPEND-CAP write on
+ * this account's Meta connection.
+ *
+ * Deliberately NARROWER than "may operate this account"
+ * (scope.server.ts's owned-or-granted union, which still governs rename,
+ * status changes, assign/release/transfer, and limit-request approval for
+ * EVERY account an agency holds, platform-assigned or not — none of that
+ * changed here). A platform-assigned account's Meta connection is the
+ * platform's, not the holding agency's, so the three actions that reach or
+ * pull from that connection by explicit admin choice — editing the spend
+ * cap, applying Meta's live cap as the local baseline, retrying a failed
+ * sync — are the platform's call once ownership is genuinely split out.
+ *
+ * Deliberately does NOT gate the automatic spend-cap sync that runs inside
+ * `approve_limit_request` (spend-cap-sync.server.ts's
+ * syncAndPersistAdAccountSpendCap, called with no actor). That sync is a
+ * side effect of the agency approving ITS OWN client's limit request — a
+ * flow that stays fully agency-controlled — not a manual platform-level
+ * action. Locking it too would silently stall every approval on a
+ * platform-assigned account, which is not what "the platform controls its
+ * own accounts" was meant to mean.
+ *
+ * Known gap, not addressed here: while nothing on /platform currently
+ * exposes these 3 actions to a platform admin, this makes a stuck
+ * meta_sync_pending row on a platform account (the "Retry sync" case)
+ * unreachable by anyone until such a screen exists. Flagged, not built —
+ * this function only decides who's ALLOWED, not who has a button.
+ */
+export function canMutateSpendCap(
+  account: { is_platform: boolean },
+  actor: { isPlatformAdmin: boolean },
+): boolean {
+  return !account.is_platform || actor.isPlatformAdmin
+}
+
+/**
  * The PostgREST `or` filter selecting every ad account one agency may use:
  * the ones it owns, plus the platform-pool accounts granted to it.
  *

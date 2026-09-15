@@ -2,16 +2,18 @@ import { useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import { Download, Megaphone, MoreHorizontal } from 'lucide-react'
+import { Download, Megaphone, MoreHorizontal, RefreshCw, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
   grantPoolAccountFn,
   listPoolAccountsFn,
+  retryPoolAccountSpendCapSyncFn,
 } from '@/server/platform/pool.fns'
 import { listOrganizationsFn } from '@/server/organizations/organization.fns'
 import { RevokeGrantDialog } from '@/components/platform/organizations/revoke-grant-dialog'
 import { PoolImportDialog } from '@/components/platform/ad-accounts/pool-import-dialog'
+import { PoolSpendCapDialog } from '@/components/platform/ad-accounts/pool-spend-cap-dialog'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatCard } from '@/components/shared/stat-card'
 import { StatusBadge } from '@/components/shared/status-badge'
@@ -57,6 +59,12 @@ function PoolPage() {
   const grant = useServerFn(grantPoolAccountFn)
   const [search, setSearch] = useState('')
   const [importOpen, setImportOpen] = useState(false)
+  const [spendCapAccount, setSpendCapAccount] = useState<{
+    id: string
+    label: string
+    currentLimitUsd: string
+  } | null>(null)
+  const retrySync = useServerFn(retryPoolAccountSpendCapSyncFn)
   // Revoking is confirmed, not a bare dropdown click — see RevokeGrantDialog.
   const [toRevoke, setToRevoke] = useState<{
     adAccountId: string
@@ -86,6 +94,20 @@ function PoolPage() {
     },
     onError: (err) =>
       toast.error(err instanceof Error ? err.message : 'Failed to grant'),
+  })
+
+  const retrySyncMutation = useMutation({
+    mutationFn: (id: string) => retrySync({ data: { id } }),
+    onSuccess: (account) => {
+      toast.success(
+        account.meta_sync_pending
+          ? 'Retried — still out of sync, see the error below'
+          : 'Spend cap sync resolved',
+      )
+      invalidate()
+    },
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : 'Retry failed'),
   })
 
   const filtered = useMemo(() => {
@@ -164,7 +186,15 @@ function PoolPage() {
                   </TableCell>
                   <TableCell className="font-medium">{row.account.name}</TableCell>
                   <TableCell className="num">
-                    {formatUsd(row.account.current_limit_usd)}
+                    <div className="flex items-center gap-1.5">
+                      {formatUsd(row.account.current_limit_usd)}
+                      {row.account.meta_sync_pending && (
+                        <TriangleAlert
+                          className="size-3.5 text-red-600 dark:text-red-400"
+                          aria-label="Spend cap out of sync with Meta"
+                        />
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={row.account.status} />
@@ -187,6 +217,31 @@ function PoolPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        {row.account.external_account_id && (
+                          <DropdownMenuItem
+                            onClick={() =>
+                              setSpendCapAccount({
+                                id: row.account.id,
+                                label: `${row.account.account_code} "${row.account.name}"`,
+                                currentLimitUsd: row.account.current_limit_usd,
+                              })
+                            }
+                          >
+                            Meta spend cap
+                          </DropdownMenuItem>
+                        )}
+                        {row.account.meta_sync_pending && (
+                          <DropdownMenuItem
+                            disabled={retrySyncMutation.isPending}
+                            onClick={() => retrySyncMutation.mutate(row.account.id)}
+                          >
+                            <RefreshCw className="size-4" />
+                            Retry sync
+                          </DropdownMenuItem>
+                        )}
+                        {(row.account.external_account_id || row.account.meta_sync_pending) && (
+                          <DropdownMenuSeparator />
+                        )}
                         {row.granted_to ? (
                           <DropdownMenuItem
                             variant="destructive"
@@ -231,6 +286,16 @@ function PoolPage() {
       )}
 
       <PoolImportDialog open={importOpen} onOpenChange={setImportOpen} />
+
+      {spendCapAccount && (
+        <PoolSpendCapDialog
+          open={spendCapAccount !== null}
+          onOpenChange={(o) => !o && setSpendCapAccount(null)}
+          accountId={spendCapAccount.id}
+          accountLabel={spendCapAccount.label}
+          currentLimitUsd={spendCapAccount.currentLimitUsd}
+        />
+      )}
 
       <RevokeGrantDialog
         grant={toRevoke}

@@ -1,12 +1,25 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { requirePlatformAdmin } from '@/server/auth/guards.server'
 import { writeAudit } from '@/server/audit/audit.service'
+import { operatingOrganizationId } from '@/server/ad-accounts/scope.server'
 import { organizationId as organizationIdSchema } from '@/schemas/organization'
-import { importPoolAccountsSchema } from '@/schemas/meta'
-import { listMetaBusinessAdAccounts } from '@/server/meta/meta.server'
+import {
+  applyMetaSpendCapSchema,
+  importPoolAccountsSchema,
+  retryMetaSpendCapSyncSchema,
+  updateMetaSpendCapSchema,
+} from '@/schemas/meta'
+import {
+  fetchMetaAdAccount,
+  listMetaBusinessAdAccounts,
+  updateMetaAdAccountSpendCap,
+} from '@/server/meta/meta.server'
 import type { MetaAdAccountSummary } from '@/server/meta/meta.server'
+import { syncAndPersistAdAccountSpendCap } from '@/server/meta/spend-cap-sync.server'
+import { dec } from '@/lib/money/money'
 import { PLATFORM_CREDENTIALS } from '@/lib/meta/credential-scope'
 import { DEPLOYMENT_ORGANIZATION_ID } from '@/lib/organizations/deployment-org'
 import type { AdAccount } from '@/types/domain'
@@ -319,4 +332,203 @@ export const importPoolAccountsFn = createServerFn({ method: 'POST' })
       })
     }
     return (accounts ?? []) as Array<AdAccount>
+  })
+
+// ---------------------------------------------------------------------------
+// Meta spend-cap management on the pool
+//
+// The agency-side counterpart of these three actions — updateMetaSpendCapFn,
+// applyMetaSpendCapFn, retryMetaSpendCapSyncFn in meta.fns.ts — is now
+// restricted to a platform admin on a platform-assigned account
+// (canMutateSpendCap() in credential-scope.ts). Without a place for a
+// platform admin to actually DO that, a stuck sync or a needed spend-cap edit
+// on a pool account would be unreachable by anyone. This section is that
+// place — the restriction and its release live together.
+//
+// Deliberately NOT scoped by grant: a platform admin manages the WHOLE pool,
+// not just accounts currently granted to someone. Granting only ever changed
+// who may USE an account, never who owns its Meta connection — so unlike
+// every agency-side fn, there is no organization check here at all, only
+// `is_platform = true`.
+// ---------------------------------------------------------------------------
+
+/** Read-only counterpart of the write helper below — no currency
+ * restriction, since viewing is fine for any currency and only the writes
+ * are USD-only. Mirrors fetchMetaAdAccountFn's shape for the agency side. */
+export const fetchPoolAccountMetaFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ id: z.uuid() }))
+  .handler(async ({ data }): Promise<MetaAdAccountSummary> => {
+    await requirePlatformAdmin()
+    const admin = getSupabaseAdminClient()
+
+    const { data: row, error } = await admin
+      .from('ad_accounts')
+      .select('is_platform, external_account_id')
+      .eq('id', data.id)
+      .maybeSingle()
+    if (error) throw new Error(error.message)
+    const account = row as { is_platform: boolean; external_account_id: string | null } | null
+    if (!account || !account.is_platform) throw new Error('Pool account not found')
+    if (!account.external_account_id) {
+      throw new Error('This account has no linked Meta external ID')
+    }
+    return fetchMetaAdAccount(account.external_account_id, PLATFORM_CREDENTIALS)
+  })
+
+async function loadPoolAccountWithMeta(admin: SupabaseClient, id: string) {
+  const { data, error } = await admin
+    .from('ad_accounts')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  const before = data as AdAccount | null
+  if (!before || !(before as unknown as { is_platform: boolean }).is_platform) {
+    throw new Error('Pool account not found')
+  }
+  if (!before.external_account_id) {
+    throw new Error('This account has no linked Meta external ID')
+  }
+  const meta = await fetchMetaAdAccount(before.external_account_id, PLATFORM_CREDENTIALS)
+  if (meta.currency !== 'USD') {
+    throw new Error(
+      `Meta reports this account's currency as ${meta.currency ?? 'unknown'}, not USD — this app can't push/apply a limit for a non-USD account`,
+    )
+  }
+  return { before, externalAccountId: before.external_account_id, meta }
+}
+
+/** Same math as updateMetaSpendCapFn (meta.fns.ts) — kept as a literal
+ * duplicate rather than a shared helper because the two differ in exactly
+ * the dimension that matters: no organization check here, is_platform=true
+ * required there not to matter. A shared helper parameterized on "how do I
+ * load the account" would obscure that difference rather than express it. */
+export const updatePoolAccountSpendCapFn = createServerFn({ method: 'POST' })
+  .validator(updateMetaSpendCapSchema)
+  .handler(async ({ data }): Promise<AdAccount> => {
+    const actor = await requirePlatformAdmin()
+    const admin = getSupabaseAdminClient()
+
+    const { before, externalAccountId, meta } = await loadPoolAccountWithMeta(
+      admin,
+      data.id,
+    )
+    const amountSpent = dec(meta.amount_spent ?? 0)
+    const liveCap = meta.spend_cap != null ? dec(meta.spend_cap) : dec(0)
+    const newCap = liveCap.plus(dec(data.increase_by_usd))
+    if (newCap.lt(amountSpent)) {
+      throw new Error(
+        `New spend cap ($${newCap.toFixed(2)}) is below the $${amountSpent.toFixed(2)} already spent on this account — Meta would pause all delivery immediately. Choose a larger increase.`,
+      )
+    }
+
+    await updateMetaAdAccountSpendCap(externalAccountId, newCap.toFixed(2), PLATFORM_CREDENTIALS)
+
+    const { data: account, error } = await admin
+      .from('ad_accounts')
+      .update({ current_limit_usd: newCap.toFixed(2) })
+      .eq('id', data.id)
+      .select('*')
+      .single()
+    if (error) throw new Error(error.message)
+
+    // Lands in whichever agency currently holds the grant, same transparency
+    // principle as the platform's "View agency data" support screen — the
+    // holder sees a platform-made change in its OWN audit log. Falls back to
+    // the platform's own organization while ungranted.
+    const operatingOrg = await operatingOrganizationId(admin, before as unknown as {
+      id: string
+      is_platform: boolean
+      organization_id: string | null
+    })
+    await writeAudit({
+      actorUserId: actor.id,
+      organizationId: operatingOrg ?? actor.organizationId,
+      action: 'AD_ACCOUNT_UPDATED',
+      entityType: 'AD_ACCOUNT',
+      entityId: data.id,
+      oldValues: {
+        current_limit_usd: before.current_limit_usd,
+        meta_spend_cap: meta.spend_cap,
+      },
+      newValues: {
+        current_limit_usd: newCap.toFixed(2),
+        meta_spend_cap: newCap.toFixed(2),
+      },
+      metadata: { source: 'META_SPEND_CAP_PUSH' },
+    })
+    return account as AdAccount
+  })
+
+/** Platform counterpart of applyMetaSpendCapFn — pulls Meta's live spend cap
+ * into current_limit_usd without writing to Meta. */
+export const applyPoolAccountSpendCapFn = createServerFn({ method: 'POST' })
+  .validator(applyMetaSpendCapSchema)
+  .handler(async ({ data }): Promise<AdAccount> => {
+    const actor = await requirePlatformAdmin()
+    const admin = getSupabaseAdminClient()
+
+    const { before, meta } = await loadPoolAccountWithMeta(admin, data.id)
+    if (meta.spend_cap == null) {
+      throw new Error('Meta reports no spend cap for this account')
+    }
+
+    const { data: account, error } = await admin
+      .from('ad_accounts')
+      .update({ current_limit_usd: meta.spend_cap })
+      .eq('id', data.id)
+      .select('*')
+      .single()
+    if (error) throw new Error(error.message)
+
+    const operatingOrg = await operatingOrganizationId(admin, before as unknown as {
+      id: string
+      is_platform: boolean
+      organization_id: string | null
+    })
+    await writeAudit({
+      actorUserId: actor.id,
+      organizationId: operatingOrg ?? actor.organizationId,
+      action: 'AD_ACCOUNT_UPDATED',
+      entityType: 'AD_ACCOUNT',
+      entityId: data.id,
+      oldValues: { current_limit_usd: before.current_limit_usd },
+      newValues: { current_limit_usd: meta.spend_cap },
+      metadata: { source: 'META_SPEND_CAP' },
+    })
+    return account as AdAccount
+  })
+
+/** Platform counterpart of retryMetaSpendCapSyncFn — retries a pool account
+ * flagged meta_sync_pending. syncAndPersistAdAccountSpendCap already resolves
+ * PLATFORM_CREDENTIALS correctly for an is_platform account on its own
+ * (metaCredentialScopeFor), so this only needs to verify the account is
+ * actually in the pool before calling it. */
+export const retryPoolAccountSpendCapSyncFn = createServerFn({ method: 'POST' })
+  .validator(retryMetaSpendCapSyncSchema)
+  .handler(async ({ data }): Promise<AdAccount> => {
+    const actor = await requirePlatformAdmin()
+    const admin = getSupabaseAdminClient()
+
+    const { data: existing } = await admin
+      .from('ad_accounts')
+      .select('id, is_platform')
+      .eq('id', data.id)
+      .maybeSingle()
+    if (!existing || !(existing as { is_platform: boolean }).is_platform) {
+      throw new Error('Pool account not found')
+    }
+
+    await syncAndPersistAdAccountSpendCap(data.id, {
+      actorUserId: actor.id,
+      source: 'META_SPEND_CAP_AUTO_SYNC',
+    })
+
+    const { data: account, error } = await admin
+      .from('ad_accounts')
+      .select('*')
+      .eq('id', data.id)
+      .single()
+    if (error) throw new Error(error.message)
+    return account as unknown as AdAccount
   })

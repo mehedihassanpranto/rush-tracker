@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   adAccountScopeFilter,
+  canMutateSpendCap,
   credentialScopeKey,
   metaCredentialScopeFor,
 } from './credential-scope'
@@ -73,5 +74,23 @@ describe('adAccountScopeFilter', () => {
   it("names only the caller's own organization", () => {
     const filter = adAccountScopeFilter(AGENCY_A, ['id-1'])
     expect(filter).not.toContain(AGENCY_B)
+  })
+})
+
+describe('canMutateSpendCap', () => {
+  it('always allows mutating an agency-owned account, any actor', () => {
+    expect(canMutateSpendCap({ is_platform: false }, { isPlatformAdmin: false })).toBe(true)
+    expect(canMutateSpendCap({ is_platform: false }, { isPlatformAdmin: true })).toBe(true)
+  })
+
+  it('refuses a non-platform actor on a platform-assigned account', () => {
+    // This is the case that matters: xRush holds a GRANT on this account, can
+    // rename it, assign it, approve limit requests on it — but may not
+    // manually push/pull its spend cap or retry a failed sync.
+    expect(canMutateSpendCap({ is_platform: true }, { isPlatformAdmin: false })).toBe(false)
+  })
+
+  it('allows a platform admin on a platform-assigned account', () => {
+    expect(canMutateSpendCap({ is_platform: true }, { isPlatformAdmin: true })).toBe(true)
   })
 })

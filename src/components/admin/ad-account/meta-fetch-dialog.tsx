@@ -35,12 +35,18 @@ export function MetaFetchDialog({
   accountId,
   externalAccountId,
   currentLimitUsd,
+  canApplySpendCap = true,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   accountId: string
   externalAccountId: string | null
   currentLimitUsd: string
+  /** False for a platform-assigned account viewed by a non-platform-admin —
+   * see canMutateSpendCap() in credential-scope.ts. Fetching stays read-only
+   * and available either way; only the write below is restricted. Defaults
+   * true so every other caller (none currently non-agency) is unaffected. */
+  canApplySpendCap?: boolean
 }) {
   const queryClient = useQueryClient()
   const fetchAccount = useServerFn(fetchMetaAdAccountFn)
@@ -69,7 +75,8 @@ export function MetaFetchDialog({
       toast.error(err instanceof Error ? err.message : 'Failed to apply spend cap'),
   })
 
-  const canApply = result?.currency === 'USD' && result.spend_cap != null
+  const canApply =
+    canApplySpendCap && result?.currency === 'USD' && result.spend_cap != null
 
   return (
     <Dialog
@@ -139,12 +146,18 @@ export function MetaFetchDialog({
                 </Button>
               </div>
             ) : (
-              result.spend_cap != null && (
+              result.spend_cap != null &&
+              (canApplySpendCap ? (
                 <p className="text-xs text-muted-foreground">
                   Currency is {result.currency ?? 'unknown'}, not USD — apply
                   this limit manually via Edit details.
                 </p>
-              )
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  This account's spend cap is managed by the platform —
+                  applying it here isn't available.
+                </p>
+              ))
             )}
           </>
         )}

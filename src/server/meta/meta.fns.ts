@@ -25,6 +25,7 @@ import {
   loadAccessibleAdAccount,
 } from '@/server/ad-accounts/scope.server'
 import {
+  canMutateSpendCap,
   credentialScopeKey,
   metaCredentialScopeFor,
   organizationCredentials,
@@ -45,11 +46,20 @@ async function loadUsdLinkedAccount(
   admin: SupabaseClient,
   id: string,
   organizationId: string,
+  actor: { isPlatformAdmin: boolean },
 ) {
   const account = await loadAccessibleAdAccount(admin, id, organizationId, '*')
   const before = account as unknown as AdAccount
   if (!before.external_account_id) {
     throw new Error('This account has no linked Meta external ID')
+  }
+  // The account's OWN owner decides who may push/pull its spend cap — see
+  // canMutateSpendCap()'s doc comment for what stays unlocked (rename,
+  // status, assign/release/transfer, limit-request approval all still work).
+  if (!canMutateSpendCap(account as unknown as { is_platform: boolean }, actor)) {
+    throw new Error(
+      "This account's spend cap is managed by the platform — it was assigned to your agency, not connected through your own Meta credentials.",
+    )
   }
 
   const externalAccountId: string = before.external_account_id
@@ -369,6 +379,7 @@ export const applyMetaSpendCapFn = createServerFn({ method: 'POST' })
       admin,
       data.id,
       actor.organizationId,
+      actor,
     )
     if (meta.spend_cap == null) {
       throw new Error('Meta reports no spend cap for this account')
@@ -424,7 +435,7 @@ export const updateMetaSpendCapFn = createServerFn({ method: 'POST' })
     const admin = getSupabaseAdminClient()
 
     const { before, externalAccountId, meta, account: linkedAccount } =
-      await loadUsdLinkedAccount(admin, data.id, actor.organizationId)
+      await loadUsdLinkedAccount(admin, data.id, actor.organizationId, actor)
     const amountSpent = dec(meta.amount_spent ?? 0)
     const liveCap = meta.spend_cap != null ? dec(meta.spend_cap) : dec(0)
     const newCap = liveCap.plus(dec(data.increase_by_usd))
@@ -488,7 +499,12 @@ export const retryMetaSpendCapSyncFn = createServerFn({ method: 'POST' })
     // the only entry point to syncAndPersistAdAccountSpendCap that's
     // user-reachable with an arbitrary id (the others come from an
     // already-org-validated context).
-    await loadAccessibleAdAccount(admin, data.id, actor.organizationId)
+    const accessible = await loadAccessibleAdAccount(admin, data.id, actor.organizationId)
+    if (!canMutateSpendCap(accessible as unknown as { is_platform: boolean }, actor)) {
+      throw new Error(
+        "This account's spend cap is managed by the platform — it was assigned to your agency, not connected through your own Meta credentials.",
+      )
+    }
 
     await syncAndPersistAdAccountSpendCap(data.id, {
       actorUserId: actor.id,

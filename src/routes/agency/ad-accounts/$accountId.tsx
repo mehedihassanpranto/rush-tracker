@@ -29,6 +29,7 @@ import {
 } from '@/server/meta/meta.fns'
 import { dec, formatBdt, formatCurrencyAmount, formatUsd } from '@/lib/money/money'
 import { LOW_BALANCE_THRESHOLD } from '@/lib/meta/thresholds'
+import { canMutateSpendCap } from '@/lib/meta/credential-scope'
 import { hasPermission } from '@/lib/auth/types'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { PageHeader } from '@/components/shared/page-header'
@@ -246,6 +247,11 @@ function AccountDetailPage() {
 
   const currentClient = account.current_client
   const isAssigned = Boolean(currentClient)
+  // See canMutateSpendCap()'s doc comment: rename/status/assign/limit-request
+  // approval stay unlocked below regardless of this value — only the 3
+  // Meta spend-cap actions (Edit spend cap, Apply as current limit, Retry
+  // sync) are platform-only on a platform-assigned account.
+  const spendCapMutable = canMutateSpendCap(account, user)
 
   return (
     <div>
@@ -341,7 +347,7 @@ function AccountDetailPage() {
                 'The last automatic sync attempt failed.'}
             </p>
           </div>
-          {canManageMeta && (
+          {canManageMeta && spendCapMutable && (
             <Button
               variant="outline"
               size="sm"
@@ -353,6 +359,11 @@ function AccountDetailPage() {
               />
               Retry sync
             </Button>
+          )}
+          {canManageMeta && !spendCapMutable && (
+            <span className="shrink-0 text-xs text-red-600 dark:text-red-400">
+              Managed by the platform
+            </span>
           )}
         </div>
       )}
@@ -466,14 +477,20 @@ function AccountDetailPage() {
               <CardHeader>
                 <CardTitle className="text-base">Meta live data</CardTitle>
                 <CardAction>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSpendCapOpen(true)}
-                  >
-                    <Pencil className="size-4" />
-                    Edit spend cap
-                  </Button>
+                  {spendCapMutable ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSpendCapOpen(true)}
+                    >
+                      <Pencil className="size-4" />
+                      Edit spend cap
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      Managed by the platform
+                    </span>
+                  )}
                 </CardAction>
               </CardHeader>
               <CardContent>
@@ -695,6 +712,7 @@ function AccountDetailPage() {
       />
       <MetaFetchDialog
         open={metaFetchOpen}
+        canApplySpendCap={spendCapMutable}
         onOpenChange={setMetaFetchOpen}
         accountId={account.id}
         externalAccountId={account.external_account_id}

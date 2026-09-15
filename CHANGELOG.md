@@ -8,6 +8,93 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-09-15
 
+**Platform-side Meta spend-cap controls added — closes the gap the entry below
+left open.**
+
+Requested as "shift editing options in the platform manager." Without this,
+the 3 actions just locked to platform admins (see the entry directly below)
+had nowhere to be performed at all.
+
+New `updatePoolAccountSpendCapFn` / `applyPoolAccountSpendCapFn` /
+`retryPoolAccountSpendCapSyncFn` / `fetchPoolAccountMetaFn`
+(`src/server/platform/pool.fns.ts`), all `requirePlatformAdmin`. **Deliberately
+NOT scoped by grant**, unlike every agency-side ad-account fn — these check
+only `is_platform = true`, nothing else, since a platform admin manages the
+whole pool regardless of who currently holds a grant. Kept as literal
+near-duplicates of the agency-side handlers rather than one shared helper — the
+one line that differs (an organization check vs. none) is the entire point of
+the split, and folding it in would have obscured that.
+
+Audit rows land in whichever agency currently holds the grant
+(`operatingOrganizationId()`, the same helper the cron already used for this)
+— same transparency principle as the platform's "View agency data" screen: the
+holder sees a platform-made change in its own audit log.
+
+UI: new `PoolSpendCapDialog` (`src/components/platform/ad-accounts/`) —
+combines the agency side's two separate dialogs (fetch+apply, edit) into one,
+since a pool account has no detail page with tabs to spread them across. Wired
+into `/platform/ad-accounts`'s row dropdown as "Meta spend cap", plus a
+conditional "Retry sync" item and a `TriangleAlert` next to Current limit when
+`meta_sync_pending`.
+
+**Verified live, including the path with no natural test case.** Opened the
+dialog on a real granted account (`ADA-0001`) and got real Meta data
+($11,100.00 cap / $11,070.40 spent). Since 0 of the 34 live accounts are
+`meta_sync_pending` today, temporarily flagged that same account to exercise
+"Retry sync" for real — the warning icon rendered, the retry correctly
+resolved it against live Meta data with no Meta write (already in sync), and
+the account was confirmed back to its exact original state
+(`meta_sync_pending: false`, `meta_sync_error: null`,
+`current_limit_usd: 11100`) immediately after. Confirmed the negative case
+too: xRush's own agency admin still redirects to `/agency` when hitting
+`/platform/ad-accounts` directly. `npm test` 83/83, typecheck and build clean.
+
+---
+
+**Manual Meta spend-cap actions restricted to the platform, on
+platform-assigned accounts only.**
+
+First slice of the "Mother Platform Account Control" spec the owner pasted for
+review. Checked every table it proposed against the live schema before writing
+anything — all 11 were missing, because the concepts already exist here under
+different names (`organizations`, `is_platform_admin`, `ad_accounts.is_platform`
++ `platform_account_grants`, `payments` + `ledger_entries`). This is the one
+genuinely new rule the spec asked for, not a rename of existing machinery.
+
+**The scope decision was confirmed via `AskUserQuestion`, not guessed.**
+Locking ALL writes on a platform-assigned account (the spec's literal
+pseudocode) would have stopped xRush editing any of its own 34 accounts the
+day this shipped, since 100% of them are currently platform-assigned. So the
+lock is narrow: only the 3 actions that reach or pull from the account's own
+Meta connection — `updateMetaSpendCapFn` (push), `applyMetaSpendCapFn` (pull),
+and `retryMetaSpendCapSyncFn` — now require `isPlatformAdmin`. Rename, status
+change, assign/release/transfer, limit-request approval, and viewing live Meta
+data (Remaining, Meta Due) are unchanged for every account an agency holds,
+owned or granted.
+
+New `canMutateSpendCap(account, actor)`
+(`src/lib/meta/credential-scope.ts`, 6 new unit tests):
+`!account.is_platform || actor.isPlatformAdmin`. **Deliberately does NOT gate**
+`syncAndPersistAdAccountSpendCap`, the automatic sync called from inside
+`approve_limit_request` with no actor (confirmed zero diff on
+`spend-cap-sync.server.ts` and `limit-request.fns.ts`) — that stays fully
+agency-controlled, since it's the side effect of an agency approving its own
+client's limit request, not a manual platform-only action.
+
+UI: the ad account detail page's "Edit spend cap" button and out-of-sync
+"Retry sync" banner both swap to a "Managed by the platform" note when locked;
+`MetaFetchDialog` gained a `canApplySpendCap` prop that does the same to "Apply
+as current limit" while leaving the read-only fetch itself untouched.
+
+Verified live against a real granted account (`ADA-0001`, held by xRush):
+"Edit spend cap" hidden with the note; "Fetch from Meta" still returns real
+Meta data (spend $11,068.21 / cap $11,100.00, proving the read path is
+untouched) but "Apply as current limit" is replaced with the note; the actions
+menu still shows Rename/Edit details/Fetch from Meta/Deactivate/Release
+exactly as before. `npm test` 83/83.
+
+---
+
 **Removed "New account" from the agency ad accounts page.**
 
 Requested: the option isn't needed. Ad accounts now reach an agency either by
