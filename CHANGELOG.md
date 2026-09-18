@@ -176,6 +176,31 @@ negative case too: xRush's own agency admin hitting the new URL directly
 still redirects to `/agency`. Zero console errors. `npm test` 83/83,
 typecheck and build clean.
 
+**Header now shows the agency name next to "Admin"/"Client Portal", no
+migration.** Reported from a screenshot: the header only ever said "Rush
+Tracker Admin" with nothing naming which agency's data is on screen — no
+longer enough now that several real agencies exist side by side
+(xRush Agency, Arrow Solutions, xRush Digital).
+
+`SessionUser` gained `organizationName`, resolved in `loadSessionUser()`
+(`auth.fns.ts`) from the same `organizations` row already queried for
+`subscription_status` — one extra selected column, no new query. Agency
+area label is now `Admin · {organizationName}`; the client portal's is now
+`Client Portal · {organizationName}` (or `{clientName} · Client Portal ·
+{organizationName}` for a login with more than one active membership,
+extending the existing client-switcher label rather than replacing it). For
+a CLIENT user this is the agency that manages them, not their own client
+company — the same `organization_id` every client's data is already scoped
+by.
+
+Verified live against real accounts of both roles (temporary Playwright +
+magic-link session, removed after — `package.json`/`package-lock.json`
+hashes confirmed byte-identical before and after): an agency ADMIN
+(`test@gmail.com`, xRush Agency) shows "Admin · xRush Agency"; a CLIENT
+login (`kikiandcocobaby@gmail.com`, also under xRush Agency) shows "Client
+Portal · xRush Agency". Zero console errors either side. `npm test` 83/83,
+typecheck and build clean.
+
 ---
 
 ## 2026-09-15

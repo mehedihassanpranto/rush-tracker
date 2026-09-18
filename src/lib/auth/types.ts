@@ -44,6 +44,11 @@ export interface SessionUser {
    * platform-admin-only account with no home organization, which does not
    * exist yet. */
   organizationId: string
+  /** organizationId's display name — the agency serving this user (their own
+   * agency for an ADMIN/SUPER_ADMIN, or the agency that manages them for a
+   * CLIENT). Shown in the header so it's always clear which agency's data is
+   * on screen, same reasoning as the client-switcher's areaLabel. */
+  organizationName: string
   /** Cross-organization platform access (distinct from the per-organization
    * SUPER_ADMIN role — see the multi-tenant migration's notes). A platform
    * admin bypasses organization scoping entirely; guards and server fns

@@ -62,12 +62,15 @@ function PortalLayout() {
 
   // With more than one active membership, name the current one in the
   // header on every portal page — not just the dashboard's switcher —
-  // so it's always clear whose data is on screen.
+  // so it's always clear whose data is on screen. The agency name is
+  // appended too, since multiple agencies can now serve different clients
+  // (multi-tenant) — always clear whose agency this portal belongs to.
   const activeClient = active.find((m) => m.clientId === user.activeClientId)
-  const areaLabel =
+  const base =
     active.length > 1 && activeClient
       ? `${activeClient.clientName} · Client Portal`
       : 'Client Portal'
+  const areaLabel = user.organizationName ? `${base} · ${user.organizationName}` : base
 
   return (
     <AppShell user={user} navItems={CLIENT_NAV} areaLabel={areaLabel}>

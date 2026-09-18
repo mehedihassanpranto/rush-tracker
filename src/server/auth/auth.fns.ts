@@ -148,7 +148,7 @@ async function loadSessionUser(
   const admin = getSupabaseAdminClient()
   const { data: org, error: orgError } = await admin
     .from('organizations')
-    .select('subscription_status')
+    .select('name, subscription_status')
     .eq('id', profile.organization_id)
     .single()
   if (orgError) {
@@ -165,9 +165,11 @@ async function loadSessionUser(
       orgError.message,
     )
   }
-  const organizationSubscriptionStatus =
-    (org as { subscription_status: 'active' | 'suspended' | 'cancelled' } | null)
-      ?.subscription_status ?? 'suspended'
+  const orgRow = org as
+    | { name: string; subscription_status: 'active' | 'suspended' | 'cancelled' }
+    | null
+  const organizationSubscriptionStatus = orgRow?.subscription_status ?? 'suspended'
+  const organizationName = orgRow?.name ?? ''
 
   return {
     id: user.id,
@@ -179,6 +181,7 @@ async function loadSessionUser(
     memberships,
     activeClientId,
     organizationId: profile.organization_id,
+    organizationName,
     isPlatformAdmin: profile.is_platform_admin,
     organizationSubscriptionStatus,
   }

@@ -31,8 +31,11 @@ export const Route = createFileRoute('/agency')({
 
 function AdminLayout() {
   const { user } = Route.useRouteContext()
+  const areaLabel = user.organizationName
+    ? `Admin · ${user.organizationName}`
+    : 'Admin'
   return (
-    <AppShell user={user} navItems={ADMIN_NAV} areaLabel="Admin">
+    <AppShell user={user} navItems={ADMIN_NAV} areaLabel={areaLabel}>
       <Outlet />
     </AppShell>
   )
