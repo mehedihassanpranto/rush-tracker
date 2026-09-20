@@ -125,7 +125,7 @@ export function Header({
 
       <div className="ml-auto flex items-center gap-1">
         <ThemeToggle className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground" />
-        <NotificationBell role={user.role} />
+        <NotificationBell role={user.role} hideViewAll={user.isPlatformAdmin} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button

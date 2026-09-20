@@ -47,6 +47,7 @@ import { Route as ClientPaymentRequestsIndexRouteImport } from './routes/client/
 import { Route as ClientProfileIndexRouteImport } from './routes/client/profile/index'
 import { Route as ClientStatementIndexRouteImport } from './routes/client/statement/index'
 import { Route as ClientTeamIndexRouteImport } from './routes/client/team/index'
+import { Route as PlatformAccountRequestsIndexRouteImport } from './routes/platform/account-requests/index'
 import { Route as PlatformAdAccountsIndexRouteImport } from './routes/platform/ad-accounts/index'
 import { Route as PlatformAdAccountsAccountIdRouteImport } from './routes/platform/ad-accounts/$accountId'
 import { Route as PlatformLimitRequestsIndexRouteImport } from './routes/platform/limit-requests/index'
@@ -252,6 +253,12 @@ const ClientTeamIndexRoute = ClientTeamIndexRouteImport.update({
   path: '/team/',
   getParentRoute: () => ClientRouteRoute,
 } as any)
+const PlatformAccountRequestsIndexRoute =
+  PlatformAccountRequestsIndexRouteImport.update({
+    id: '/account-requests/',
+    path: '/account-requests/',
+    getParentRoute: () => PlatformRouteRoute,
+  } as any)
 const PlatformAdAccountsIndexRoute = PlatformAdAccountsIndexRouteImport.update({
   id: '/ad-accounts/',
   path: '/ad-accounts/',
@@ -339,6 +346,7 @@ export interface FileRoutesByFullPath {
   '/client/profile/': typeof ClientProfileIndexRoute
   '/client/statement/': typeof ClientStatementIndexRoute
   '/client/team/': typeof ClientTeamIndexRoute
+  '/platform/account-requests/': typeof PlatformAccountRequestsIndexRoute
   '/platform/ad-accounts/': typeof PlatformAdAccountsIndexRoute
   '/platform/limit-requests/': typeof PlatformLimitRequestsIndexRoute
   '/platform/organizations/': typeof PlatformOrganizationsIndexRoute
@@ -383,6 +391,7 @@ export interface FileRoutesByTo {
   '/client/profile': typeof ClientProfileIndexRoute
   '/client/statement': typeof ClientStatementIndexRoute
   '/client/team': typeof ClientTeamIndexRoute
+  '/platform/account-requests': typeof PlatformAccountRequestsIndexRoute
   '/platform/ad-accounts': typeof PlatformAdAccountsIndexRoute
   '/platform/limit-requests': typeof PlatformLimitRequestsIndexRoute
   '/platform/organizations': typeof PlatformOrganizationsIndexRoute
@@ -432,6 +441,7 @@ export interface FileRoutesById {
   '/client/profile/': typeof ClientProfileIndexRoute
   '/client/statement/': typeof ClientStatementIndexRoute
   '/client/team/': typeof ClientTeamIndexRoute
+  '/platform/account-requests/': typeof PlatformAccountRequestsIndexRoute
   '/platform/ad-accounts/': typeof PlatformAdAccountsIndexRoute
   '/platform/limit-requests/': typeof PlatformLimitRequestsIndexRoute
   '/platform/organizations/': typeof PlatformOrganizationsIndexRoute
@@ -481,6 +491,7 @@ export interface FileRouteTypes {
     | '/client/profile/'
     | '/client/statement/'
     | '/client/team/'
+    | '/platform/account-requests/'
     | '/platform/ad-accounts/'
     | '/platform/limit-requests/'
     | '/platform/organizations/'
@@ -525,6 +536,7 @@ export interface FileRouteTypes {
     | '/client/profile'
     | '/client/statement'
     | '/client/team'
+    | '/platform/account-requests'
     | '/platform/ad-accounts'
     | '/platform/limit-requests'
     | '/platform/organizations'
@@ -573,6 +585,7 @@ export interface FileRouteTypes {
     | '/client/profile/'
     | '/client/statement/'
     | '/client/team/'
+    | '/platform/account-requests/'
     | '/platform/ad-accounts/'
     | '/platform/limit-requests/'
     | '/platform/organizations/'
@@ -860,6 +873,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClientTeamIndexRouteImport
       parentRoute: typeof ClientRouteRoute
     }
+    '/platform/account-requests/': {
+      id: '/platform/account-requests/'
+      path: '/account-requests'
+      fullPath: '/platform/account-requests/'
+      preLoaderRoute: typeof PlatformAccountRequestsIndexRouteImport
+      parentRoute: typeof PlatformRouteRoute
+    }
     '/platform/ad-accounts/': {
       id: '/platform/ad-accounts/'
       path: '/ad-accounts'
@@ -1011,6 +1031,7 @@ interface PlatformRouteRouteChildren {
   PlatformIndexRoute: typeof PlatformIndexRoute
   PlatformAdAccountsAccountIdRoute: typeof PlatformAdAccountsAccountIdRoute
   PlatformLimitRequestsRequestIdRoute: typeof PlatformLimitRequestsRequestIdRoute
+  PlatformAccountRequestsIndexRoute: typeof PlatformAccountRequestsIndexRoute
   PlatformAdAccountsIndexRoute: typeof PlatformAdAccountsIndexRoute
   PlatformLimitRequestsIndexRoute: typeof PlatformLimitRequestsIndexRoute
   PlatformOrganizationsIndexRoute: typeof PlatformOrganizationsIndexRoute
@@ -1023,6 +1044,7 @@ const PlatformRouteRouteChildren: PlatformRouteRouteChildren = {
   PlatformIndexRoute: PlatformIndexRoute,
   PlatformAdAccountsAccountIdRoute: PlatformAdAccountsAccountIdRoute,
   PlatformLimitRequestsRequestIdRoute: PlatformLimitRequestsRequestIdRoute,
+  PlatformAccountRequestsIndexRoute: PlatformAccountRequestsIndexRoute,
   PlatformAdAccountsIndexRoute: PlatformAdAccountsIndexRoute,
   PlatformLimitRequestsIndexRoute: PlatformLimitRequestsIndexRoute,
   PlatformOrganizationsIndexRoute: PlatformOrganizationsIndexRoute,

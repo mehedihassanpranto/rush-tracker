@@ -5,6 +5,7 @@ import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { requirePlatformAdmin } from '@/server/auth/guards.server'
 import { writeAudit } from '@/server/audit/audit.service'
 import { operatingOrganizationId } from '@/server/ad-accounts/scope.server'
+import { grantPoolAccountToOrganization } from '@/server/platform/pool-grant.service'
 import { organizationId as organizationIdSchema } from '@/schemas/organization'
 import {
   adAccountRenameSchema,
@@ -156,60 +157,12 @@ export const grantPoolAccountFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<{ ok: true }> => {
     const actor = await requirePlatformAdmin()
     const admin = getSupabaseAdminClient()
-
-    const { data: account } = await admin
-      .from('ad_accounts')
-      .select('id, account_code, name, is_platform')
-      .eq('id', data.ad_account_id)
-      .maybeSingle()
-    if (!account) throw new Error('Ad account not found')
-    if (!(account as { is_platform: boolean }).is_platform) {
-      throw new Error(
-        'That account belongs to an agency, not the platform pool — it cannot be granted.',
-      )
-    }
-
-    const { data: org } = await admin
-      .from('organizations')
-      .select('id, name')
-      .eq('id', data.organization_id)
-      .maybeSingle()
-    if (!org) throw new Error('Organization not found')
-
-    const { data: existing } = await admin
-      .from('platform_account_grants')
-      .select('organization_id, organization:organizations(name)')
-      .eq('ad_account_id', data.ad_account_id)
-      .maybeSingle()
-    if (existing) {
-      const holder = (
-        existing as unknown as { organization: { name: string } | null }
-      ).organization?.name
-      throw new Error(
-        `That account is already granted to ${holder ?? 'another agency'}. Revoke it first.`,
-      )
-    }
-
-    const { error } = await admin.from('platform_account_grants').insert({
-      ad_account_id: data.ad_account_id,
-      organization_id: data.organization_id,
-      granted_by: actor.id,
-    })
-    if (error) throw new Error(error.message)
-
-    await writeAudit({
-      actorUserId: actor.id,
-      organizationId: actor.organizationId,
-      action: 'PLATFORM_ACCOUNT_GRANTED',
-      entityType: 'AD_ACCOUNT',
-      entityId: data.ad_account_id,
-      newValues: {
-        account_code: (account as { account_code: string }).account_code,
-        account_name: (account as { name: string }).name,
-        organization_id: data.organization_id,
-        organization_name: (org as { name: string }).name,
-      },
-    })
+    await grantPoolAccountToOrganization(
+      admin,
+      actor,
+      data.ad_account_id,
+      data.organization_id,
+    )
     return { ok: true }
   })
 

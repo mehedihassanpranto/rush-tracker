@@ -18,7 +18,16 @@ import {
 } from '@/components/ui/dropdown-menu'
 import type { RoleKey } from '@/lib/auth/types'
 
-export function NotificationBell({ role }: { role: RoleKey }) {
+export function NotificationBell({
+  role,
+  hideViewAll = false,
+}: {
+  role: RoleKey
+  /** A platform admin's stored role is CLIENT (see displayRoleFor), but it
+   * has no client portal — /client/notifications would just bounce it back to
+   * /platform, so it gets the dropdown only. */
+  hideViewAll?: boolean
+}) {
   const queryClient = useQueryClient()
   const getCount = useServerFn(unreadNotificationCountFn)
   const getList = useServerFn(listMyNotificationsFn)
@@ -123,7 +132,7 @@ export function NotificationBell({ role }: { role: RoleKey }) {
           )}
         </div>
 
-        {isClient && (
+        {isClient && !hideViewAll && (
           <div className="border-t px-3 py-2 text-center">
             <Link
               to="/client/notifications"

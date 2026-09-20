@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import { Bell, Download, Megaphone, RefreshCw } from 'lucide-react'
+import { Bell, Download, Megaphone, Plus, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { listAdAccountsFn } from '@/server/ad-accounts/ad-account.fns'
@@ -15,6 +15,8 @@ import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { railClassName, type RailHealth } from '@/components/shared/status-rail'
 import { MetaImportDialog } from '@/components/admin/ad-account/meta-import-dialog'
+import { AccountRequestsCard } from '@/components/admin/ad-account/account-requests-card'
+import { RequestAdAccountDialog } from '@/components/admin/ad-account/request-ad-account-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -34,11 +36,13 @@ export const Route = createFileRoute('/agency/ad-accounts/')({
 
 function AdAccountsPage() {
   const { user } = Route.useRouteContext()
-  const canManageMeta = hasPermission(user, PERMISSIONS.AD_ACCOUNTS_MANAGE)
+  const canManage = hasPermission(user, PERMISSIONS.AD_ACCOUNTS_MANAGE)
+  const canManageMeta = canManage
   const listAccounts = useServerFn(listAdAccountsFn)
   const listMetaAccounts = useServerFn(listUsableMetaAdAccountsFn)
   const syncAdAccountName = useServerFn(syncAdAccountNameFn)
   const [importOpen, setImportOpen] = useState(false)
+  const [requestOpen, setRequestOpen] = useState(false)
 
   const {
     data: accounts,
@@ -196,7 +200,15 @@ function AdAccountsPage() {
             </Button>
           </>
         )}
+        {canManage && (
+          <Button onClick={() => setRequestOpen(true)}>
+            <Plus className="size-4" />
+            Request Ad Account
+          </Button>
+        )}
       </PageHeader>
+
+      <AccountRequestsCard canManage={canManage} />
 
       <Card className="p-0">
         <Table>
@@ -340,6 +352,7 @@ function AdAccountsPage() {
       </Card>
 
       <MetaImportDialog open={importOpen} onOpenChange={setImportOpen} />
+      <RequestAdAccountDialog open={requestOpen} onOpenChange={setRequestOpen} />
     </div>
   )
 }

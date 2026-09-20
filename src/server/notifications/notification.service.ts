@@ -88,6 +88,30 @@ export async function notifyAdmins(
   await notify({ ...input, userIds: await adminUserIds(input.organizationId) })
 }
 
+/** Notify every active platform admin (the vendor layer — e.g. an agency
+ * asked for a new ad account). Platform admins are not tied to any one
+ * agency, but notifications.organization_id is NOT NULL, so each row carries
+ * the recipient's OWN home organization; recipients are grouped by it so a
+ * (hypothetical) platform admin in another org still gets a correctly-tagged
+ * row rather than one stamped with somebody else's organization. */
+export async function notifyPlatformAdmins(
+  input: Omit<NotifyInput, 'userIds' | 'organizationId'>,
+): Promise<void> {
+  const admin = getSupabaseAdminClient()
+  const { data } = await admin
+    .from('user_profiles')
+    .select('user_id, organization_id')
+    .eq('status', 'ACTIVE')
+    .eq('is_platform_admin', true)
+  const byOrg = new Map<string, Array<string>>()
+  for (const row of (data ?? []) as Array<{ user_id: string; organization_id: string }>) {
+    byOrg.set(row.organization_id, [...(byOrg.get(row.organization_id) ?? []), row.user_id])
+  }
+  for (const [organizationId, userIds] of byOrg) {
+    await notify({ ...input, userIds, organizationId })
+  }
+}
+
 /** Notify every active member of a client (e.g. an approval/rejection).
  * organizationId is resolved from the client row itself — clientId already
  * uniquely determines it, so every call site doesn't need to also thread

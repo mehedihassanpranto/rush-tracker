@@ -1664,6 +1664,31 @@ bug fixes, and anything else that isn't a whole new named feature.
   or approve/reject the real request** as part of verification — that's a
   real decision on a real client's request, left to whoever actually reviews
   it. `npm test` 83/83, typecheck and build clean throughout.
+- **Agency-initiated "Request Ad Account" (post-Phase-8 addition): done,
+  pending owner review. Migration `20260723000040` confirmed applied to the
+  live project.** Spec §4.4 of "Mother Platform Account Control." An agency asks the
+  platform for a NEW pool account — no client, no existing ad account. **Not
+  the same as a limit request** (that's a client raising the cap on an account
+  that exists, `limit_requests`); the table is `platform_account_requests`
+  (`AAR-000N`), named apart on purpose because "account request" is easy to
+  confuse with it. `organization_id` = the spec's `agencies`; fulfilment reuses
+  `platform_account_grants`.
+  Agency: "Request Ad Account" button + "Ad account requests" card on
+  `/agency/ad-accounts` (`account-request.fns.ts`: list/create/cancel, all
+  scoped to the caller's own organization; may withdraw a PENDING one).
+  Platform: `/platform/account-requests` (`account-requests.fns.ts`,
+  `requirePlatformAdmin`): Assign account / Decline. **Fulfilment claims the
+  request first (conditional PENDING → FULFILLED), then grants, and undoes the
+  claim if the grant fails** — do not reorder to grant-first. The grant lives in
+  `pool-grant.service.ts`, shared with `grantPoolAccountFn`, so the two can't
+  drift. Decisions are audited into the REQUESTING agency's organization.
+  New `notifyPlatformAdmins()` — platform admins had no notification path.
+  **`platform_account_requests` is in `OFFBOARD_ORDER`** (its `requested_by` is
+  a NO ACTION FK to `auth.users`). **The migration must precede any deploy** or
+  `deleteOrganizationFn` breaks (`offboarding.test.ts` fails without it).
+  Verified end to end against production (33 checks incl. a concurrent-fulfil
+  race and cross-agency isolation). §9 open questions decided as: withdrawal allowed, several pending
+  allowed, no bulk fulfilment.
 - **Pool account detail page on `/platform/ad-accounts` (post-Phase-8
   addition): done, pending owner review, no migration.** Requested as "shift
   ad account details page, rename and other things and also live data." The

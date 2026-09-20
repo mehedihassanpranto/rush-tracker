@@ -6,6 +6,109 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-09-19
+
+**Agency-initiated "Request Ad Account" (spec §4.4) — done, pending owner
+review. Migration `20260723000040` — confirmed applied to the live project.**
+
+The spec was pasted again with one genuinely new piece: an agency asking the
+platform for a NEW pool account (no client, no existing ad account involved).
+Everything else in it was already built (§4.3 limit-request routing, the
+spend-cap lock, the platform detail page, the pool + grants).
+
+**What it does**: an agency user with `ad_accounts.manage` clicks **Request
+Ad Account** on `/agency/ad-accounts`, writes one free-text note, and it goes
+straight to the platform — there is no agency-review step because the agency
+is the requester. Platform admins are notified, work it on the new
+**Account Requests** page (`/platform/account-requests`), and either **Assign
+account** (pick an unassigned, non-deactivated pool account) or **Decline**
+with a reason. Assigning is the same act as the pool panel's manual Grant,
+plus closing the request; the agency sees the outcome in a new "Ad account
+requests" card on its Ad Accounts page and gets an in-app notification.
+
+**Mapped onto this codebase, not copied from the spec**: the spec's shared
+`ad_account_requests` table (three `request_type`s) collapses here, because a
+client's limit request already lives in `limit_requests` with its own approval
+RPCs. So the new table, `platform_account_requests` (`AAR-000N` codes), holds
+only the type that had no home. `agencies`/`requesting_agency_id` are
+`organization_id`; fulfilment reuses `platform_account_grants`. `status` is
+text + CHECK, not an enum — a new enum value can't be used in the transaction
+that adds it, and nothing here needs the enum.
+
+**Decisions made on the spec's §9 open questions, flagged so they can be
+overruled**: an agency may withdraw its own PENDING request (built — small,
+and a request that can never be taken back is worse); several pending
+requests at once are allowed; fulfilment is one at a time, no bulk assign.
+
+**Design points worth keeping**:
+- Fulfilling **claims the request first** (conditional `PENDING → FULFILLED`
+  update), then grants, and undoes the claim if the grant fails. Grant-first
+  would leave a granted account behind a still-PENDING request if the second
+  write failed, and two platform admins could both pass a plain status check.
+- The grant logic was extracted from `grantPoolAccountFn` into
+  `pool-grant.service.ts` so the manual Grant and fulfilment can't drift. A
+  plain service module (not an export from a `.fns.ts`) for the same
+  import-protection reason as `limit-request-approval.service.ts`.
+- Request decisions are audited into the **requesting agency's**
+  organization, so the agency sees what the platform decided in its own Audit
+  Log (same principle as "View agency data"). The grant itself keeps its
+  existing audit row in the platform's organization.
+- `notifyPlatformAdmins()` is new — platform admins had no notification path
+  before. Recipients are grouped by their own home organization since
+  `notifications.organization_id` is NOT NULL.
+- `platform_account_requests` is in `OFFBOARD_ORDER`. Its `requested_by` is a
+  NO ACTION FK to `auth.users`, so it must be cleared before the agency's
+  logins are deleted; cascading from the organization row is too late.
+
+**Ordering constraint, worth remembering: the migration must be applied BEFORE
+this code is deployed.** `deleteOrganizationFn` now clears
+`platform_account_requests`; against a database without the table, deleting an
+agency fails with "Failed clearing platform_account_requests". The live-DB
+`offboarding.test.ts` caught exactly this while the migration was pending (4
+tests failed, 79/83). The first thing seen in the browser while it was pending
+was the platform queue's own error state — "Could not find the table
+'public.platform_account_requests' in the schema cache" — which is what
+prompted applying it.
+
+Also fixed: the notification bell's "View all" link pointed platform admins at
+`/client/notifications`, which bounces them straight back (their stored role is
+CLIENT). Now hidden for platform admins, who newly receive notifications.
+
+**Verified end to end against production** (temporary Playwright + magic-link,
+a throwaway agency + super admin + pool accounts, all removed afterwards;
+lockfile hashes byte-identical): 33 checks, all passing — agency submits
+through the real dialog; the row lands PENDING with an `AAR-` code scoped to
+the agency; the audit row lands in the AGENCY's organization; the platform
+admin is notified; the platform queue shows it with agency name and notes; the
+Assign dialog offers only an unassigned, active account (a deactivated one and
+one held by another agency are hidden); assigning marks it FULFILLED, grants
+the account to the requesting agency (`granted_by` recorded), writes the
+decision audit into the agency's org and the grant audit into the platform's,
+and notifies the agency, whose Ad Accounts page then shows the assignment link
+and the account itself; Decline blocks an empty reason and the agency sees
+"Declined: <reason>"; Withdraw cancels and drops it from the platform's Pending
+list. Edge cases through the real server fns: an already-FULFILLED request is
+refused; a deactivated account is refused with the request untouched; an
+account already held by xRush is refused naming the holder AND the claim is
+undone (clean PENDING, no second grant); an agency admin is refused on both
+platform fns; another agency cannot withdraw this agency's request and its own
+list contains none of them; and two concurrent fulfilments of one request with
+different accounts resolve to exactly one winner and exactly one grant.
+`npm test` 83/83 (the 4 offboarding tests pass now), typecheck and build clean.
+Also validated the SQL in PGlite before applying (constraints, `set null` on
+account delete, cascade on organization delete). The refactored manual Grant
+was regression-checked too.
+
+**One harness false-positive worth recording**: the first isolation check
+"passed" only because the second agency's page had never navigated, so the call
+failed on module resolution rather than being refused by the server. Caught by
+reading the returned message instead of trusting the PASS; the check now
+requires the server's own refusal text.
+
+---
+
+---
+
 ## 2026-09-16
 
 **Limit requests on platform-assigned accounts now route through the agency

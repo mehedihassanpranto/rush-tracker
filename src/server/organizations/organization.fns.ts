@@ -624,6 +624,9 @@ const OFFBOARD_ORDER = [
   'payments',
   'payment_requests',
   'limit_requests',
+  // requested_by is a NO ACTION FK to auth.users, so these must go before the
+  // agency's logins do (cascading from the organization row is too late).
+  'platform_account_requests',
   'ad_account_assignments',
   'attachments',
   'ad_accounts',

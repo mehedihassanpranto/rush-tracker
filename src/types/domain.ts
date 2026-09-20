@@ -175,6 +175,33 @@ export interface LimitRequestWithRefs extends LimitRequest {
   ad_account: Pick<AdAccount, 'id' | 'account_code' | 'name' | 'is_platform'> | null
 }
 
+export type PlatformAccountRequestStatus =
+  | 'PENDING'
+  | 'FULFILLED'
+  | 'REJECTED'
+  | 'CANCELLED'
+
+/** An agency's request to the platform for a NEW pool account (spec §4.4) —
+ * no client or existing ad account involved. Distinct from a limit request. */
+export interface PlatformAccountRequest {
+  id: string
+  request_number: string
+  organization_id: string
+  requested_by: string | null
+  notes: string
+  status: PlatformAccountRequestStatus
+  fulfilled_ad_account_id: string | null
+  decision_reason: string | null
+  decided_by: string | null
+  decided_at: string | null
+  cancelled_at: string | null
+  created_at: string
+}
+
+export interface PlatformAccountRequestWithRefs extends PlatformAccountRequest {
+  fulfilled_ad_account: Pick<AdAccount, 'id' | 'account_code' | 'name'> | null
+}
+
 /** Approval-screen payload: request, live account limit, proof + staleness. */
 export interface LimitRequestDetail extends LimitRequestWithRefs {
   account_current_limit_usd: string | null
