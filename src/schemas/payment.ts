@@ -9,6 +9,12 @@ const bdtAmount = z.coerce
   .max(1_000_000_000, 'Amount is too large')
 
 export const PAYMENT_METHODS = [
+  'Brac Bank',
+  'DBBL',
+  'IBBL',
+  'UCB',
+  'City Bank',
+  'EBL',
   'bKash',
   'Nagad',
   'Rocket',

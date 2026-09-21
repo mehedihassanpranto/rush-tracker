@@ -486,7 +486,7 @@ function PaymentCollectionReport({ filters }: { filters: DateFilters }) {
           cell: (r) => <span className="font-medium">{formatBdt(r.amount_bdt)}</span>,
           csv: (r) => r.amount_bdt,
         },
-        { header: 'Method', cell: (r) => r.payment_method ?? '—', csv: (r) => r.payment_method },
+        { header: 'Send to', cell: (r) => r.payment_method ?? '—', csv: (r) => r.payment_method },
         {
           header: 'Reference',
           cell: (r) => r.transaction_reference ?? '—',

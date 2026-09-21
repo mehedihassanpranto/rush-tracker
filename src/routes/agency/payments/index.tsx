@@ -89,7 +89,7 @@ function PaymentsPage() {
               <TableHead>Payment</TableHead>
               <TableHead>Client</TableHead>
               <TableHead className="text-right">Amount</TableHead>
-              <TableHead>Method</TableHead>
+              <TableHead>Send to</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Date</TableHead>
               <TableHead>Notes</TableHead>

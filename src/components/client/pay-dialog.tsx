@@ -54,20 +54,20 @@ export function PayDialog({
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [amount, setAmount] = useState('')
-  const [method, setMethod] = useState<(typeof PAYMENT_METHODS)[number]>('bKash')
+  const [method, setMethod] = useState<(typeof PAYMENT_METHODS)[number]>('UCB')
   const [reference, setReference] = useState('')
   const [note, setNote] = useState('')
   const [file, setFile] = useState<File | null>(null)
 
   useEffect(() => {
     if (open) {
-      setAmount(presetAmount ?? outstanding)
-      setMethod('bKash')
+      setAmount(presetAmount ?? '')
+      setMethod('UCB')
       setReference('')
       setNote('')
       setFile(null)
     }
-  }, [open, presetAmount, outstanding])
+  }, [open, presetAmount])
 
   const amountNum = Number(amount)
   const outstandingNum = Number(outstanding)
@@ -138,6 +138,7 @@ export function PayDialog({
                 type="number"
                 min="0"
                 step="0.01"
+                placeholder="Enter amount"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
               />
@@ -148,7 +149,7 @@ export function PayDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label>Method</Label>
+              <Label>Send to</Label>
               <Select
                 value={method}
                 onValueChange={(v) =>

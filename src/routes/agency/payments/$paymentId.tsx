@@ -154,7 +154,7 @@ function PaymentDetailPage() {
               }
             />
             <Row label="Amount" value={formatBdt(payment.amount_bdt)} />
-            <Row label="Method" value={payment.payment_method ?? '—'} />
+            <Row label="Send to" value={payment.payment_method ?? '—'} />
             <Row
               label="Reference"
               value={payment.transaction_reference ?? '—'}

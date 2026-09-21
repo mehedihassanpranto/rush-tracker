@@ -6,6 +6,45 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-09-20
+
+**Six more payment methods in the client "Make a payment" dialog, no migration.**
+Added Brac Bank, DBBL, IBBL, UCB, City Bank and EBL to `PAYMENT_METHODS`
+(`src/schemas/payment.ts`), listed first — at the top of the dropdown, in the
+order given — with the existing methods after them in their original order.
+The preselected default is now UCB (was bKash), set in `pay-dialog.tsx` in
+both the initial state and the reset that runs each time the dialog opens, so
+it holds on every open rather than only the first. The field is now labelled
+"Send to" instead of "Method" everywhere it appears: the payment dialog, the
+client payment history, the agency payment list and detail page, and the
+payments report (whose column header is also the CSV export's header).
+
+The **Amount (BDT)** field in that dialog now opens empty with an "Enter
+amount" placeholder instead of being pre-filled with the whole outstanding due
+(a pre-filled full amount nudged clients toward paying everything and had to be
+deleted before typing a partial one). Submit stays disabled until a valid
+amount and a proof are both present, and the over-limit error still only
+appears once something has been typed. When the dialog is opened from a
+specific **payment request** it still pre-fills that request's amount — an
+explicit figure the agency asked for, not a guess. Also dropped `outstanding`
+from the dialog's open-effect dependencies: it is no longer read there, and
+leaving it would have wiped a half-typed payment if the due refetched.
+
+**Verified in a real browser** (temporary Playwright + magic-link, removed
+after, lockfile hashes byte-identical) as the client login with ৳39,000 due:
+amount empty, placeholder present, "Send to" label, UCB preselected, Submit
+disabled while empty, over-limit error shown for 99,999,999 and cleared for
+100, dropdown order banks-first, reopening resets the amount to empty, and the
+"Send to" header on the client payment history and the agency payments list.
+Nothing was submitted. 13/13 checks. The list is defined once
+and read by both the dialog and the server-side zod enum, so the two cannot
+disagree. `payments.payment_method` is a plain text column with no constraint,
+so no migration was needed and existing payments keep whatever they were saved
+with. "Bank Transfer" was kept as the generic option rather than removed.
+`npm test` 83/83, typecheck clean.
+
+---
+
 ## 2026-09-19
 
 **Agency-initiated "Request Ad Account" (spec §4.4) — done, pending owner
