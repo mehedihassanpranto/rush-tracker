@@ -3337,6 +3337,32 @@ bug fixes, and anything else that isn't a whole new named feature.
   (`telegram_link_tokens` + `user_telegram_links`, both empty) — hence this
   migration's token table is `telegram_link_requests`. Pending: 000046
   (untracked, not part of this work) and 000047.
+  **Update, same day: the "not recoverable" app code was found after all.**
+  It existed uncommitted on a different machine running this same project —
+  the Platform USD/BDT stock ledger ("Finance & Accounts", migrations
+  000041–000044: `usd_sources`/`usd_purchases`/`usd_sales`,
+  `agency_usd_summary`/`usd_stock_summary` views) and the per-user Telegram
+  design 000045 replaces. Reconciled by branching this Telegram redesign onto
+  a new `telegram-notifications-integrated` branch and layering the recovered
+  Finance app code on top: `src/server/platform/finance.fns.ts`,
+  `src/lib/finance/{usd-stock,agency-allocations}.ts`,
+  `src/components/platform/finance/*`, `src/routes/platform/finance/`,
+  `src/schemas/platform-finance.ts`, and the `UsdSource`/`UsdPurchase`/
+  `UsdSale`/`UsdStockSummary`/`AgencyUsdSummaryRow`/`AgencyLimitApproval`
+  types in `domain.ts` — none of it touches Telegram, so it layered on
+  cleanly with no conflicts. `/platform` nav gained "Finance & Accounts".
+  The per-user Telegram code (000045's app half: `telegram.fns.ts`,
+  `telegram-link.server.ts`, `link-crypto.server.ts`, the header's
+  `TelegramDialog`) was deliberately NOT revived — this branch's multi-role
+  design supersedes it outright, migration 000045 stays applied but its
+  tables are now dead (harmless: nothing reads or writes them).
+  Also ported: `sendLimitRequestToPlatformFn` was sending platform admins a
+  Telegram message but no in-app bell notification — reaches only admins who
+  linked a chat. Added a `notifyPlatformAdmins()` call alongside the existing
+  `notifyTelegram()` ones so the bell is the guaranteed path regardless of
+  Telegram setup. `npm test`: 131/131 (Finance's 14 live-DB tests included),
+  typecheck and build clean. Not yet merged to `main` or pushed — the owner
+  should review before that.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

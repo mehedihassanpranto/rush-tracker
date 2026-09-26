@@ -75,6 +75,26 @@ no copy of this repo.
 New env: `TELEGRAM_WEBHOOK_SECRET` (docs/DEPLOYMENT.md). `npm test` 87/87 (4
 new), typecheck and build clean.
 
+*Update, same day: the "app code not recoverable" call was wrong — found and
+reintegrated.* The Platform USD/BDT stock ledger ("Finance & Accounts",
+migrations 000041–000044) and the per-user Telegram design (000045) both had
+working app code sitting uncommitted on a different machine running this
+project. Branched this Telegram work onto `telegram-notifications-integrated`
+and layered the recovered Finance feature on top (`finance.fns.ts`,
+`src/lib/finance/`, the Finance dialogs/route/schema, and the `UsdSource` /
+`UsdPurchase` / `UsdSale` / `UsdStockSummary` / `AgencyUsdSummaryRow` /
+`AgencyLimitApproval` domain types) — zero overlap with the Telegram files, so
+it applied cleanly. New "Finance & Accounts" item in the platform nav. The
+recovered per-user Telegram *app* code was left out on purpose: this
+multi-role design replaces it outright, so reviving it would just reintroduce
+the single-chat leak this whole change fixes. Also added the one small gap
+found while merging: `sendLimitRequestToPlatformFn` had a Telegram message to
+the platform but no in-app bell, so a platform admin with no chat linked had
+no notification at all — added the matching `notifyPlatformAdmins()` call.
+`npm test` 131/131 (Finance's live-DB tests ran for real against the project),
+typecheck and build clean. Sitting on `telegram-notifications-integrated`,
+not on `main` — awaiting review before merge.
+
 ---
 
 ## 2026-09-20

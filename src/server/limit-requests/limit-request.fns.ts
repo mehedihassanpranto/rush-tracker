@@ -9,6 +9,7 @@ import { writeAudit } from '@/server/audit/audit.service'
 import {
   notifyAdmins,
   notifyClientMembers,
+  notifyPlatformAdmins,
 } from '@/server/notifications/notification.service'
 import { notifyTelegram } from '@/server/telegram/telegram.service'
 import {
@@ -649,6 +650,18 @@ export const sendLimitRequestToPlatformFn = createServerFn({ method: 'POST' })
       .maybeSingle()
     const agencyName = (org as { name: string } | null)?.name ?? 'An agency'
     const payload = { limit_request_id: data.id, request_number: r.request_number }
+
+    // The Telegram sends below only reach admins who've linked a chat — this
+    // is the in-app bell, so it's the one guaranteed way the platform notices
+    // a request is waiting, rather than only if someone happens to open
+    // /platform/limit-requests.
+    await notifyPlatformAdmins({
+      type: 'LIMIT_REQUEST_SENT_TO_PLATFORM',
+      title: 'Limit request awaiting platform approval',
+      message: `${agencyName} sent ${r.request_number} (${formatUsd(r.requested_amount_usd)}) for platform review.`,
+      entityType: 'LIMIT_REQUEST',
+      entityId: data.id,
+    })
     await notifyTelegram({
       eventType: 'limit_request.sent_to_platform',
       recipient: { type: 'platform_admin' },
