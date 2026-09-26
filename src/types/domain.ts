@@ -202,6 +202,118 @@ export interface PlatformAccountRequestWithRefs extends PlatformAccountRequest {
   fulfilled_ad_account: Pick<AdAccount, 'id' | 'account_code' | 'name'> | null
 }
 
+// ---------------------------------------------------------------------------
+// Platform USD/BDT stock ledger (spec §6). Platform-internal: none of these
+// are ever returned to an agency — buying rates and source names are the
+// platform's margin. NUMERIC columns follow the app-wide convention of being
+// typed as strings; wrap with dec() before doing arithmetic on them.
+// ---------------------------------------------------------------------------
+
+export interface UsdSource {
+  id: string
+  name: string
+  /** How the dollars reach the platform (Payoneer, PayPal, …). null only for a
+   * source created before the column existed — new sources must choose one. */
+  payment_method: string | null
+  is_active: boolean
+  created_at: string
+}
+
+export interface UsdPurchase {
+  id: string
+  source_id: string
+  method: string | null
+  usd_amount: string
+  bdt_amount: string
+  /** bdt_amount / usd_amount, computed by the database. */
+  buying_rate: string
+  purchased_at: string
+  recorded_by: string | null
+  notes: string | null
+  created_at: string
+}
+
+export interface UsdPurchaseWithSource extends UsdPurchase {
+  source: Pick<UsdSource, 'id' | 'name' | 'payment_method'> | null
+}
+
+export interface UsdSale {
+  id: string
+  /** null only when the buying agency has since been deleted. */
+  organization_id: string | null
+  /** Snapshot taken at sale time, so a surviving row still says who bought. */
+  agency_name: string
+  ad_account_id: string | null
+  usd_amount: string
+  bdt_amount: string
+  /** bdt_amount / usd_amount, computed by the database. */
+  selling_rate: string
+  reference_id: string
+  sold_at: string
+  recorded_by: string | null
+  notes: string | null
+  created_at: string
+}
+
+export interface UsdSaleWithRefs extends UsdSale {
+  organization: { id: string; name: string } | null
+  ad_account: Pick<AdAccount, 'id' | 'account_code' | 'name'> | null
+}
+
+/** One row of the `usd_stock_summary` view. Rates and the two BDT figures are
+ * null while no USD has been bought/sold — a rate over zero dollars is
+ * undefined, and showing 0 would read as a real (terrible) rate. */
+export interface UsdStockSummary {
+  total_usd_purchased: string
+  total_bdt_invested: string
+  total_usd_sold: string
+  total_bdt_received: string
+  remaining_usd_stock: string
+  avg_buying_rate: string | null
+  avg_selling_rate: string | null
+  remaining_stock_bdt_value: string | null
+  gross_bdt_difference: string | null
+}
+
+export interface AgencyUsdSummaryRow {
+  /** null for a deleted agency whose sales survive in the ledger. */
+  organization_id: string | null
+  name: string
+  removed: boolean
+  subscription_status: string | null
+  /** USD from sales recorded by hand. */
+  sales_usd: string
+  /** USD from approved limit requests on platform-owned accounts. */
+  limits_usd: string
+  /** sales_usd + limits_usd — what the platform has allocated to the agency.
+   * The two can overlap if an agency pre-bought dollars AND had limits
+   * approved, which is why the parts stay visible. */
+  total_usd_allocated: string
+  /** From recorded sales only: a limit approval carries no BDT. */
+  total_bdt_paid: string
+  /** Recorded sales only. */
+  transaction_count: number
+  limit_approval_count: number
+  /** Approved limit requests on platform accounts whose approval falls on
+   * today's Asia/Dhaka business day. */
+  limits_today_usd: string
+  limits_today_count: number
+  /** Later of the agency's last sale and last limit approval. */
+  last_activity_at: string | null
+  /** From recorded sales only, so limit USD never dilutes it. */
+  avg_selling_rate: string | null
+}
+
+/** An approved limit request on a platform-owned account, as it appears in one
+ * agency's allocation history. */
+export interface AgencyLimitApproval {
+  id: string
+  request_number: string
+  approved_amount_usd: string
+  approved_at: string | null
+  ad_account: Pick<AdAccount, 'id' | 'account_code' | 'name'>
+}
+
 /** Approval-screen payload: request, live account limit, proof + staleness. */
 export interface LimitRequestDetail extends LimitRequestWithRefs {
   account_current_limit_usd: string | null

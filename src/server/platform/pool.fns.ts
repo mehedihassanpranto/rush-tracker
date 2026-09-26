@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { requirePlatformAdmin } from '@/server/auth/guards.server'
 import { writeAudit } from '@/server/audit/audit.service'
+import { notifyTelegram } from '@/server/telegram/telegram.service'
 import { operatingOrganizationId } from '@/server/ad-accounts/scope.server'
 import { grantPoolAccountToOrganization } from '@/server/platform/pool-grant.service'
 import { organizationId as organizationIdSchema } from '@/schemas/organization'
@@ -157,12 +158,21 @@ export const grantPoolAccountFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<{ ok: true }> => {
     const actor = await requirePlatformAdmin()
     const admin = getSupabaseAdminClient()
-    await grantPoolAccountToOrganization(
+    const granted = await grantPoolAccountToOrganization(
       admin,
       actor,
       data.ad_account_id,
       data.organization_id,
     )
+    // Here rather than inside grantPoolAccountToOrganization: fulfilling an
+    // account request also grants, and sends its own (request-specific)
+    // message — one event, one message.
+    await notifyTelegram({
+      eventType: 'ad_account.granted',
+      recipient: { type: 'agency', organizationId: data.organization_id },
+      text: `➕ Ad account ${granted.accountCode} "${granted.accountName}" was assigned to your agency by the platform.`,
+      payload: { ad_account_id: data.ad_account_id },
+    })
     return { ok: true }
   })
 
@@ -179,7 +189,9 @@ export const revokePoolAccountFn = createServerFn({ method: 'POST' })
 
     const { data: existing } = await admin
       .from('platform_account_grants')
-      .select('organization_id, organization:organizations(name)')
+      .select(
+        'organization_id, organization:organizations(name), ad_account:ad_accounts(account_code, name)',
+      )
       .eq('ad_account_id', data.ad_account_id)
       .maybeSingle()
     if (!existing) throw new Error('That account is not currently granted')
@@ -193,6 +205,7 @@ export const revokePoolAccountFn = createServerFn({ method: 'POST' })
     const row = existing as unknown as {
       organization_id: string
       organization: { name: string } | null
+      ad_account: { account_code: string; name: string } | null
     }
     await writeAudit({
       actorUserId: actor.id,
@@ -204,6 +217,12 @@ export const revokePoolAccountFn = createServerFn({ method: 'POST' })
         organization_id: row.organization_id,
         organization_name: row.organization?.name ?? null,
       },
+    })
+    await notifyTelegram({
+      eventType: 'ad_account.revoked',
+      recipient: { type: 'agency', organizationId: row.organization_id },
+      text: `➖ Ad account ${row.ad_account?.account_code ?? ''} "${row.ad_account?.name ?? ''}" was withdrawn from your agency by the platform. Clients holding it no longer have access.`,
+      payload: { ad_account_id: data.ad_account_id },
     })
     return { ok: true }
   })

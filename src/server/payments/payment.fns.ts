@@ -9,6 +9,7 @@ import {
   notifyAdmins,
   notifyClientMembers,
 } from '@/server/notifications/notification.service'
+import { notifyTelegram } from '@/server/telegram/telegram.service'
 import { signProofUrl, uploadProof } from '@/server/storage/storage.service'
 import { dec, formatBdt } from '@/lib/money/money'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
@@ -191,6 +192,12 @@ export const submitPaymentFn = createServerFn({ method: 'POST' })
       entityId: payment.id,
       organizationId: user.organizationId,
     })
+    await notifyTelegram({
+      eventType: 'payment.submitted',
+      recipient: { type: 'agency', organizationId: user.organizationId },
+      text: `💰 ${membership.clientName} submitted payment ${payment.payment_number}: ${formatBdt(data.amount_bdt)} via ${data.payment_method}, awaiting verification.`,
+      payload: { payment_id: payment.id, payment_number: payment.payment_number },
+    })
     return payment as Payment
   })
 
@@ -346,6 +353,12 @@ export const approvePaymentFn = createServerFn({ method: 'POST' })
         entityType: 'PAYMENT',
         entityId: data.id,
       })
+      await notifyTelegram({
+        eventType: 'payment.approved',
+        recipient: { type: 'client', clientId: p.client_id },
+        text: `✅ Payment ${p.payment_number} received — ${formatBdt(p.amount_bdt)} has been credited to your account.`,
+        payload: { payment_id: data.id, payment_number: p.payment_number },
+      })
     }
     return { ledger_id: ledgerId as string }
   })
@@ -390,6 +403,12 @@ export const rejectPaymentFn = createServerFn({ method: 'POST' })
       message: `${rejected.payment_number}: ${data.rejection_reason}`,
       entityType: 'PAYMENT',
       entityId: data.id,
+    })
+    await notifyTelegram({
+      eventType: 'payment.rejected',
+      recipient: { type: 'client', clientId: rejected.client_id },
+      text: `❌ Payment ${rejected.payment_number} could not be verified: ${data.rejection_reason}`,
+      payload: { payment_id: data.id, payment_number: rejected.payment_number },
     })
     return { ok: true }
   })

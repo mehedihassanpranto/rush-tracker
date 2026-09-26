@@ -13,8 +13,9 @@
  * rather than quietly seeing someone else's ad accounts.
  *
  * What it is still used for:
- *   - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` are this organization's chat,
- *     so per-agency alerts fire for org zero only (see alertTelegram()).
+ *   - The legacy `TELEGRAM_CHAT_ID` is imported as THIS organization's agency
+ *     chat (importLegacyTelegramChatFn). Telegram is otherwise per-recipient
+ *     since migration 000047 — no alert is gated on org zero any more.
  *   - `audit_logs.organization_id` is NOT NULL, but a pool account that is
  *     currently ungranted belongs to no agency — org zero is the fallback
  *     owner of those rows.

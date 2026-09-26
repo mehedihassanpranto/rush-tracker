@@ -615,6 +615,13 @@ export const updateOrganizationSubscriptionStatusFn = createServerFn({
  * customer leaving must not destroy accounts the platform owns. Their grants
  * are removed by the ON DELETE CASCADE on platform_account_grants, returning
  * the accounts to the pool unassigned.
+ *
+ * ALSO NOT listed, on purpose: usd_sales (the platform's USD stock ledger,
+ * migration 000041). A sale is the PLATFORM's revenue, and total_usd_sold feeds
+ * remaining stock — deleting a departed customer's rows would put phantom
+ * dollars back into stock. Its organization_id is ON DELETE SET NULL, so the
+ * organization row deletes cleanly and the sale survives under the agency_name
+ * it was recorded with. Do not add it here for "completeness".
  */
 const OFFBOARD_ORDER = [
   'notifications',

@@ -6,7 +6,7 @@ import {
   listMetaBusinessAdAccounts,
   metaStatusLabel,
 } from '@/server/meta/meta.server'
-import { sendTelegramMessage } from '@/server/telegram/telegram.service'
+import { notifyTelegram } from '@/server/telegram/telegram.service'
 import { DEPLOYMENT_ORGANIZATION_ID } from '@/lib/organizations/deployment-org'
 import {
   PLATFORM_CREDENTIALS,
@@ -173,8 +173,10 @@ async function syncCredentialSet(
     // A pool account has no owner of its own; its audit trail belongs to the
     // agency currently holding the grant (falling back to the platform's own
     // organization while it is ungranted).
-    const operatingOrg =
-      (await operatingOrganizationId(admin, row)) ?? DEPLOYMENT_ORGANIZATION_ID
+    // holderOrg is null only for an ungranted pool account — used below to
+    // send its Telegram alerts to the platform rather than to any agency.
+    const holderOrg = await operatingOrganizationId(admin, row)
+    const operatingOrg = holderOrg ?? DEPLOYMENT_ORGANIZATION_ID
     accountOrgs.set(row.id, operatingOrg)
 
     let currentName = row.name
@@ -219,7 +221,9 @@ async function syncCredentialSet(
     if (newlyDisabled) {
       newlyDisabledList.push({ id: row.id, account_code: row.account_code, name: currentName })
       await alertTelegram(
-        scope,
+        holderOrg,
+        'meta.account_disabled',
+        row.id,
         `🚫 Ad account ${row.account_code} "${currentName}" was disabled on Meta (status: ${metaStatusLabel(meta.meta_status_code)}).`,
       )
     }
@@ -231,7 +235,9 @@ async function syncCredentialSet(
         remaining,
       })
       await alertTelegram(
-        scope,
+        holderOrg,
+        'meta.low_balance',
+        row.id,
         `⚠️ Ad account ${row.account_code} "${currentName}" is low on Meta spend headroom: ${formatCurrencyAmount(remaining, meta.currency)} remaining (threshold: ${LOW_BALANCE_THRESHOLD}).`,
       )
     }
@@ -279,30 +285,30 @@ async function syncCredentialSet(
 }
 
 /**
- * Telegram alerts go to the ONE chat configured on the deployment
- * (`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`), which belongs to the deployment's
- * owner. Sending another agency's account names and balances into that chat
- * would leak their data to xRush, so these fire for exactly two credential
- * sets: org zero's own portfolio, and the platform pool — which xRush operates
- * (it holds every grant) and whose alerts it has always received.
+ * Disabled / low-balance alerts go to the agency that USES the account — the
+ * owner for an agency's own account, the grant holder for a pool account —
+ * and to the platform admins only for a pool account nobody holds yet.
  *
- * The platform arm matters since migration 000037: the pool used to be synced
- * under org zero's id, so the old `!== DEPLOYMENT_ORGANIZATION_ID` check passed
- * it by accident. Now that the pool is its own scope, dropping this arm would
- * have silently ended every disabled/low-balance Telegram alert for all 34
- * accounts, with nothing failing to show it.
- *
- * Per-agency Telegram is a separate feature (each agency would register its own
- * bot/chat, the same way each now registers its own Meta credentials) and is
- * deliberately NOT inferred here — other agencies get the in-app notification,
- * which is correctly scoped to them.
+ * This replaces the old org-zero-only gate. That gate existed because there
+ * was one deployment-wide chat belonging to xRush, so another agency's
+ * account names could not be sent there; with per-recipient subscriptions
+ * each agency's alerts reach only that agency's own linked chats, so every
+ * agency now gets them (spec §5.1, "Meta Due" alert).
  */
-async function alertTelegram(scope: MetaCredentialScope, message: string) {
-  const isDeploymentOwned =
-    scope.kind === 'platform' ||
-    scope.organizationId === DEPLOYMENT_ORGANIZATION_ID
-  if (!isDeploymentOwned) return
-  await sendTelegramMessage(message)
+async function alertTelegram(
+  holderOrganizationId: string | null,
+  eventType: string,
+  adAccountId: string,
+  text: string,
+) {
+  await notifyTelegram({
+    eventType,
+    recipient: holderOrganizationId
+      ? { type: 'agency', organizationId: holderOrganizationId }
+      : { type: 'platform_admin' },
+    text,
+    payload: { ad_account_id: adAccountId },
+  })
 }
 
 export interface MetaSyncOrganizationResult extends MetaSyncResult {
