@@ -21,10 +21,21 @@ const serverEnvSchema = z.object({
   // it as `Authorization: Bearer <value>` automatically when this env var is
   // set on the project. Optional: unset disables the sync endpoint.
   CRON_SECRET: z.string().min(1).optional(),
-  // Telegram Bot API — optional: unset disables Telegram alerts entirely
-  // (sendTelegramMessage() no-ops), same "optional integration" pattern as
-  // the Meta credentials above.
+  // Telegram Bot API — optional: unset disables Telegram entirely (every
+  // send is logged as failed/skipped, linking is unavailable), same
+  // "optional integration" pattern as the Meta credentials above.
   TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
+  // Sent by Telegram as X-Telegram-Bot-Api-Secret-Token on every webhook
+  // call (set via setWebhook's secret_token). Required for the webhook —
+  // without it /api/telegram/webhook refuses every request. Telegram allows
+  // 1-256 chars of A-Z a-z 0-9 _ - — checked when registering the webhook,
+  // NOT here: a malformed optional value must not make getServerEnv() throw
+  // and take the whole app down with it.
+  TELEGRAM_WEBHOOK_SECRET: z.string().min(1).optional(),
+  // LEGACY: the single deployment-wide chat from before per-recipient
+  // subscriptions. Read ONLY by the platform's "Import legacy chat" action,
+  // which turns it into xRush Agency's agency subscription. Nothing sends to
+  // it directly any more; remove it once imported.
   TELEGRAM_CHAT_ID: z.string().min(1).optional(),
 })
 
@@ -48,6 +59,7 @@ export function getServerEnv(): ServerEnv {
       META_API_VERSION: process.env.META_API_VERSION,
       CRON_SECRET: process.env.CRON_SECRET,
       TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+      TELEGRAM_WEBHOOK_SECRET: process.env.TELEGRAM_WEBHOOK_SECRET,
       TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID,
     })
     if (!parsed.success) {

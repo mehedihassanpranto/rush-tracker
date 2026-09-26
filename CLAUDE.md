@@ -3300,6 +3300,43 @@ bug fixes, and anything else that isn't a whole new named feature.
   `/subscription-suspended`. Logged loudly so that reads as an outage
   rather than a subscription problem. **Flagged, not changed**: whether
   fail-closed is the right tradeoff there is the owner's call.
+- **Multi-role Telegram notifications (post-Phase-8 addition): done, pending
+  owner review, migration `20260723000047` NOT YET APPLIED (blocked — see
+  end).** One bot, per-recipient chats; replaces the single env
+  `TELEGRAM_CHAT_ID`. `notifyTelegram({ eventType, recipient, text, payload })`
+  (`src/server/telegram/telegram.service.ts`), recipient is
+  `{type:'platform_admin'}` (broadcast to every ACTIVE platform admin, looked
+  up live) | `{type:'agency', organizationId}` | `{type:'client', clientId}`.
+  **THE RULE: address the one tenant the event belongs to. Never loop over
+  "every agency subscription"** — the old single-chat design delivered every
+  agency's limit requests into xRush's chat, which is the leak this closes.
+  Best-effort, never throws; every attempt lands in `notification_events`
+  (`sent`/`failed`/`skipped_no_subscription` + raw Telegram response).
+  403 → subscription deactivated; 400 with `migrate_to_chat_id` → chat id
+  followed and persisted, retried once.
+  Linking: `telegram.fns.ts` derives the recipient from the SESSION, never
+  from input (`scope` only selects the guard: `requirePlatformAdmin` /
+  `requireAdmin(INTEGRATIONS_MANAGE)` / `requireClientMembership()` → the
+  ACTIVE client). Tokens are 32-char base64url, SHA-256-hashed at rest,
+  15-min, single-use via a conditional UPDATE. `/api/telegram/webhook` needs
+  `TELEGRAM_WEBHOOK_SECRET` (503 without) and always 200s once authenticated
+  (a non-2xx makes Telegram retry and stall the queue). Registered from
+  Platform → Settings → Telegram bot, which also shows `getWebhookInfo`,
+  recent failures, and "Import legacy chat" (env chat → xRush's agency sub).
+  Schema: `telegram_subscriptions` keeps the spec's generic `recipient_id`
+  AND typed FK columns (`platform_user_id`/`organization_id`/`client_id`,
+  CHECK-bound to it) so deletion cascades without touching `OFFBOARD_ORDER`/
+  `WIPE_ORDER`. Meta disabled/low-balance alerts now go to whichever agency
+  USES the account (owner or grant holder), platform admins only for an
+  ungranted pool account — the old org-zero-only `alertTelegram` gate is gone.
+  **Migrations 000041–000045** were applied to the live project from a copy of
+  this repo that no longer exists; their SQL was recovered 2026-09-26 with
+  `supabase migration fetch` (the ONLY way to get a remote-only migration back
+  — it reads `supabase_migrations.schema_migrations`), but their app code was
+  not recoverable. 000045 is an overlapping per-user Telegram design
+  (`telegram_link_tokens` + `user_telegram_links`, both empty) — hence this
+  migration's token table is `telegram_link_requests`. Pending: 000046
+  (untracked, not part of this work) and 000047.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

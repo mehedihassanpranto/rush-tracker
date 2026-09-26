@@ -4,6 +4,7 @@ import { requireAdmin } from '@/server/auth/guards.server'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { writeAudit } from '@/server/audit/audit.service'
 import { notifyPlatformAdmins } from '@/server/notifications/notification.service'
+import { notifyTelegram } from '@/server/telegram/telegram.service'
 import {
   accountRequestCreateSchema,
   accountRequestIdSchema,
@@ -73,6 +74,12 @@ export const createAccountRequestFn = createServerFn({ method: 'POST' })
       message: `${actor.organizationName || 'An agency'} requested a new ad account (${row.request_number}).`,
       entityType: 'PLATFORM_ACCOUNT_REQUEST',
       entityId: row.id,
+    })
+    await notifyTelegram({
+      eventType: 'account_request.created',
+      recipient: { type: 'platform_admin' },
+      text: `🆕 ${actor.organizationName || 'An agency'} requested a new ad account (${row.request_number})${data.notes ? `: ${data.notes}` : '.'}`,
+      payload: { account_request_id: row.id, request_number: row.request_number },
     })
     return row
   })

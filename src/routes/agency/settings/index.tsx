@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ResetDataDialog } from '@/components/admin/settings/reset-data-dialog'
 import { IntegrationSettingsCard } from '@/components/shared/integration-settings/integration-settings-card'
+import { TelegramConnectCard } from '@/components/shared/telegram/telegram-connect-card'
 
 export const Route = createFileRoute('/agency/settings/')({
   component: SettingsPage,
@@ -28,6 +29,9 @@ function SettingsPage() {
       />
 
       {canManageIntegrations && <IntegrationSettingsCard />}
+      {/* Same permission as the server fns: a linked chat receives client
+          names and amounts, so connecting one is gated like the credentials. */}
+      {canManageIntegrations && <TelegramConnectCard scope="agency" />}
 
       {isSuperAdmin && (
         <div className="sm:max-w-lg">

@@ -6,6 +6,77 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-09-26
+
+**Multi-role Telegram notifications — one bot, per-recipient chats (Phases
+B–D of the Telegram spec, most of E). Migration `20260723000047` written, NOT
+YET APPLIED — see the blocker below.**
+
+*Outage diagnosis (Phase A).* The old integration had no webhook and no
+polling: `sendTelegramMessage()` POSTed to one env-configured
+`TELEGRAM_CHAT_ID`, and a failure was only a `console.error`. Nothing in the
+code path had regressed, so the outage is operational (env var missing on
+Vercel, revoked token, or the chat upgraded to a supergroup — which changes
+its id and 400s every send). Could not be confirmed from here: no Telegram
+credentials locally, no Vercel CLI. The new design surfaces all three on the
+platform Settings page and self-heals the supergroup case.
+
+*Cross-tenant leak fixed.* `createLimitRequestFn` sent **every agency's**
+limit requests into xRush's single chat. Every Telegram message is now
+addressed to exactly the agency, client, or (broadcast) platform admins the
+event belongs to.
+
+*Schema.* `telegram_subscriptions` (recipient_type + recipient_id as the spec
+asks, plus typed FK columns tied to it by a CHECK so offboarding / "Clear all
+data" / client deletion cascade), `telegram_link_requests` (single-use,
+15-minute, SHA-256-hashed /start tokens) and `notification_events` (every
+send, skip and failure with Telegram's raw response). All three RLS-on, zero
+policies.
+
+*Linking.* `/api/telegram/webhook` (secret-token header, constant-time
+compare) consumes `/start <token>` from a DM or `/start@Bot <token>` from a
+group, atomically, then confirms in the chat. Bot removed/blocked (403 or a
+`my_chat_member` update) deactivates the subscription; a supergroup migration
+follows the new chat id. A "Telegram" card on Platform Settings, agency
+Settings (`integrations.manage`) and the client Profile page connects,
+disconnects and sends a test message. Platform Settings also gains a **Telegram
+bot** card: token/secret status, webhook URL vs. this deployment,
+`getWebhookInfo`'s last error, per-type chat counts, recent failed sends,
+**Register webhook**, and **Import legacy chat** (turns `TELEGRAM_CHAT_ID`
+into xRush Agency's agency chat so it keeps receiving).
+
+*Events wired* (all alongside the existing in-app notification, none
+replacing it): platform ← agency requests an ad account, agency sends a limit
+request for platform review, alerts on ungranted pool accounts; agency ←
+client limit request, client payment submitted, platform approved/rejected an
+escalated limit request, platform fulfilled/declined an ad account request,
+pool account granted/withdrawn, Meta disabled/low-balance on its accounts
+(now **every** agency, routed to the grant holder — the org-zero-only gate
+existed only because there was one shared chat); client ← limit request
+approved / rejected / forwarded for review, payment approved / rejected.
+Not wired because the features don't exist yet: pool running low, agency
+payments/overdue to the platform, subscription expiry, funding applied.
+
+*Blocker — not applied.* The live project has migrations
+**000041–000045 that exist nowhere in this repo** (not on origin, not on this
+machine). They created an empty `telegram_link_tokens` + `user_telegram_links`
+pair (per-user linking) and `usd_purchases`/`usd_sales`/`usd_sources`. The
+token table here was renamed to avoid colliding with them, but `supabase db
+push` will refuse to run until those five are pulled into the repo or
+repaired, and the untracked `000046` would be pushed alongside. Owner call.
+
+*Update, same day:* recovered all five with `supabase migration fetch` (run in
+a scratch copy; the fetched 001–040 were confirmed identical to ours first)
+and added them to `supabase/migrations/` — history is back in sync, only 000046
+and 000047 pending. Only the SQL was recoverable: the app code that uses those
+tables (platform USD stock ledger / Finance & Accounts, per-user Telegram) is in
+no copy of this repo.
+
+New env: `TELEGRAM_WEBHOOK_SECRET` (docs/DEPLOYMENT.md). `npm test` 87/87 (4
+new), typecheck and build clean.
+
+---
+
 ## 2026-09-20
 
 **Six more payment methods in the client "Make a payment" dialog, no migration.**

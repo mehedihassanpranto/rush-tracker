@@ -39,6 +39,7 @@ import { Route as AgencySearchIndexRouteImport } from './routes/agency/search/in
 import { Route as AgencySettingsIndexRouteImport } from './routes/agency/settings/index'
 import { Route as AgencyUsersIndexRouteImport } from './routes/agency/users/index'
 import { Route as ApiCronMetaSyncRouteImport } from './routes/api/cron/meta-sync'
+import { Route as ApiTelegramWebhookRouteImport } from './routes/api/telegram/webhook'
 import { Route as ClientAdAccountsIndexRouteImport } from './routes/client/ad-accounts/index'
 import { Route as ClientDueIndexRouteImport } from './routes/client/due/index'
 import { Route as ClientLimitRequestsIndexRouteImport } from './routes/client/limit-requests/index'
@@ -210,6 +211,11 @@ const ApiCronMetaSyncRoute = ApiCronMetaSyncRouteImport.update({
   path: '/api/cron/meta-sync',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTelegramWebhookRoute = ApiTelegramWebhookRouteImport.update({
+  id: '/api/telegram/webhook',
+  path: '/api/telegram/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ClientAdAccountsIndexRoute = ClientAdAccountsIndexRouteImport.update({
   id: '/ad-accounts/',
   path: '/ad-accounts/',
@@ -323,6 +329,7 @@ export interface FileRoutesByFullPath {
   '/agency/limit-requests/$requestId': typeof AgencyLimitRequestsRequestIdRoute
   '/agency/payments/$paymentId': typeof AgencyPaymentsPaymentIdRoute
   '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
+  '/api/telegram/webhook': typeof ApiTelegramWebhookRoute
   '/platform/ad-accounts/$accountId': typeof PlatformAdAccountsAccountIdRoute
   '/platform/limit-requests/$requestId': typeof PlatformLimitRequestsRequestIdRoute
   '/agency/ad-accounts/': typeof AgencyAdAccountsIndexRoute
@@ -368,6 +375,7 @@ export interface FileRoutesByTo {
   '/agency/limit-requests/$requestId': typeof AgencyLimitRequestsRequestIdRoute
   '/agency/payments/$paymentId': typeof AgencyPaymentsPaymentIdRoute
   '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
+  '/api/telegram/webhook': typeof ApiTelegramWebhookRoute
   '/platform/ad-accounts/$accountId': typeof PlatformAdAccountsAccountIdRoute
   '/platform/limit-requests/$requestId': typeof PlatformLimitRequestsRequestIdRoute
   '/agency/ad-accounts': typeof AgencyAdAccountsIndexRoute
@@ -418,6 +426,7 @@ export interface FileRoutesById {
   '/agency/limit-requests/$requestId': typeof AgencyLimitRequestsRequestIdRoute
   '/agency/payments/$paymentId': typeof AgencyPaymentsPaymentIdRoute
   '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
+  '/api/telegram/webhook': typeof ApiTelegramWebhookRoute
   '/platform/ad-accounts/$accountId': typeof PlatformAdAccountsAccountIdRoute
   '/platform/limit-requests/$requestId': typeof PlatformLimitRequestsRequestIdRoute
   '/agency/ad-accounts/': typeof AgencyAdAccountsIndexRoute
@@ -468,6 +477,7 @@ export interface FileRouteTypes {
     | '/agency/limit-requests/$requestId'
     | '/agency/payments/$paymentId'
     | '/api/cron/meta-sync'
+    | '/api/telegram/webhook'
     | '/platform/ad-accounts/$accountId'
     | '/platform/limit-requests/$requestId'
     | '/agency/ad-accounts/'
@@ -513,6 +523,7 @@ export interface FileRouteTypes {
     | '/agency/limit-requests/$requestId'
     | '/agency/payments/$paymentId'
     | '/api/cron/meta-sync'
+    | '/api/telegram/webhook'
     | '/platform/ad-accounts/$accountId'
     | '/platform/limit-requests/$requestId'
     | '/agency/ad-accounts'
@@ -562,6 +573,7 @@ export interface FileRouteTypes {
     | '/agency/limit-requests/$requestId'
     | '/agency/payments/$paymentId'
     | '/api/cron/meta-sync'
+    | '/api/telegram/webhook'
     | '/platform/ad-accounts/$accountId'
     | '/platform/limit-requests/$requestId'
     | '/agency/ad-accounts/'
@@ -603,6 +615,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SubscriptionSuspendedRoute: typeof SubscriptionSuspendedRoute
   ApiCronMetaSyncRoute: typeof ApiCronMetaSyncRoute
+  ApiTelegramWebhookRoute: typeof ApiTelegramWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -815,6 +828,13 @@ declare module '@tanstack/react-router' {
       path: '/api/cron/meta-sync'
       fullPath: '/api/cron/meta-sync'
       preLoaderRoute: typeof ApiCronMetaSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/telegram/webhook': {
+      id: '/api/telegram/webhook'
+      path: '/api/telegram/webhook'
+      fullPath: '/api/telegram/webhook'
+      preLoaderRoute: typeof ApiTelegramWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/client/ad-accounts/': {
@@ -1068,6 +1088,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SubscriptionSuspendedRoute: SubscriptionSuspendedRoute,
   ApiCronMetaSyncRoute: ApiCronMetaSyncRoute,
+  ApiTelegramWebhookRoute: ApiTelegramWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
