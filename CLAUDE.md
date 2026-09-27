@@ -3419,6 +3419,58 @@ bug fixes, and anything else that isn't a whole new named feature.
   5 new unit tests for the event-type catalog (`event-types.test.ts`).
   `npm test`: 136/136, typecheck and build clean. On branch
   `telegram-preferences-and-log`, not yet merged — awaiting review.
+- **Split into a shared bot and a separate platform-only bot (post-Phase-8
+  addition): done, pending owner review, no migration.** Prompted by the
+  platform owner's personal Telegram account hitting Telegram's own
+  account-side "restricted access" block (confirmed via `@SpamBot`, not a
+  bug here — `getMe`/`getWebhookInfo` on the shared bot were both healthy
+  the whole time) — the owner's call was a dedicated platform bot rather
+  than depending on any one personal account.
+  **THE RULE: `platform_admin` talks to `TELEGRAM_PLATFORM_BOT_TOKEN`;
+  `agency` and `client` talk to `TELEGRAM_BOT_TOKEN` (the original, shared
+  bot) — structurally, via `botKindFor(recipientType)`
+  (`src/lib/telegram/recipients.ts`), never by reading a global token
+  directly.** Every Bot-API-touching function (`telegramApi`,
+  `sendTelegramText`, `getBotUsername`, `deliver` in `telegram.service.ts`)
+  takes or derives a `TelegramBotKind` (`'shared' | 'platform'`) now,
+  making it impossible to accidentally send a platform notification
+  through the bot agencies and clients also use. The two tokens are
+  independently optional — either bot works with the other unconfigured.
+  New webhook route `src/routes/api/telegram/webhook/platform.ts`,
+  byte-similar to the existing `webhook.ts`, checking
+  `TELEGRAM_PLATFORM_BOT_TOKEN` instead and calling
+  `handleTelegramUpdate(update, 'platform')`. **Both webhooks share
+  `TELEGRAM_WEBHOOK_SECRET`** — deliberate, not an oversight: the two are
+  told apart by which URL Telegram calls, and the secret only proves "this
+  came from Telegram", so a second secret would add a config knob with no
+  security benefit.
+  `handleTelegramUpdate()`/`handleStart()` (`telegram-link.service.ts`) now
+  take the bot kind and **refuse a `/start` token minted for the other
+  bot** rather than silently linking it — Telegram requires replying
+  through the same bot that received a message, so a chat_id reached via
+  bot A means nothing to bot B; linking it anyway would create a
+  subscription that can never actually receive anything, forever, with no
+  visible error beyond a permanently-failing send. `deactivateChat()` and
+  the supergroup-migration handler are now scoped via
+  `recipientTypesForBot(kind)` too — **a private chat's numeric `chat.id`
+  is the SAME value regardless of which bot it's talking to** (it's the
+  person's own Telegram user id, not bot-specific), so an unscoped
+  `my_chat_member`/migration update from bot A could otherwise deactivate
+  or move bot B's subscription for that same person. Same reasoning
+  applies to a group that's added both bots.
+  `getTelegramBotStatusFn`/`registerTelegramWebhookFn` both gained a
+  required `kind` parameter; `TelegramBotStatusCard` gained a `kind` prop
+  and Platform Settings now renders it twice — one card per bot, each with
+  its own Register-webhook action and linked-chat counts scoped to only
+  the recipient types that bot actually serves (showing "30 agency" on the
+  platform bot's own card would describe chats that have nothing to do
+  with it).
+  3 new unit tests (`recipients.test.ts`) for `botKindFor`/
+  `recipientTypesForBot` — including that the two bots' recipient-type
+  sets never overlap. `npm test`: 139/139, typecheck and build clean.
+  **Not yet registered on the live platform bot** — that's the
+  owner's own "Register webhook" click on Platform Settings after this
+  merges and deploys, same as the shared bot's own setup.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

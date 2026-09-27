@@ -12,10 +12,11 @@ import {
   requirePlatformAdmin,
 } from '@/server/auth/guards.server'
 import { writeAudit } from '@/server/audit/audit.service'
-import { telegramDeepLink } from '@/lib/telegram/recipients'
-import type { TelegramScope } from '@/lib/telegram/recipients'
+import { botKindFor, recipientTypesForBot, telegramDeepLink } from '@/lib/telegram/recipients'
+import type { TelegramBotKind, TelegramScope } from '@/lib/telegram/recipients'
 import { eventTypesFor, isKnownEventType } from '@/lib/telegram/event-types'
 import {
+  botToken,
   getBotUsername,
   notifyTelegram,
   telegramApi,
@@ -117,7 +118,9 @@ export const getTelegramConnectionFn = createServerFn({ method: 'GET' })
       .order('linked_at', { ascending: false })
     if (error) throw new Error(error.message)
     return {
-      available: Boolean(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_WEBHOOK_SECRET),
+      available: Boolean(
+        botToken(botKindFor(columns.recipient_type)) && env.TELEGRAM_WEBHOOK_SECRET,
+      ),
       chats: (rows ?? []) as Array<TelegramChatLink>,
     }
   })
@@ -222,11 +225,12 @@ export const createTelegramLinkFn = createServerFn({ method: 'POST' })
   .validator(scopeSchema.extend({ target: z.enum(['private', 'group']) }))
   .handler(async ({ data }): Promise<{ url: string; expiresAt: string }> => {
     const { actorId, columns } = await resolveScope(data.scope)
+    const kind = botKindFor(columns.recipient_type)
     const env = getServerEnv()
-    if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_WEBHOOK_SECRET) {
+    if (!botToken(kind) || !env.TELEGRAM_WEBHOOK_SECRET) {
       throw new Error('Telegram is not set up on Rush Tracker yet. Contact the platform owner.')
     }
-    const username = await getBotUsername()
+    const username = await getBotUsername(kind)
     if (!username) {
       throw new Error('Could not reach the Telegram bot. Try again in a moment.')
     }
@@ -287,7 +291,7 @@ export const sendTelegramTestFn = createServerFn({ method: 'POST' })
     const before = new Date().toISOString()
     const text = '🧪 Test message from Rush Tracker — notifications are working.'
     if (columns.recipient_type === 'platform_admin') {
-      await notifyTelegramToUser(columns.recipient_id, text)
+      await notifyTelegramToUser(columns.recipient_id, text, 'platform')
     } else {
       await notifyTelegram({
         eventType: 'test',
@@ -319,7 +323,7 @@ export const sendTelegramTestFn = createServerFn({ method: 'POST' })
   })
 
 /** One platform admin's own chats only — used by the test message. */
-async function notifyTelegramToUser(userId: string, text: string) {
+async function notifyTelegramToUser(userId: string, text: string, kind: TelegramBotKind) {
   const admin = getSupabaseAdminClient()
   const { data: subs } = await admin
     .from('telegram_subscriptions')
@@ -328,7 +332,7 @@ async function notifyTelegramToUser(userId: string, text: string) {
     .eq('recipient_id', userId)
     .eq('is_active', true)
   for (const sub of (subs ?? []) as Array<{ id: string; telegram_chat_id: string }>) {
-    const res = await telegramApi('sendMessage', { chat_id: sub.telegram_chat_id, text })
+    const res = await telegramApi('sendMessage', { chat_id: sub.telegram_chat_id, text }, kind)
     await admin.from('notification_events').insert({
       event_type: 'test',
       recipient_type: 'platform_admin',
@@ -372,24 +376,30 @@ export interface TelegramBotStatus {
 
 const WEBHOOK_SECRET_PATTERN = /^[A-Za-z0-9_-]{1,256}$/
 
-function expectedWebhookUrl(): string {
-  return `${getRequestUrl().origin}/api/telegram/webhook`
+function expectedWebhookUrl(kind: TelegramBotKind): string {
+  const path = kind === 'platform' ? '/api/telegram/webhook/platform' : '/api/telegram/webhook'
+  return `${getRequestUrl().origin}${path}`
 }
 
-export const getTelegramBotStatusFn = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<TelegramBotStatus> => {
+const botStatusSchema = z.object({ kind: z.enum(['shared', 'platform']) })
+
+export const getTelegramBotStatusFn = createServerFn({ method: 'GET' })
+  .validator(botStatusSchema)
+  .handler(async ({ data }): Promise<TelegramBotStatus> => {
     await requirePlatformAdmin()
     const env = getServerEnv()
     const admin = getSupabaseAdminClient()
+    const kind = data.kind
+    const token = botToken(kind)
 
     let botUsername: string | null = null
     let apiError: string | null = null
     let webhook: TelegramBotStatus['webhook'] = null
-    if (env.TELEGRAM_BOT_TOKEN) {
-      const me = await telegramApi('getMe')
+    if (token) {
+      const me = await telegramApi('getMe', {}, kind)
       if (me.ok) {
         botUsername = (me.result as { username?: string }).username ?? null
-        const info = await telegramApi('getWebhookInfo')
+        const info = await telegramApi('getWebhookInfo', {}, kind)
         if (info.ok) {
           const r = info.result as {
             url: string
@@ -413,10 +423,15 @@ export const getTelegramBotStatusFn = createServerFn({ method: 'GET' }).handler(
       }
     }
 
+    // Scoped to only the recipient types THIS bot could ever own — showing
+    // "agency: 30" on the platform bot's own card would describe chats that
+    // have nothing to do with it.
+    const relevantTypes = recipientTypesForBot(kind)
     const { data: subs } = await admin
       .from('telegram_subscriptions')
       .select('recipient_type, recipient_id, telegram_chat_id')
       .eq('is_active', true)
+      .in('recipient_type', relevantTypes)
     const subRows = (subs ?? []) as Array<{
       recipient_type: 'platform_admin' | 'agency' | 'client'
       recipient_id: string
@@ -429,24 +444,29 @@ export const getTelegramBotStatusFn = createServerFn({ method: 'GET' }).handler(
       .from('notification_events')
       .select('id, event_type, recipient_type, created_at, telegram_response')
       .eq('status', 'failed')
+      .in('recipient_type', relevantTypes)
       .order('created_at', { ascending: false })
       .limit(10)
 
     return {
-      tokenConfigured: Boolean(env.TELEGRAM_BOT_TOKEN),
+      tokenConfigured: Boolean(token),
       webhookSecretConfigured: Boolean(env.TELEGRAM_WEBHOOK_SECRET),
       webhookSecretValid: WEBHOOK_SECRET_PATTERN.test(env.TELEGRAM_WEBHOOK_SECRET ?? ''),
       botUsername,
       apiError,
-      expectedWebhookUrl: expectedWebhookUrl(),
+      expectedWebhookUrl: expectedWebhookUrl(kind),
       webhook,
-      legacyChatConfigured: Boolean(env.TELEGRAM_CHAT_ID),
-      legacyChatImported: subRows.some(
-        (s) =>
-          s.recipient_type === 'agency' &&
-          s.recipient_id === DEPLOYMENT_ORGANIZATION_ID &&
-          s.telegram_chat_id === env.TELEGRAM_CHAT_ID,
-      ),
+      // The legacy single-chat import only ever applied to the shared bot —
+      // the platform bot never had a predecessor to import from.
+      legacyChatConfigured: kind === 'shared' && Boolean(env.TELEGRAM_CHAT_ID),
+      legacyChatImported:
+        kind === 'shared' &&
+        subRows.some(
+          (s) =>
+            s.recipient_type === 'agency' &&
+            s.recipient_id === DEPLOYMENT_ORGANIZATION_ID &&
+            s.telegram_chat_id === env.TELEGRAM_CHAT_ID,
+        ),
       subscriptionCounts,
       recentFailures: (
         (failures ?? []) as Array<{
@@ -464,29 +484,35 @@ export const getTelegramBotStatusFn = createServerFn({ method: 'GET' }).handler(
         error: f.telegram_response?.description ?? null,
       })),
     }
-  },
-)
+  })
 
-export const registerTelegramWebhookFn = createServerFn({ method: 'POST' }).handler(
-  async () => {
+export const registerTelegramWebhookFn = createServerFn({ method: 'POST' })
+  .validator(botStatusSchema)
+  .handler(async ({ data }) => {
+    const kind = data.kind
     const actor = await requirePlatformAdmin()
     const env = getServerEnv()
-    if (!env.TELEGRAM_BOT_TOKEN) throw new Error('TELEGRAM_BOT_TOKEN is not set')
+    const token = botToken(kind)
+    if (!token) throw new Error(`${kind === 'platform' ? 'TELEGRAM_PLATFORM_BOT_TOKEN' : 'TELEGRAM_BOT_TOKEN'} is not set`)
     if (!env.TELEGRAM_WEBHOOK_SECRET) throw new Error('TELEGRAM_WEBHOOK_SECRET is not set')
     if (!WEBHOOK_SECRET_PATTERN.test(env.TELEGRAM_WEBHOOK_SECRET)) {
       throw new Error(
         'TELEGRAM_WEBHOOK_SECRET may only contain A–Z, a–z, 0–9, _ and - (max 256). Try `openssl rand -hex 32`.',
       )
     }
-    const url = expectedWebhookUrl()
+    const url = expectedWebhookUrl(kind)
     if (!url.startsWith('https://')) {
       throw new Error(`Telegram only accepts HTTPS webhooks — this deployment is at ${url}`)
     }
-    const res = await telegramApi('setWebhook', {
-      url,
-      secret_token: env.TELEGRAM_WEBHOOK_SECRET,
-      allowed_updates: ['message', 'my_chat_member'],
-    })
+    const res = await telegramApi(
+      'setWebhook',
+      {
+        url,
+        secret_token: env.TELEGRAM_WEBHOOK_SECRET,
+        allowed_updates: ['message', 'my_chat_member'],
+      },
+      kind,
+    )
     if (!res.ok) throw new Error(res.description ?? 'setWebhook failed')
 
     await writeAudit({
@@ -494,11 +520,10 @@ export const registerTelegramWebhookFn = createServerFn({ method: 'POST' }).hand
       organizationId: actor.organizationId,
       action: 'TELEGRAM_WEBHOOK_REGISTERED',
       entityType: 'PLATFORM_SETTINGS',
-      newValues: { url },
+      newValues: { url, kind },
     })
     return { url }
-  },
-)
+  })
 
 /**
  * One-time migration of the old single deployment chat (TELEGRAM_CHAT_ID)

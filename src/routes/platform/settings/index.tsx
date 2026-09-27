@@ -33,7 +33,8 @@ function PlatformSettingsPage() {
       />
       <IntegrationSettingsCard scope="platform" />
       <TelegramConnectCard scope="platform" />
-      <TelegramBotStatusCard />
+      <TelegramBotStatusCard kind="platform" />
+      <TelegramBotStatusCard kind="shared" />
     </div>
   )
 }

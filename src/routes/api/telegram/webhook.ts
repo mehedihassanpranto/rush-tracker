@@ -4,9 +4,11 @@ import { getServerEnv } from '@/lib/env/env.server'
 import { handleTelegramUpdate } from '@/server/telegram/telegram-link.service'
 
 /**
- * Telegram Bot API webhook — registered from the platform panel's Settings
- * ("Register webhook"), which calls setWebhook with this URL and
- * TELEGRAM_WEBHOOK_SECRET as its secret_token.
+ * Telegram Bot API webhook for the SHARED bot (agency + client chats) —
+ * registered from the platform panel's Settings ("Register webhook"), which
+ * calls setWebhook with this URL and TELEGRAM_WEBHOOK_SECRET as its
+ * secret_token. See ./webhook/platform.ts for the platform-admin bot's own
+ * webhook — a separate bot, a separate URL, deliberately never this one.
  *
  * Telegram sends that secret back as X-Telegram-Bot-Api-Secret-Token on
  * every call; it is the only thing standing between this endpoint and anyone
@@ -44,7 +46,7 @@ export const Route = createFileRoute('/api/telegram/webhook')({
 
         try {
           const update = await request.json()
-          await handleTelegramUpdate(update)
+          await handleTelegramUpdate(update, 'shared')
         } catch (err) {
           console.error('[telegram/webhook] failed to handle update', err)
         }

@@ -45,6 +45,39 @@ flag. Flagged both mismatches (the spec's own text asked to confirm rather
 than guess on exactly these two points) and got a direct answer: keep the
 working system, add only what it was actually missing. `npm test`: 136/136.
 
+**Split into two bots: a shared one (agency + client, unchanged) and a new,
+separate platform-only bot.** Prompted by the platform admin's personal
+Telegram account hitting Telegram's own "restricted access" block on the
+shared bot — confirmed via `@SpamBot` etc. to be an account-side restriction,
+not a code problem, but the owner's call was to stop depending on any one
+personal account entirely and give the platform its own dedicated bot.
+
+`TELEGRAM_PLATFORM_BOT_TOKEN` is a new, independent env var — the platform
+bot works with no shared bot configured and vice versa. `botKindFor()`
+(`src/lib/telegram/recipients.ts`) derives which bot a recipient type talks
+to (`platform_admin` → platform bot, `agency`/`client` → shared bot,
+structurally, not by config); every function that touches the Bot API
+(`telegramApi`, `sendTelegramText`, `getBotUsername`, `deliver`) now takes or
+derives that kind rather than reading one global token.
+
+New webhook route `/api/telegram/webhook/platform` for the platform bot,
+alongside the existing `/api/telegram/webhook` for the shared one — same
+`TELEGRAM_WEBHOOK_SECRET` for both (the URL tells them apart, not the
+secret). `handleTelegramUpdate()` takes the bot kind and refuses a `/start`
+token minted for the other bot instead of silently creating a subscription
+that could never actually receive anything (Telegram requires replying
+through the same bot that received the message — a chat_id reached via one
+bot means nothing to the other). `deactivateChat()` and the supergroup
+migration handler are now scoped to only the recipient types a given bot
+could own too: a private chat's `chat.id` is the same numeric value
+regardless of which bot it's talking to, so an unscoped update could
+otherwise deactivate the OTHER bot's subscription for the same person.
+
+Platform Settings now shows two "Telegram bot" diagnostics cards, one per
+bot, each with its own Register webhook action and its own linked-chat
+counts scoped to only the recipient types that bot serves. `npm test`:
+139/139 (3 new for the bot-kind routing).
+
 ---
 
 ## 2026-09-27
