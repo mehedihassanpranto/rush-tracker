@@ -6,6 +6,21 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-09-27
+
+**Migrations `000046` and `000047` applied to the live project**, via
+`supabase db push` after reading both in full. `000046`'s reversal netting was
+checked against `reverse_financial_transaction` first (reversal rows copy the
+original's positive `usd_amount` and point at it by id, and are
+duplicate-guarded, so nothing is subtracted twice). Verified directly
+afterwards: `telegram_subscriptions`, `telegram_link_requests` and
+`notification_events` exist and return nothing to the anon key; Gopal (CL-0086)
+now shows `total_approved_usd` $280 instead of the double-counted $560, with due
+unchanged at ৳0. Migration history is in sync through `000047`. The two empty
+per-user Telegram tables from `000045` are still in the database, unused.
+
+---
+
 ## 2026-09-26
 
 **Multi-role Telegram notifications — one bot, per-recipient chats (Phases

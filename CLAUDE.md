@@ -3301,8 +3301,8 @@ bug fixes, and anything else that isn't a whole new named feature.
   rather than a subscription problem. **Flagged, not changed**: whether
   fail-closed is the right tradeoff there is the owner's call.
 - **Multi-role Telegram notifications (post-Phase-8 addition): done, pending
-  owner review, migration `20260723000047` NOT YET APPLIED (blocked — see
-  end).** One bot, per-recipient chats; replaces the single env
+  owner review. Migration `20260723000047` confirmed applied to the live
+  project 2026-09-27.** One bot, per-recipient chats; replaces the single env
   `TELEGRAM_CHAT_ID`. `notifyTelegram({ eventType, recipient, text, payload })`
   (`src/server/telegram/telegram.service.ts`), recipient is
   `{type:'platform_admin'}` (broadcast to every ACTIVE platform admin, looked
@@ -3335,8 +3335,12 @@ bug fixes, and anything else that isn't a whole new named feature.
   — it reads `supabase_migrations.schema_migrations`), but their app code was
   not recoverable. 000045 is an overlapping per-user Telegram design
   (`telegram_link_tokens` + `user_telegram_links`, both empty) — hence this
-  migration's token table is `telegram_link_requests`. Pending: 000046
-  (untracked, not part of this work) and 000047.
+  migration's token table is `telegram_link_requests`. 000046 (reversal
+  netting in `client_financials().total_approved_usd`) and 000047 were both
+  applied via `supabase db push` on 2026-09-27 and verified directly: the three
+  tables exist, the anon key reads nothing from them, and CL-0086 (Gopal) now
+  reports `total_approved_usd` 280, not 560. Migration history is fully in sync
+  through 000047.
   **Update, same day: the "not recoverable" app code was found after all.**
   It existed uncommitted on a different machine running this same project —
   the Platform USD/BDT stock ledger ("Finance & Accounts", migrations
