@@ -3,6 +3,7 @@ import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { requirePlatformAdmin } from '@/server/auth/guards.server'
 import { writeAudit } from '@/server/audit/audit.service'
 import { notifyAdmins } from '@/server/notifications/notification.service'
+import { notifyTelegram } from '@/server/telegram/telegram.service'
 import { grantPoolAccountToOrganization } from '@/server/platform/pool-grant.service'
 import {
   accountRequestFulfillSchema,
@@ -162,6 +163,12 @@ export const fulfillAccountRequestFn = createServerFn({ method: 'POST' })
       entityType: 'AD_ACCOUNT',
       entityId: data.ad_account_id,
     })
+    await notifyTelegram({
+      eventType: 'account_request.fulfilled',
+      recipient: { type: 'agency', organizationId: request.organization_id },
+      text: `✅ Your ad account request ${request.request_number} was approved: ${granted.accountCode} "${granted.accountName}" is now assigned to your agency.`,
+      payload: { account_request_id: data.id, ad_account_id: data.ad_account_id },
+    })
     return { ok: true }
   })
 
@@ -203,6 +210,12 @@ export const rejectAccountRequestFn = createServerFn({ method: 'POST' })
       message: `${row.request_number}: ${data.reason}`,
       entityType: 'PLATFORM_ACCOUNT_REQUEST',
       entityId: data.id,
+    })
+    await notifyTelegram({
+      eventType: 'account_request.rejected',
+      recipient: { type: 'agency', organizationId: row.organization_id },
+      text: `❌ Your ad account request ${row.request_number} was declined: ${data.reason}`,
+      payload: { account_request_id: data.id },
     })
     return { ok: true }
   })

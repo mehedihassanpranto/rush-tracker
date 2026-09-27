@@ -7,6 +7,7 @@ import {
   Gauge,
   HandCoins,
   Inbox,
+  Landmark,
   LayoutDashboard,
   Megaphone,
   ScrollText,
@@ -57,6 +58,7 @@ export const PLATFORM_NAV: Array<NavItem> = [
   { label: 'Ad Account Pool', icon: Megaphone, to: '/platform/ad-accounts' },
   { label: 'Account Requests', icon: Inbox, to: '/platform/account-requests' },
   { label: 'Limit Requests', icon: Gauge, to: '/platform/limit-requests' },
+  { label: 'Finance & Accounts', icon: Landmark, to: '/platform/finance' },
   { label: 'Settings', icon: Settings, to: '/platform/settings' },
 ]
 

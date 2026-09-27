@@ -37,6 +37,9 @@ Set these for **Production** (and Preview if you use it):
 | `META_BUSINESS_ID` | Business Portfolio ID | **Server only**, optional (same as above) |
 | `META_API_VERSION` | e.g. `v21.0` | **Server only**, optional — defaults to `v21.0` if unset |
 | `CRON_SECRET` | Random string (`openssl rand -hex 32`) | **Server only**, optional — without it, `/api/cron/meta-sync` returns 503 instead of running |
+| `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather | **Server only**, optional — without it every Telegram send is logged as failed and linking is unavailable |
+| `TELEGRAM_WEBHOOK_SECRET` | Random string (`openssl rand -hex 32` — only `A-Z a-z 0-9 _ -` allowed) | **Server only**, optional — required for the `/api/telegram/webhook` endpoint (503 without it). After setting both, open **Platform → Settings → Telegram bot** and click **Register webhook** |
+| `TELEGRAM_CHAT_ID` | Legacy single chat id | **Server only**, legacy — read only by Platform → Settings → "Import legacy chat". Remove once imported |
 
 Notes:
 - The server env loader (`env.server.ts`) reads `SUPABASE_URL` / `SUPABASE_ANON_KEY`

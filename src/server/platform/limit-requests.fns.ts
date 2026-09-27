@@ -4,6 +4,8 @@ import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { requirePlatformAdmin } from '@/server/auth/guards.server'
 import { writeAudit } from '@/server/audit/audit.service'
 import { notifyClientMembers } from '@/server/notifications/notification.service'
+import { formatUsd } from '@/lib/money/money'
+import { notifyTelegram } from '@/server/telegram/telegram.service'
 import { adAccountUsdRate } from '@/server/exchange-rates/rate.service'
 import { signProofUrl } from '@/server/storage/storage.service'
 import {
@@ -144,13 +146,17 @@ export const getPlatformLimitProofUrlFn = createServerFn({ method: 'POST' })
 async function loadPlatformRequestForAction(admin: SupabaseClient, id: string) {
   const { data: req } = await admin
     .from('limit_requests')
-    .select('status, organization_id, ad_account:ad_accounts(is_platform)')
+    .select(
+      'status, organization_id, request_number, client:clients(name), ad_account:ad_accounts(is_platform, account_code)',
+    )
     .eq('id', id)
     .maybeSingle()
   const r = req as unknown as {
     status: string
     organization_id: string
-    ad_account: { is_platform: boolean } | null
+    request_number: string
+    client: { name: string } | null
+    ad_account: { is_platform: boolean; account_code: string } | null
   } | null
   if (!r || !r.ad_account?.is_platform) {
     throw new Error('Request not found')
@@ -197,6 +203,14 @@ export const approvePlatformLimitRequestFn = createServerFn({ method: 'POST' })
       paymentId,
       existing.organization_id,
     )
+    // The client hears through finishLimitRequestApproval; the agency that
+    // escalated it hears here — to that one agency only.
+    await notifyTelegram({
+      eventType: 'limit_request.platform_approved',
+      recipient: { type: 'agency', organizationId: existing.organization_id },
+      text: `✅ The platform approved ${existing.request_number} for ${existing.client?.name ?? 'your client'}: ${formatUsd(data.approved_amount_usd)} on ${existing.ad_account?.account_code}.`,
+      payload: { limit_request_id: data.id, request_number: existing.request_number },
+    })
     return { ledger_id: ledgerId, payment_id: paymentId }
   })
 
@@ -244,6 +258,19 @@ export const rejectPlatformLimitRequestFn = createServerFn({ method: 'POST' })
       message: `${rejected.request_number}: ${data.rejection_reason}`,
       entityType: 'LIMIT_REQUEST',
       entityId: data.id,
+    })
+    const payload = { limit_request_id: data.id, request_number: rejected.request_number }
+    await notifyTelegram({
+      eventType: 'limit_request.platform_rejected',
+      recipient: { type: 'agency', organizationId: existing.organization_id },
+      text: `❌ The platform rejected ${rejected.request_number} for ${existing.client?.name ?? 'your client'}: ${data.rejection_reason}`,
+      payload,
+    })
+    await notifyTelegram({
+      eventType: 'limit_request.rejected',
+      recipient: { type: 'client', clientId: rejected.client_id },
+      text: `❌ Your limit request ${rejected.request_number} was rejected: ${data.rejection_reason}`,
+      payload,
     })
     return { ok: true }
   })

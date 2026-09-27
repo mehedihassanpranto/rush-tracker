@@ -18,6 +18,11 @@ export const RESET_CONFIRM_PHRASE = 'DELETE ALL DATA'
  * even though the Employees FEATURE was removed on 2026-09-15**: the tables
  * and their FKs still exist, so dropping them from this list would leave rows
  * behind and break the delete order if the feature ever comes back.
+ *
+ * usd_sales is NOT listed, on purpose: it is the platform's own ledger of what
+ * it sold this agency, not the agency's business data, so an agency clearing
+ * its data must not erase the platform's revenue records. Its ad_account_id is
+ * ON DELETE SET NULL, so wiping the agency's accounts never blocks on it.
  */
 const WIPE_ORDER = [
   'notifications',

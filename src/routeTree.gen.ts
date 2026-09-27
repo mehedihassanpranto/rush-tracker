@@ -39,6 +39,7 @@ import { Route as AgencySearchIndexRouteImport } from './routes/agency/search/in
 import { Route as AgencySettingsIndexRouteImport } from './routes/agency/settings/index'
 import { Route as AgencyUsersIndexRouteImport } from './routes/agency/users/index'
 import { Route as ApiCronMetaSyncRouteImport } from './routes/api/cron/meta-sync'
+import { Route as ApiTelegramWebhookRouteImport } from './routes/api/telegram/webhook'
 import { Route as ClientAdAccountsIndexRouteImport } from './routes/client/ad-accounts/index'
 import { Route as ClientDueIndexRouteImport } from './routes/client/due/index'
 import { Route as ClientLimitRequestsIndexRouteImport } from './routes/client/limit-requests/index'
@@ -50,6 +51,7 @@ import { Route as ClientTeamIndexRouteImport } from './routes/client/team/index'
 import { Route as PlatformAccountRequestsIndexRouteImport } from './routes/platform/account-requests/index'
 import { Route as PlatformAdAccountsIndexRouteImport } from './routes/platform/ad-accounts/index'
 import { Route as PlatformAdAccountsAccountIdRouteImport } from './routes/platform/ad-accounts/$accountId'
+import { Route as PlatformFinanceIndexRouteImport } from './routes/platform/finance/index'
 import { Route as PlatformLimitRequestsIndexRouteImport } from './routes/platform/limit-requests/index'
 import { Route as PlatformLimitRequestsRequestIdRouteImport } from './routes/platform/limit-requests/$requestId'
 import { Route as PlatformOrganizationsIndexRouteImport } from './routes/platform/organizations/index'
@@ -210,6 +212,11 @@ const ApiCronMetaSyncRoute = ApiCronMetaSyncRouteImport.update({
   path: '/api/cron/meta-sync',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTelegramWebhookRoute = ApiTelegramWebhookRouteImport.update({
+  id: '/api/telegram/webhook',
+  path: '/api/telegram/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ClientAdAccountsIndexRoute = ClientAdAccountsIndexRouteImport.update({
   id: '/ad-accounts/',
   path: '/ad-accounts/',
@@ -270,6 +277,11 @@ const PlatformAdAccountsAccountIdRoute =
     path: '/ad-accounts/$accountId',
     getParentRoute: () => PlatformRouteRoute,
   } as any)
+const PlatformFinanceIndexRoute = PlatformFinanceIndexRouteImport.update({
+  id: '/finance/',
+  path: '/finance/',
+  getParentRoute: () => PlatformRouteRoute,
+} as any)
 const PlatformLimitRequestsIndexRoute =
   PlatformLimitRequestsIndexRouteImport.update({
     id: '/limit-requests/',
@@ -323,6 +335,7 @@ export interface FileRoutesByFullPath {
   '/agency/limit-requests/$requestId': typeof AgencyLimitRequestsRequestIdRoute
   '/agency/payments/$paymentId': typeof AgencyPaymentsPaymentIdRoute
   '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
+  '/api/telegram/webhook': typeof ApiTelegramWebhookRoute
   '/platform/ad-accounts/$accountId': typeof PlatformAdAccountsAccountIdRoute
   '/platform/limit-requests/$requestId': typeof PlatformLimitRequestsRequestIdRoute
   '/agency/ad-accounts/': typeof AgencyAdAccountsIndexRoute
@@ -348,6 +361,7 @@ export interface FileRoutesByFullPath {
   '/client/team/': typeof ClientTeamIndexRoute
   '/platform/account-requests/': typeof PlatformAccountRequestsIndexRoute
   '/platform/ad-accounts/': typeof PlatformAdAccountsIndexRoute
+  '/platform/finance/': typeof PlatformFinanceIndexRoute
   '/platform/limit-requests/': typeof PlatformLimitRequestsIndexRoute
   '/platform/organizations/': typeof PlatformOrganizationsIndexRoute
   '/platform/settings/': typeof PlatformSettingsIndexRoute
@@ -368,6 +382,7 @@ export interface FileRoutesByTo {
   '/agency/limit-requests/$requestId': typeof AgencyLimitRequestsRequestIdRoute
   '/agency/payments/$paymentId': typeof AgencyPaymentsPaymentIdRoute
   '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
+  '/api/telegram/webhook': typeof ApiTelegramWebhookRoute
   '/platform/ad-accounts/$accountId': typeof PlatformAdAccountsAccountIdRoute
   '/platform/limit-requests/$requestId': typeof PlatformLimitRequestsRequestIdRoute
   '/agency/ad-accounts': typeof AgencyAdAccountsIndexRoute
@@ -393,6 +408,7 @@ export interface FileRoutesByTo {
   '/client/team': typeof ClientTeamIndexRoute
   '/platform/account-requests': typeof PlatformAccountRequestsIndexRoute
   '/platform/ad-accounts': typeof PlatformAdAccountsIndexRoute
+  '/platform/finance': typeof PlatformFinanceIndexRoute
   '/platform/limit-requests': typeof PlatformLimitRequestsIndexRoute
   '/platform/organizations': typeof PlatformOrganizationsIndexRoute
   '/platform/settings': typeof PlatformSettingsIndexRoute
@@ -418,6 +434,7 @@ export interface FileRoutesById {
   '/agency/limit-requests/$requestId': typeof AgencyLimitRequestsRequestIdRoute
   '/agency/payments/$paymentId': typeof AgencyPaymentsPaymentIdRoute
   '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
+  '/api/telegram/webhook': typeof ApiTelegramWebhookRoute
   '/platform/ad-accounts/$accountId': typeof PlatformAdAccountsAccountIdRoute
   '/platform/limit-requests/$requestId': typeof PlatformLimitRequestsRequestIdRoute
   '/agency/ad-accounts/': typeof AgencyAdAccountsIndexRoute
@@ -443,6 +460,7 @@ export interface FileRoutesById {
   '/client/team/': typeof ClientTeamIndexRoute
   '/platform/account-requests/': typeof PlatformAccountRequestsIndexRoute
   '/platform/ad-accounts/': typeof PlatformAdAccountsIndexRoute
+  '/platform/finance/': typeof PlatformFinanceIndexRoute
   '/platform/limit-requests/': typeof PlatformLimitRequestsIndexRoute
   '/platform/organizations/': typeof PlatformOrganizationsIndexRoute
   '/platform/settings/': typeof PlatformSettingsIndexRoute
@@ -468,6 +486,7 @@ export interface FileRouteTypes {
     | '/agency/limit-requests/$requestId'
     | '/agency/payments/$paymentId'
     | '/api/cron/meta-sync'
+    | '/api/telegram/webhook'
     | '/platform/ad-accounts/$accountId'
     | '/platform/limit-requests/$requestId'
     | '/agency/ad-accounts/'
@@ -493,6 +512,7 @@ export interface FileRouteTypes {
     | '/client/team/'
     | '/platform/account-requests/'
     | '/platform/ad-accounts/'
+    | '/platform/finance/'
     | '/platform/limit-requests/'
     | '/platform/organizations/'
     | '/platform/settings/'
@@ -513,6 +533,7 @@ export interface FileRouteTypes {
     | '/agency/limit-requests/$requestId'
     | '/agency/payments/$paymentId'
     | '/api/cron/meta-sync'
+    | '/api/telegram/webhook'
     | '/platform/ad-accounts/$accountId'
     | '/platform/limit-requests/$requestId'
     | '/agency/ad-accounts'
@@ -538,6 +559,7 @@ export interface FileRouteTypes {
     | '/client/team'
     | '/platform/account-requests'
     | '/platform/ad-accounts'
+    | '/platform/finance'
     | '/platform/limit-requests'
     | '/platform/organizations'
     | '/platform/settings'
@@ -562,6 +584,7 @@ export interface FileRouteTypes {
     | '/agency/limit-requests/$requestId'
     | '/agency/payments/$paymentId'
     | '/api/cron/meta-sync'
+    | '/api/telegram/webhook'
     | '/platform/ad-accounts/$accountId'
     | '/platform/limit-requests/$requestId'
     | '/agency/ad-accounts/'
@@ -587,6 +610,7 @@ export interface FileRouteTypes {
     | '/client/team/'
     | '/platform/account-requests/'
     | '/platform/ad-accounts/'
+    | '/platform/finance/'
     | '/platform/limit-requests/'
     | '/platform/organizations/'
     | '/platform/settings/'
@@ -603,6 +627,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SubscriptionSuspendedRoute: typeof SubscriptionSuspendedRoute
   ApiCronMetaSyncRoute: typeof ApiCronMetaSyncRoute
+  ApiTelegramWebhookRoute: typeof ApiTelegramWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -817,6 +842,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCronMetaSyncRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/telegram/webhook': {
+      id: '/api/telegram/webhook'
+      path: '/api/telegram/webhook'
+      fullPath: '/api/telegram/webhook'
+      preLoaderRoute: typeof ApiTelegramWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/client/ad-accounts/': {
       id: '/client/ad-accounts/'
       path: '/ad-accounts'
@@ -892,6 +924,13 @@ declare module '@tanstack/react-router' {
       path: '/ad-accounts/$accountId'
       fullPath: '/platform/ad-accounts/$accountId'
       preLoaderRoute: typeof PlatformAdAccountsAccountIdRouteImport
+      parentRoute: typeof PlatformRouteRoute
+    }
+    '/platform/finance/': {
+      id: '/platform/finance/'
+      path: '/finance'
+      fullPath: '/platform/finance/'
+      preLoaderRoute: typeof PlatformFinanceIndexRouteImport
       parentRoute: typeof PlatformRouteRoute
     }
     '/platform/limit-requests/': {
@@ -1033,6 +1072,7 @@ interface PlatformRouteRouteChildren {
   PlatformLimitRequestsRequestIdRoute: typeof PlatformLimitRequestsRequestIdRoute
   PlatformAccountRequestsIndexRoute: typeof PlatformAccountRequestsIndexRoute
   PlatformAdAccountsIndexRoute: typeof PlatformAdAccountsIndexRoute
+  PlatformFinanceIndexRoute: typeof PlatformFinanceIndexRoute
   PlatformLimitRequestsIndexRoute: typeof PlatformLimitRequestsIndexRoute
   PlatformOrganizationsIndexRoute: typeof PlatformOrganizationsIndexRoute
   PlatformSettingsIndexRoute: typeof PlatformSettingsIndexRoute
@@ -1046,6 +1086,7 @@ const PlatformRouteRouteChildren: PlatformRouteRouteChildren = {
   PlatformLimitRequestsRequestIdRoute: PlatformLimitRequestsRequestIdRoute,
   PlatformAccountRequestsIndexRoute: PlatformAccountRequestsIndexRoute,
   PlatformAdAccountsIndexRoute: PlatformAdAccountsIndexRoute,
+  PlatformFinanceIndexRoute: PlatformFinanceIndexRoute,
   PlatformLimitRequestsIndexRoute: PlatformLimitRequestsIndexRoute,
   PlatformOrganizationsIndexRoute: PlatformOrganizationsIndexRoute,
   PlatformSettingsIndexRoute: PlatformSettingsIndexRoute,
@@ -1068,6 +1109,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SubscriptionSuspendedRoute: SubscriptionSuspendedRoute,
   ApiCronMetaSyncRoute: ApiCronMetaSyncRoute,
+  ApiTelegramWebhookRoute: ApiTelegramWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

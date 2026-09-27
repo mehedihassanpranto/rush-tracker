@@ -83,7 +83,8 @@ deploy — see `docs/DEPLOYMENT.md` §2 for the full notes on each.
 | `META_BUSINESS_ID` | optional | **Server only** |
 | `META_API_VERSION` | optional (default `v21.0`) | **Server only** |
 | `TELEGRAM_BOT_TOKEN` | optional | **Server only** |
-| `TELEGRAM_CHAT_ID` | optional | **Server only** |
+| `TELEGRAM_WEBHOOK_SECRET` | optional, but required for linking to work | **Server only** |
+| `TELEGRAM_CHAT_ID` | optional, legacy — only used by "Import legacy chat" | **Server only** |
 
 ### ⚠ Set these BEFORE the first build, or you get a silent broken deploy
 
@@ -118,6 +119,12 @@ the app.
 The `META_*` variables are the **platform's** credentials (they point at the
 Business Portfolio holding the platform ad-account pool), not any one agency's.
 They can also be managed live from Platform → Settings without a redeploy.
+
+`TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET` are server-only, so — unlike
+the `VITE_` variables — setting or changing them only needs a **restart**, not a
+rebuild. After setting both and restarting, go to **Platform → Settings →
+Telegram bot** and click **Register webhook** once (again if the token ever
+changes) so Telegram knows to call `https://yourdomain/api/telegram/webhook`.
 
 ---
 

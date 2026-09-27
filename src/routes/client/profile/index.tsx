@@ -5,6 +5,7 @@ import { activeMemberships } from '@/lib/auth/types'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EditProfileDialog } from '@/components/client/edit-profile-dialog'
+import { TelegramConnectCard } from '@/components/shared/telegram/telegram-connect-card'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -85,6 +86,12 @@ function ProfilePage() {
       <p className="mt-4 text-xs text-muted-foreground">
         Email changes aren't supported here yet.
       </p>
+
+      {/* Linked to the client currently selected — a login belonging to
+          several clients connects each one separately. */}
+      <div className="mt-6">
+        <TelegramConnectCard scope="client" />
+      </div>
 
       <EditProfileDialog
         open={editOpen}

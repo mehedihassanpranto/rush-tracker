@@ -1,5 +1,6 @@
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { notifyClientMembers } from '@/server/notifications/notification.service'
+import { notifyTelegram } from '@/server/telegram/telegram.service'
 import { syncAndPersistAdAccountSpendCap } from '@/server/meta/spend-cap-sync.server'
 import { formatUsd } from '@/lib/money/money'
 
@@ -105,6 +106,12 @@ export async function finishLimitRequestApproval(
     message: `${r.request_number}: approved for ${formatUsd(approvedAmountUsd)}`,
     entityType: 'LIMIT_REQUEST',
     entityId: requestId,
+  })
+  await notifyTelegram({
+    eventType: 'limit_request.approved',
+    recipient: { type: 'client', clientId: r.client_id },
+    text: `✅ Your limit request ${r.request_number} was approved for ${formatUsd(approvedAmountUsd)}.`,
+    payload: { limit_request_id: requestId, request_number: r.request_number },
   })
 
   // Best-effort: push the new limit to the linked Meta ad account's

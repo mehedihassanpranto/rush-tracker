@@ -9,8 +9,9 @@ import { writeAudit } from '@/server/audit/audit.service'
 import {
   notifyAdmins,
   notifyClientMembers,
+  notifyPlatformAdmins,
 } from '@/server/notifications/notification.service'
-import { sendTelegramMessage } from '@/server/telegram/telegram.service'
+import { notifyTelegram } from '@/server/telegram/telegram.service'
 import {
   PROOF_ENTITY,
   finishLimitRequestApproval,
@@ -284,9 +285,14 @@ export const createLimitRequestFn = createServerFn({ method: 'POST' })
       organizationId: user.organizationId,
     })
 
-    await sendTelegramMessage(
-      `🔔 New limit request ${created.request_number}: ${clientName} requested ${formatUsd(data.requested_amount_usd)} on ${acc.account_code} "${acc.name}".`,
-    )
+    // To THIS agency only. The old single-chat send here delivered every
+    // agency's requests into xRush's own chat.
+    await notifyTelegram({
+      eventType: 'limit_request.created',
+      recipient: { type: 'agency', organizationId: user.organizationId },
+      text: `🔔 New limit request ${created.request_number}: ${clientName} requested ${formatUsd(data.requested_amount_usd)} on ${acc.account_code} "${acc.name}".`,
+      payload: { limit_request_id: created.id, request_number: created.request_number },
+    })
 
     return created as LimitRequest
   })
@@ -594,14 +600,20 @@ export const sendLimitRequestToPlatformFn = createServerFn({ method: 'POST' })
 
     const { data: req } = await admin
       .from('limit_requests')
-      .select('status, ad_account:ad_accounts(is_platform)')
+      .select(
+        'status, request_number, client_id, requested_amount_usd, client:clients(name), ad_account:ad_accounts(is_platform, account_code, name)',
+      )
       .eq('id', data.id)
       .eq('organization_id', actor.organizationId)
       .maybeSingle()
     if (!req) throw new Error('Request not found')
     const r = req as unknown as {
       status: string
-      ad_account: { is_platform: boolean } | null
+      request_number: string
+      client_id: string
+      requested_amount_usd: string
+      client: { name: string } | null
+      ad_account: { is_platform: boolean; account_code: string; name: string } | null
     }
     if (!r.ad_account?.is_platform) {
       throw new Error(
@@ -629,6 +641,38 @@ export const sendLimitRequestToPlatformFn = createServerFn({ method: 'POST' })
       action: 'LIMIT_REQUEST_SENT_TO_PLATFORM',
       entityType: 'LIMIT_REQUEST',
       entityId: data.id,
+    })
+
+    const { data: org } = await admin
+      .from('organizations')
+      .select('name')
+      .eq('id', actor.organizationId)
+      .maybeSingle()
+    const agencyName = (org as { name: string } | null)?.name ?? 'An agency'
+    const payload = { limit_request_id: data.id, request_number: r.request_number }
+
+    // The Telegram sends below only reach admins who've linked a chat — this
+    // is the in-app bell, so it's the one guaranteed way the platform notices
+    // a request is waiting, rather than only if someone happens to open
+    // /platform/limit-requests.
+    await notifyPlatformAdmins({
+      type: 'LIMIT_REQUEST_SENT_TO_PLATFORM',
+      title: 'Limit request awaiting platform approval',
+      message: `${agencyName} sent ${r.request_number} (${formatUsd(r.requested_amount_usd)}) for platform review.`,
+      entityType: 'LIMIT_REQUEST',
+      entityId: data.id,
+    })
+    await notifyTelegram({
+      eventType: 'limit_request.sent_to_platform',
+      recipient: { type: 'platform_admin' },
+      text: `📨 ${agencyName} sent ${r.request_number} for platform review: ${r.client?.name ?? 'a client'} requests ${formatUsd(r.requested_amount_usd)} on ${r.ad_account?.account_code} "${r.ad_account?.name}".`,
+      payload,
+    })
+    await notifyTelegram({
+      eventType: 'limit_request.sent_to_platform',
+      recipient: { type: 'client', clientId: r.client_id },
+      text: `⏳ Your limit request ${r.request_number} (${formatUsd(r.requested_amount_usd)}) has been forwarded for final review.`,
+      payload,
     })
     return { ok: true }
   })
@@ -676,6 +720,12 @@ export const rejectLimitRequestFn = createServerFn({ method: 'POST' })
       message: `${rejected.request_number}: ${data.rejection_reason}`,
       entityType: 'LIMIT_REQUEST',
       entityId: data.id,
+    })
+    await notifyTelegram({
+      eventType: 'limit_request.rejected',
+      recipient: { type: 'client', clientId: rejected.client_id },
+      text: `❌ Your limit request ${rejected.request_number} was rejected: ${data.rejection_reason}`,
+      payload: { limit_request_id: data.id, request_number: rejected.request_number },
     })
     return { ok: true }
   })
