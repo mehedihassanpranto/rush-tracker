@@ -16,8 +16,14 @@ duplicate-guarded, so nothing is subtracted twice). Verified directly
 afterwards: `telegram_subscriptions`, `telegram_link_requests` and
 `notification_events` exist and return nothing to the anon key; Gopal (CL-0086)
 now shows `total_approved_usd` $280 instead of the double-counted $560, with due
-unchanged at ৳0. Migration history is in sync through `000047`. The two empty
-per-user Telegram tables from `000045` are still in the database, unused.
+unchanged at ৳0. Migration history is in sync through `000047`.
+
+**Dropped the superseded per-user Telegram tables** (`user_telegram_links`,
+`telegram_link_tokens`, from `000045`) with migration `000048`, applied and
+verified. Both were confirmed empty and unreferenced by any code first; plain
+`DROP` with no `CASCADE`, so a hidden dependency would have failed the migration
+rather than been removed with it. The multi-role tables from `000047` are
+untouched.
 
 ---
 

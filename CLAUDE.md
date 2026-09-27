@@ -3339,8 +3339,11 @@ bug fixes, and anything else that isn't a whole new named feature.
   netting in `client_financials().total_approved_usd`) and 000047 were both
   applied via `supabase db push` on 2026-09-27 and verified directly: the three
   tables exist, the anon key reads nothing from them, and CL-0086 (Gopal) now
-  reports `total_approved_usd` 280, not 560. Migration history is fully in sync
-  through 000047.
+  reports `total_approved_usd` 280, not 560. 000045's two per-user tables
+  were then dropped by 000048 (both empty, no code used them), so
+  `telegram_subscriptions`/`telegram_link_requests`/`notification_events` are
+  now the ONLY Telegram tables. Migration history is fully in sync through
+  000048.
   **Update, same day: the "not recoverable" app code was found after all.**
   It existed uncommitted on a different machine running this same project —
   the Platform USD/BDT stock ledger ("Finance & Accounts", migrations
