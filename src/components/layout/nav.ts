@@ -59,6 +59,7 @@ export const PLATFORM_NAV: Array<NavItem> = [
   { label: 'Account Requests', icon: Inbox, to: '/platform/account-requests' },
   { label: 'Limit Requests', icon: Gauge, to: '/platform/limit-requests' },
   { label: 'Finance & Accounts', icon: Landmark, to: '/platform/finance' },
+  { label: 'Notifications', icon: Bell, to: '/platform/notifications' },
   { label: 'Settings', icon: Settings, to: '/platform/settings' },
 ]
 

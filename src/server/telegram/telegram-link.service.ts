@@ -1,8 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { writeAudit } from '@/server/audit/audit.service'
-import { parseStartToken } from '@/lib/telegram/recipients'
-import type { TelegramRecipientType } from '@/lib/telegram/recipients'
+import { botKindFor, parseStartToken, recipientTypesForBot } from '@/lib/telegram/recipients'
+import type { TelegramBotKind, TelegramRecipientType } from '@/lib/telegram/recipients'
 import { sendTelegramText } from './telegram.service'
 
 /**
@@ -81,8 +81,8 @@ interface TelegramUpdate {
   }
 }
 
-async function reply(chatId: number | string, text: string) {
-  await sendTelegramText(String(chatId), text)
+async function reply(chatId: number | string, text: string, kind: TelegramBotKind) {
+  await sendTelegramText(String(chatId), text, kind)
 }
 
 /** Display name for the confirmation message — what the chat will now
@@ -125,6 +125,7 @@ async function handleStart(
   chat: TelegramChat,
   fromUsername: string | undefined,
   token: string,
+  botKind: TelegramBotKind,
 ) {
   const admin = getSupabaseAdminClient()
   const now = new Date().toISOString()
@@ -144,13 +145,29 @@ async function handleStart(
     await reply(
       chat.id,
       'This link has expired or was already used. Open Rush Tracker and choose "Connect Telegram" again to get a new one.',
+      botKind,
     )
     return
   }
   const row = consumed as RecipientColumns & { created_by: string }
+
+  // The token is now consumed either way, so this can never be retried — but
+  // a token minted for the other bot (someone pasting a platform link into
+  // the shared bot, say) must not create a subscription at all: the chat_id
+  // this bot just talked to was never introduced to the OTHER bot, so any
+  // later send through that bot would just fail forever, silently.
+  if (botKindFor(row.recipient_type) !== botKind) {
+    await reply(
+      chat.id,
+      "This link isn't for this bot. Open Rush Tracker and choose \"Connect Telegram\" again from there.",
+      botKind,
+    )
+    return
+  }
+
   const resolved = await recipientLabel(row)
   if (!resolved) {
-    await reply(chat.id, 'This link is no longer valid. Nothing was connected.')
+    await reply(chat.id, 'This link is no longer valid. Nothing was connected.', botKind)
     return
   }
 
@@ -177,7 +194,7 @@ async function handleStart(
     .single()
   if (error) {
     console.error('[telegram] failed to save subscription', error)
-    await reply(chat.id, 'Something went wrong connecting this chat. Please try again.')
+    await reply(chat.id, 'Something went wrong connecting this chat. Please try again.', botKind)
     return
   }
 
@@ -199,26 +216,37 @@ async function handleStart(
   await reply(
     chat.id,
     `✅ Connected — you'll now receive notifications for ${resolved.label} here.`,
+    botKind,
   )
 }
 
-/** Deactivate every subscription pointing at a chat (bot removed/blocked). */
-async function deactivateChat(chatId: number | string) {
+/**
+ * Deactivate subscriptions pointing at a chat (bot removed/blocked) —
+ * scoped to the recipient types THIS bot could ever own, so a person who
+ * has the same chat_id linked under both bots (their own Telegram user id
+ * is identical to either bot) doesn't have the other bot's subscription
+ * wiped by an event that only happened to this one.
+ */
+async function deactivateChat(chatId: number | string, botKind: TelegramBotKind) {
   await getSupabaseAdminClient()
     .from('telegram_subscriptions')
     .update({ is_active: false, unlinked_at: new Date().toISOString() })
     .eq('telegram_chat_id', String(chatId))
     .eq('is_active', true)
+    .in('recipient_type', recipientTypesForBot(botKind))
 }
 
-export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void> {
+export async function handleTelegramUpdate(
+  update: TelegramUpdate,
+  botKind: TelegramBotKind,
+): Promise<void> {
   const admin = getSupabaseAdminClient()
 
   // The bot was removed from a group, or a user blocked it.
   const member = update.my_chat_member
   if (member) {
     if (['left', 'kicked'].includes(member.new_chat_member.status)) {
-      await deactivateChat(member.chat.id)
+      await deactivateChat(member.chat.id, botKind)
     }
     return
   }
@@ -228,11 +256,14 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
 
   // A group upgraded to a supergroup: Telegram posts this service message in
   // the old group. Follow the id now, rather than waiting for a failed send.
+  // Scoped to this bot's own recipient types for the same reason as
+  // deactivateChat — a group carrying both bots has one chat_id either way.
   if (message.migrate_to_chat_id) {
     await admin
       .from('telegram_subscriptions')
       .update({ telegram_chat_id: String(message.migrate_to_chat_id) })
       .eq('telegram_chat_id', String(message.chat.id))
+      .in('recipient_type', recipientTypesForBot(botKind))
     return
   }
 
@@ -241,7 +272,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
 
   const token = parseStartToken(text)
   if (token) {
-    await handleStart(message.chat, message.from?.username, token)
+    await handleStart(message.chat, message.from?.username, token, botKind)
     return
   }
   // Only answer a bare /start in a private chat — in a group, any member
@@ -250,6 +281,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
     await reply(
       message.chat.id,
       'Hi! To receive Rush Tracker notifications here, open Rush Tracker and choose "Connect Telegram".',
+      botKind,
     )
   }
 }

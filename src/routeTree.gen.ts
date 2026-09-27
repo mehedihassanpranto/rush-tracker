@@ -54,8 +54,10 @@ import { Route as PlatformAdAccountsAccountIdRouteImport } from './routes/platfo
 import { Route as PlatformFinanceIndexRouteImport } from './routes/platform/finance/index'
 import { Route as PlatformLimitRequestsIndexRouteImport } from './routes/platform/limit-requests/index'
 import { Route as PlatformLimitRequestsRequestIdRouteImport } from './routes/platform/limit-requests/$requestId'
+import { Route as PlatformNotificationsIndexRouteImport } from './routes/platform/notifications/index'
 import { Route as PlatformOrganizationsIndexRouteImport } from './routes/platform/organizations/index'
 import { Route as PlatformSettingsIndexRouteImport } from './routes/platform/settings/index'
+import { Route as ApiTelegramWebhookPlatformRouteImport } from './routes/api/telegram/webhook/platform'
 import { Route as PlatformOrganizationsOrganizationIdIndexRouteImport } from './routes/platform/organizations/$organizationId.index'
 import { Route as PlatformOrganizationsOrganizationIdDataRouteImport } from './routes/platform/organizations/$organizationId.data'
 
@@ -294,6 +296,12 @@ const PlatformLimitRequestsRequestIdRoute =
     path: '/limit-requests/$requestId',
     getParentRoute: () => PlatformRouteRoute,
   } as any)
+const PlatformNotificationsIndexRoute =
+  PlatformNotificationsIndexRouteImport.update({
+    id: '/notifications/',
+    path: '/notifications/',
+    getParentRoute: () => PlatformRouteRoute,
+  } as any)
 const PlatformOrganizationsIndexRoute =
   PlatformOrganizationsIndexRouteImport.update({
     id: '/organizations/',
@@ -305,6 +313,12 @@ const PlatformSettingsIndexRoute = PlatformSettingsIndexRouteImport.update({
   path: '/settings/',
   getParentRoute: () => PlatformRouteRoute,
 } as any)
+const ApiTelegramWebhookPlatformRoute =
+  ApiTelegramWebhookPlatformRouteImport.update({
+    id: '/platform',
+    path: '/platform',
+    getParentRoute: () => ApiTelegramWebhookRoute,
+  } as any)
 const PlatformOrganizationsOrganizationIdIndexRoute =
   PlatformOrganizationsOrganizationIdIndexRouteImport.update({
     id: '/organizations/$organizationId/',
@@ -335,7 +349,7 @@ export interface FileRoutesByFullPath {
   '/agency/limit-requests/$requestId': typeof AgencyLimitRequestsRequestIdRoute
   '/agency/payments/$paymentId': typeof AgencyPaymentsPaymentIdRoute
   '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
-  '/api/telegram/webhook': typeof ApiTelegramWebhookRoute
+  '/api/telegram/webhook': typeof ApiTelegramWebhookRouteWithChildren
   '/platform/ad-accounts/$accountId': typeof PlatformAdAccountsAccountIdRoute
   '/platform/limit-requests/$requestId': typeof PlatformLimitRequestsRequestIdRoute
   '/agency/ad-accounts/': typeof AgencyAdAccountsIndexRoute
@@ -363,8 +377,10 @@ export interface FileRoutesByFullPath {
   '/platform/ad-accounts/': typeof PlatformAdAccountsIndexRoute
   '/platform/finance/': typeof PlatformFinanceIndexRoute
   '/platform/limit-requests/': typeof PlatformLimitRequestsIndexRoute
+  '/platform/notifications/': typeof PlatformNotificationsIndexRoute
   '/platform/organizations/': typeof PlatformOrganizationsIndexRoute
   '/platform/settings/': typeof PlatformSettingsIndexRoute
+  '/api/telegram/webhook/platform': typeof ApiTelegramWebhookPlatformRoute
   '/platform/organizations/$organizationId/data': typeof PlatformOrganizationsOrganizationIdDataRoute
   '/platform/organizations/$organizationId/': typeof PlatformOrganizationsOrganizationIdIndexRoute
 }
@@ -382,7 +398,7 @@ export interface FileRoutesByTo {
   '/agency/limit-requests/$requestId': typeof AgencyLimitRequestsRequestIdRoute
   '/agency/payments/$paymentId': typeof AgencyPaymentsPaymentIdRoute
   '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
-  '/api/telegram/webhook': typeof ApiTelegramWebhookRoute
+  '/api/telegram/webhook': typeof ApiTelegramWebhookRouteWithChildren
   '/platform/ad-accounts/$accountId': typeof PlatformAdAccountsAccountIdRoute
   '/platform/limit-requests/$requestId': typeof PlatformLimitRequestsRequestIdRoute
   '/agency/ad-accounts': typeof AgencyAdAccountsIndexRoute
@@ -410,8 +426,10 @@ export interface FileRoutesByTo {
   '/platform/ad-accounts': typeof PlatformAdAccountsIndexRoute
   '/platform/finance': typeof PlatformFinanceIndexRoute
   '/platform/limit-requests': typeof PlatformLimitRequestsIndexRoute
+  '/platform/notifications': typeof PlatformNotificationsIndexRoute
   '/platform/organizations': typeof PlatformOrganizationsIndexRoute
   '/platform/settings': typeof PlatformSettingsIndexRoute
+  '/api/telegram/webhook/platform': typeof ApiTelegramWebhookPlatformRoute
   '/platform/organizations/$organizationId/data': typeof PlatformOrganizationsOrganizationIdDataRoute
   '/platform/organizations/$organizationId': typeof PlatformOrganizationsOrganizationIdIndexRoute
 }
@@ -434,7 +452,7 @@ export interface FileRoutesById {
   '/agency/limit-requests/$requestId': typeof AgencyLimitRequestsRequestIdRoute
   '/agency/payments/$paymentId': typeof AgencyPaymentsPaymentIdRoute
   '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
-  '/api/telegram/webhook': typeof ApiTelegramWebhookRoute
+  '/api/telegram/webhook': typeof ApiTelegramWebhookRouteWithChildren
   '/platform/ad-accounts/$accountId': typeof PlatformAdAccountsAccountIdRoute
   '/platform/limit-requests/$requestId': typeof PlatformLimitRequestsRequestIdRoute
   '/agency/ad-accounts/': typeof AgencyAdAccountsIndexRoute
@@ -462,8 +480,10 @@ export interface FileRoutesById {
   '/platform/ad-accounts/': typeof PlatformAdAccountsIndexRoute
   '/platform/finance/': typeof PlatformFinanceIndexRoute
   '/platform/limit-requests/': typeof PlatformLimitRequestsIndexRoute
+  '/platform/notifications/': typeof PlatformNotificationsIndexRoute
   '/platform/organizations/': typeof PlatformOrganizationsIndexRoute
   '/platform/settings/': typeof PlatformSettingsIndexRoute
+  '/api/telegram/webhook/platform': typeof ApiTelegramWebhookPlatformRoute
   '/platform/organizations/$organizationId/data': typeof PlatformOrganizationsOrganizationIdDataRoute
   '/platform/organizations/$organizationId/': typeof PlatformOrganizationsOrganizationIdIndexRoute
 }
@@ -514,8 +534,10 @@ export interface FileRouteTypes {
     | '/platform/ad-accounts/'
     | '/platform/finance/'
     | '/platform/limit-requests/'
+    | '/platform/notifications/'
     | '/platform/organizations/'
     | '/platform/settings/'
+    | '/api/telegram/webhook/platform'
     | '/platform/organizations/$organizationId/data'
     | '/platform/organizations/$organizationId/'
   fileRoutesByTo: FileRoutesByTo
@@ -561,8 +583,10 @@ export interface FileRouteTypes {
     | '/platform/ad-accounts'
     | '/platform/finance'
     | '/platform/limit-requests'
+    | '/platform/notifications'
     | '/platform/organizations'
     | '/platform/settings'
+    | '/api/telegram/webhook/platform'
     | '/platform/organizations/$organizationId/data'
     | '/platform/organizations/$organizationId'
   id:
@@ -612,8 +636,10 @@ export interface FileRouteTypes {
     | '/platform/ad-accounts/'
     | '/platform/finance/'
     | '/platform/limit-requests/'
+    | '/platform/notifications/'
     | '/platform/organizations/'
     | '/platform/settings/'
+    | '/api/telegram/webhook/platform'
     | '/platform/organizations/$organizationId/data'
     | '/platform/organizations/$organizationId/'
   fileRoutesById: FileRoutesById
@@ -627,7 +653,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SubscriptionSuspendedRoute: typeof SubscriptionSuspendedRoute
   ApiCronMetaSyncRoute: typeof ApiCronMetaSyncRoute
-  ApiTelegramWebhookRoute: typeof ApiTelegramWebhookRoute
+  ApiTelegramWebhookRoute: typeof ApiTelegramWebhookRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -947,6 +973,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlatformLimitRequestsRequestIdRouteImport
       parentRoute: typeof PlatformRouteRoute
     }
+    '/platform/notifications/': {
+      id: '/platform/notifications/'
+      path: '/notifications'
+      fullPath: '/platform/notifications/'
+      preLoaderRoute: typeof PlatformNotificationsIndexRouteImport
+      parentRoute: typeof PlatformRouteRoute
+    }
     '/platform/organizations/': {
       id: '/platform/organizations/'
       path: '/organizations'
@@ -960,6 +993,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/platform/settings/'
       preLoaderRoute: typeof PlatformSettingsIndexRouteImport
       parentRoute: typeof PlatformRouteRoute
+    }
+    '/api/telegram/webhook/platform': {
+      id: '/api/telegram/webhook/platform'
+      path: '/platform'
+      fullPath: '/api/telegram/webhook/platform'
+      preLoaderRoute: typeof ApiTelegramWebhookPlatformRouteImport
+      parentRoute: typeof ApiTelegramWebhookRoute
     }
     '/platform/organizations/$organizationId/': {
       id: '/platform/organizations/$organizationId/'
@@ -1074,6 +1114,7 @@ interface PlatformRouteRouteChildren {
   PlatformAdAccountsIndexRoute: typeof PlatformAdAccountsIndexRoute
   PlatformFinanceIndexRoute: typeof PlatformFinanceIndexRoute
   PlatformLimitRequestsIndexRoute: typeof PlatformLimitRequestsIndexRoute
+  PlatformNotificationsIndexRoute: typeof PlatformNotificationsIndexRoute
   PlatformOrganizationsIndexRoute: typeof PlatformOrganizationsIndexRoute
   PlatformSettingsIndexRoute: typeof PlatformSettingsIndexRoute
   PlatformOrganizationsOrganizationIdDataRoute: typeof PlatformOrganizationsOrganizationIdDataRoute
@@ -1088,6 +1129,7 @@ const PlatformRouteRouteChildren: PlatformRouteRouteChildren = {
   PlatformAdAccountsIndexRoute: PlatformAdAccountsIndexRoute,
   PlatformFinanceIndexRoute: PlatformFinanceIndexRoute,
   PlatformLimitRequestsIndexRoute: PlatformLimitRequestsIndexRoute,
+  PlatformNotificationsIndexRoute: PlatformNotificationsIndexRoute,
   PlatformOrganizationsIndexRoute: PlatformOrganizationsIndexRoute,
   PlatformSettingsIndexRoute: PlatformSettingsIndexRoute,
   PlatformOrganizationsOrganizationIdDataRoute:
@@ -1100,6 +1142,17 @@ const PlatformRouteRouteWithChildren = PlatformRouteRoute._addFileChildren(
   PlatformRouteRouteChildren,
 )
 
+interface ApiTelegramWebhookRouteChildren {
+  ApiTelegramWebhookPlatformRoute: typeof ApiTelegramWebhookPlatformRoute
+}
+
+const ApiTelegramWebhookRouteChildren: ApiTelegramWebhookRouteChildren = {
+  ApiTelegramWebhookPlatformRoute: ApiTelegramWebhookPlatformRoute,
+}
+
+const ApiTelegramWebhookRouteWithChildren =
+  ApiTelegramWebhookRoute._addFileChildren(ApiTelegramWebhookRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRouteRoute: AuthRouteRouteWithChildren,
@@ -1109,7 +1162,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SubscriptionSuspendedRoute: SubscriptionSuspendedRoute,
   ApiCronMetaSyncRoute: ApiCronMetaSyncRoute,
-  ApiTelegramWebhookRoute: ApiTelegramWebhookRoute,
+  ApiTelegramWebhookRoute: ApiTelegramWebhookRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

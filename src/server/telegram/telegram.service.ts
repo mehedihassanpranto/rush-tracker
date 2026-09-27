@@ -1,12 +1,14 @@
 import { getServerEnv } from '@/lib/env/env.server'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
+import { botKindFor } from '@/lib/telegram/recipients'
 import type {
+  TelegramBotKind,
   TelegramRecipient,
   TelegramRecipientType,
 } from '@/lib/telegram/recipients'
 
 /**
- * Multi-role Telegram notifications — one bot, per-recipient chats.
+ * Multi-role Telegram notifications — TWO bots, per-recipient chats.
  *
  * Best-effort like notification.service.ts's notify(): called after the
  * primary write, never throws to the caller, never blocks or rolls back the
@@ -20,6 +22,14 @@ import type {
  * platform admin. Never "every agency subscription" as a shortcut: that is
  * precisely how the old single-chat design leaked every agency's limit
  * requests into xRush's chat.
+ *
+ * THE SECOND RULE, added when the platform bot was split out: `platform_admin`
+ * always talks to the PLATFORM bot (`TELEGRAM_PLATFORM_BOT_TOKEN`), `agency`
+ * and `client` always talk to the SHARED bot (`TELEGRAM_BOT_TOKEN`) — see
+ * `botKindFor()`. Every function here that touches the Bot API takes or
+ * derives a `TelegramBotKind` rather than reading one global token, so it's
+ * structurally impossible to send a platform notification through the bot
+ * agencies and clients also use, or vice versa.
  *
  * Only the specific event sites that want a Telegram message call this — it
  * is deliberately not wired into notifyAdmins()/notify() globally.
@@ -35,13 +45,24 @@ export interface TelegramApiResponse {
   parameters?: { migrate_to_chat_id?: number; retry_after?: number }
 }
 
-/** Raw Bot API call. Never throws — network errors come back as ok:false. */
+export function botToken(kind: TelegramBotKind): string | undefined {
+  const env = getServerEnv()
+  return kind === 'platform' ? env.TELEGRAM_PLATFORM_BOT_TOKEN : env.TELEGRAM_BOT_TOKEN
+}
+
+function envVarNameFor(kind: TelegramBotKind): string {
+  return kind === 'platform' ? 'TELEGRAM_PLATFORM_BOT_TOKEN' : 'TELEGRAM_BOT_TOKEN'
+}
+
+/** Raw Bot API call against one specific bot. Never throws — network errors
+ * come back as ok:false. */
 export async function telegramApi(
   method: string,
   body: Record<string, unknown> = {},
+  kind: TelegramBotKind = 'shared',
 ): Promise<TelegramApiResponse> {
-  const token = getServerEnv().TELEGRAM_BOT_TOKEN
-  if (!token) return { ok: false, description: 'TELEGRAM_BOT_TOKEN not configured' }
+  const token = botToken(kind)
+  if (!token) return { ok: false, description: `${envVarNameFor(kind)} not configured` }
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
       method: 'POST',
@@ -58,26 +79,32 @@ export async function telegramApi(
   }
 }
 
-let cachedBotUsername: string | null = null
+const cachedBotUsername: Partial<Record<TelegramBotKind, string>> = {}
 
-/** The bot's @username (without the @), from getMe — cached per instance. */
-export async function getBotUsername(): Promise<string | null> {
-  if (cachedBotUsername) return cachedBotUsername
-  const res = await telegramApi('getMe')
+/** That bot's @username (without the @), from getMe — cached per bot, per
+ * instance. */
+export async function getBotUsername(kind: TelegramBotKind = 'shared'): Promise<string | null> {
+  if (cachedBotUsername[kind]) return cachedBotUsername[kind] as string
+  const res = await telegramApi('getMe', {}, kind)
   const username = (res.result as { username?: string } | undefined)?.username
-  if (res.ok && username) cachedBotUsername = username
-  return cachedBotUsername
+  if (res.ok && username) cachedBotUsername[kind] = username
+  return cachedBotUsername[kind] ?? null
 }
 
 export async function sendTelegramText(
   chatId: string,
   text: string,
+  kind: TelegramBotKind = 'shared',
 ): Promise<TelegramApiResponse> {
-  return telegramApi('sendMessage', {
-    chat_id: chatId,
-    text,
-    disable_web_page_preview: true,
-  })
+  return telegramApi(
+    'sendMessage',
+    {
+      chat_id: chatId,
+      text,
+      disable_web_page_preview: true,
+    },
+    kind,
+  )
 }
 
 interface SubscriptionRow {
@@ -133,7 +160,7 @@ async function logEvent(row: {
   subscription_id?: string | null
   telegram_chat_id?: string | null
   payload?: Record<string, unknown> | null
-  status: 'sent' | 'failed' | 'skipped_no_subscription'
+  status: 'sent' | 'failed' | 'skipped_no_subscription' | 'skipped_preference_off'
   telegram_response?: unknown
 }) {
   try {
@@ -157,9 +184,13 @@ async function logEvent(row: {
  *    subscription so the portal shows "Not connected" instead of a chat that
  *    silently receives nothing.
  */
-async function deliver(sub: SubscriptionRow, text: string): Promise<TelegramApiResponse> {
+async function deliver(
+  sub: SubscriptionRow,
+  text: string,
+  kind: TelegramBotKind,
+): Promise<TelegramApiResponse> {
   const admin = getSupabaseAdminClient()
-  let res = await sendTelegramText(sub.telegram_chat_id, text)
+  let res = await sendTelegramText(sub.telegram_chat_id, text, kind)
 
   const migratedTo = res.parameters?.migrate_to_chat_id
   if (!res.ok && migratedTo) {
@@ -169,7 +200,7 @@ async function deliver(sub: SubscriptionRow, text: string): Promise<TelegramApiR
       .update({ telegram_chat_id: newChatId })
       .eq('id', sub.id)
     sub.telegram_chat_id = newChatId
-    res = await sendTelegramText(newChatId, text)
+    res = await sendTelegramText(newChatId, text, kind)
   }
 
   if (!res.ok && res.error_code === 403) {
@@ -195,6 +226,7 @@ export async function notifyTelegram(input: NotifyTelegramInput): Promise<void> 
     const targets = await resolveRecipientIds(input.recipient)
     if (targets.length === 0) return
     const admin = getSupabaseAdminClient()
+    const kind = botKindFor(input.recipient.type)
 
     for (const target of targets) {
       const { data } = await admin
@@ -214,15 +246,40 @@ export async function notifyTelegram(input: NotifyTelegramInput): Promise<void> 
       }
 
       // A linked chat with no bot token still goes through deliver(), which
-      // logs it as 'failed' with "TELEGRAM_BOT_TOKEN not configured" — the
+      // logs it as 'failed' with "<the right env var> not configured" — the
       // exact message someone debugging an outage needs to see.
       if (subs.length === 0) {
         await logEvent({ ...base, status: 'skipped_no_subscription' })
         continue
       }
 
+      // Muted per-chat, per-event-type — a second, narrower filter on top of
+      // the isolation rule above: this chat IS the right tenant, but whoever
+      // manages it turned this specific event type off. One batched query for
+      // the whole target's subs rather than one per subscription.
+      const { data: muteRows } = await admin
+        .from('telegram_notification_mutes')
+        .select('subscription_id')
+        .eq('event_type', input.eventType)
+        .in(
+          'subscription_id',
+          subs.map((s) => s.id),
+        )
+      const muted = new Set(
+        ((muteRows ?? []) as Array<{ subscription_id: string }>).map((m) => m.subscription_id),
+      )
+
       for (const sub of subs) {
-        const res = await deliver(sub, input.text)
+        if (muted.has(sub.id)) {
+          await logEvent({
+            ...base,
+            subscription_id: sub.id,
+            telegram_chat_id: sub.telegram_chat_id,
+            status: 'skipped_preference_off',
+          })
+          continue
+        }
+        const res = await deliver(sub, input.text, kind)
         if (!res.ok) {
           console.error('[telegram] send failed', input.eventType, sub.id, res.description)
         }

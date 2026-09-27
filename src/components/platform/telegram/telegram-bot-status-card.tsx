@@ -7,6 +7,7 @@ import {
   importLegacyTelegramChatFn,
   registerTelegramWebhookFn,
 } from '@/server/telegram/telegram.fns'
+import type { TelegramBotKind } from '@/lib/telegram/recipients'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -40,30 +41,52 @@ function Ok({ ok, yes, no }: { ok: boolean; yes: string; no: string }) {
   return <Badge variant={ok ? 'secondary' : 'destructive'}>{ok ? yes : no}</Badge>
 }
 
+const TITLES: Record<TelegramBotKind, string> = {
+  shared: 'Shared bot (agency + client)',
+  platform: 'Platform bot (platform admins only)',
+}
+
+const DESCRIPTIONS: Record<TelegramBotKind, string> = {
+  shared:
+    'Serves every agency and client chat. Set TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET on the deployment, then register the webhook so the bot can receive /start links.',
+  platform:
+    'A separate bot for platform-admin chats only, deliberately never shared with any agency or client. Set TELEGRAM_PLATFORM_BOT_TOKEN (TELEGRAM_WEBHOOK_SECRET is shared with the bot above), then register this bot\'s own webhook.',
+}
+
+const LINKED_CHATS_LABEL: Record<TelegramBotKind, (data: {
+  subscriptionCounts: Record<'platform_admin' | 'agency' | 'client', number>
+}) => string> = {
+  shared: (d) => `${d.subscriptionCounts.agency} agency · ${d.subscriptionCounts.client} client`,
+  platform: (d) => `${d.subscriptionCounts.platform_admin} platform admin`,
+}
+
 /**
- * The bot's health, for the platform owner: is it configured, is the webhook
+ * One bot's health, for the platform owner: is it configured, is the webhook
  * pointed at THIS deployment, what did Telegram last complain about, and
  * which recent sends failed. Everything the "it just stopped" outage needed
- * and nobody could see.
+ * and nobody could see. Rendered twice on Platform Settings — once per bot,
+ * since the two are independent (each can be configured, healthy, or broken
+ * without affecting the other).
  */
-export function TelegramBotStatusCard() {
+export function TelegramBotStatusCard({ kind }: { kind: TelegramBotKind }) {
   const queryClient = useQueryClient()
   const getStatus = useServerFn(getTelegramBotStatusFn)
   const register = useServerFn(registerTelegramWebhookFn)
   const importLegacy = useServerFn(importLegacyTelegramChatFn)
+  const queryKey = ['telegram-bot-status', kind]
 
   const { data, isLoading } = useQuery({
-    queryKey: ['telegram-bot-status'],
-    queryFn: () => getStatus(),
+    queryKey,
+    queryFn: () => getStatus({ data: { kind } }),
   })
 
   const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ['telegram-bot-status'] })
+    void queryClient.invalidateQueries({ queryKey })
     void queryClient.invalidateQueries({ queryKey: ['telegram-connection'] })
   }
 
   const registerMutation = useMutation({
-    mutationFn: () => register(),
+    mutationFn: () => register({ data: { kind } }),
     onSuccess: (res) => {
       toast.success(`Webhook registered: ${res.url}`)
       refresh()
@@ -89,12 +112,8 @@ export function TelegramBotStatusCard() {
       <h2 className="mb-2 text-sm font-semibold">Telegram bot</h2>
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Bot and webhook</CardTitle>
-          <CardDescription>
-            One bot serves every recipient. Set TELEGRAM_BOT_TOKEN and
-            TELEGRAM_WEBHOOK_SECRET on the deployment, then register the webhook
-            so the bot can receive /start links.
-          </CardDescription>
+          <CardTitle className="text-base">{TITLES[kind]}</CardTitle>
+          <CardDescription>{DESCRIPTIONS[kind]}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {isLoading && <Skeleton className="h-32 w-full" />}
@@ -145,11 +164,7 @@ export function TelegramBotStatusCard() {
                   </Row>
                 )}
                 <Row label="Linked chats">
-                  <span className="num">
-                    {data.subscriptionCounts.platform_admin} platform ·{' '}
-                    {data.subscriptionCounts.agency} agency ·{' '}
-                    {data.subscriptionCounts.client} client
-                  </span>
+                  <span className="num">{LINKED_CHATS_LABEL[kind](data)}</span>
                 </Row>
                 {data.legacyChatConfigured && (
                   <Row label="Legacy TELEGRAM_CHAT_ID">

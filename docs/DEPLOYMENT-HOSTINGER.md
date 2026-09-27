@@ -82,9 +82,10 @@ deploy — see `docs/DEPLOYMENT.md` §2 for the full notes on each.
 | `META_SYSTEM_USER_TOKEN` | optional | **Server only** |
 | `META_BUSINESS_ID` | optional | **Server only** |
 | `META_API_VERSION` | optional (default `v21.0`) | **Server only** |
-| `TELEGRAM_BOT_TOKEN` | optional | **Server only** |
-| `TELEGRAM_WEBHOOK_SECRET` | optional, but required for linking to work | **Server only** |
-| `TELEGRAM_CHAT_ID` | optional, legacy — only used by "Import legacy chat" | **Server only** |
+| `TELEGRAM_BOT_TOKEN` | optional — the SHARED bot (agency + client) | **Server only** |
+| `TELEGRAM_PLATFORM_BOT_TOKEN` | optional — a SEPARATE bot, platform admins only | **Server only** |
+| `TELEGRAM_WEBHOOK_SECRET` | optional, but required for linking to work on either bot | **Server only** |
+| `TELEGRAM_CHAT_ID` | optional, legacy — only used by "Import legacy chat" (shared bot) | **Server only** |
 
 ### ⚠ Set these BEFORE the first build, or you get a silent broken deploy
 
@@ -120,11 +121,14 @@ The `META_*` variables are the **platform's** credentials (they point at the
 Business Portfolio holding the platform ad-account pool), not any one agency's.
 They can also be managed live from Platform → Settings without a redeploy.
 
-`TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET` are server-only, so — unlike
-the `VITE_` variables — setting or changing them only needs a **restart**, not a
-rebuild. After setting both and restarting, go to **Platform → Settings →
-Telegram bot** and click **Register webhook** once (again if the token ever
-changes) so Telegram knows to call `https://yourdomain/api/telegram/webhook`.
+`TELEGRAM_BOT_TOKEN`, `TELEGRAM_PLATFORM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET`
+are server-only, so — unlike the `VITE_` variables — setting or changing them
+only needs a **restart**, not a rebuild. The two bots are independent and each
+needs its own **Register webhook** click on Platform → Settings (one card per
+bot): the shared bot calls `https://yourdomain/api/telegram/webhook`, the
+platform bot calls `https://yourdomain/api/telegram/webhook/platform`. Only
+set up the ones you actually have a token for — either can be configured
+without the other.
 
 ---
 

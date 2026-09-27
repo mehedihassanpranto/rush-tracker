@@ -3368,8 +3368,109 @@ bug fixes, and anything else that isn't a whole new named feature.
   linked a chat. Added a `notifyPlatformAdmins()` call alongside the existing
   `notifyTelegram()` ones so the bell is the guaranteed path regardless of
   Telegram setup. `npm test`: 131/131 (Finance's 14 live-DB tests included),
-  typecheck and build clean. Not yet merged to `main` or pushed — the owner
-  should review before that.
+  typecheck and build clean. **Merged to `main` 2026-09-27** (PR #1) — the
+  "not yet merged" this bullet originally said is stale, left as written
+  since it's now history, not current state.
+- **Per-chat Telegram notification preferences + Platform → Notifications log
+  (post-Phase-8 addition): done, pending owner review. Migration
+  `20260723000049` confirmed applied to the live project 2026-09-28.**
+  Prompted by a request to build a much larger "centralized, role-based
+  Telegram Notification System" from scratch — checked its two explicit
+  "confirm before guessing" points against this codebase and both failed:
+  it assumed six roles (`platform_owner`/`platform_admin`/`agency_owner`/
+  `agency_admin`/`agency_staff`/`client`) where this app has three
+  (`SUPER_ADMIN`/`ADMIN`/`CLIENT`) plus a separate `is_platform_admin` flag,
+  and it assumed no connect/verify pattern existed to reuse when the
+  `/start` deep-link token flow above already is one. Owner's call: don't
+  rebuild what was just merged and is confirmed delivering real messages —
+  add only the two pieces that spec named which genuinely didn't exist yet.
+  **Per-chat preferences**: `telegram_notification_mutes` (subscription_id,
+  event_type) is a MUTE LIST, not a preference row per event type — absence
+  of a row means enabled, so every existing connection needed zero backfill.
+  `notifyTelegram()` (`telegram.service.ts`) checks it with one batched
+  query per event across that event's subscribers, right before `deliver()`,
+  and logs the new `skipped_preference_off` status instead of sending when
+  muted — the chat stays connected either way, same as an existing mute
+  never touching `is_active`. The event-type catalog itself
+  (`src/lib/telegram/event-types.ts`, `TELEGRAM_EVENT_TYPES` +
+  `eventTypesFor(recipientType)`) is a fixed list in CODE, not a database
+  table: every entry is already tied to one specific `notifyTelegram()`
+  call site (enumerated by grepping every call site rather than guessed),
+  so a second, DB-editable copy of "what events exist and who can get them"
+  would just be a second place for that list to drift from the first — the
+  isolation itself (who CAN receive an event at all) is still enforced
+  structurally by `recipient.type`/`recipient_id` addressing, same as
+  before; this only adds "of what I'm eligible for, mute this one." UI: a
+  **Preferences** button next to **Disconnect** on every chat row in
+  `TelegramConnectCard` (shared across Platform/Agency Settings and the
+  Client Profile page) opens `TelegramPreferencesDialog`
+  (checkboxes, one per event type that specific chat's recipient type can
+  ever receive). New `getTelegramPreferencesFn`/`setTelegramEventMuteFn`
+  (`telegram.fns.ts`) — the setter re-verifies the subscription id belongs
+  to the caller's own scope before writing, same discipline as
+  `disconnectTelegramChatFn`, never trusting a bare id.
+  **Platform → Notifications**: new `/platform/notifications`
+  (`requirePlatformAdmin`), reading `notification_events` directly —
+  filterable by status, connected-chat counts by role at the top
+  (`getNotificationLogSummaryFn`/`listNotificationEventsFn`,
+  `src/server/platform/notification-log.fns.ts`). Read-only by design:
+  connecting/disconnecting a chat stays exactly where it already was, in
+  each portal's own Settings — this page only ever browses the log.
+  5 new unit tests for the event-type catalog (`event-types.test.ts`).
+  `npm test`: 136/136, typecheck and build clean. On branch
+  `telegram-preferences-and-log`, not yet merged — awaiting review.
+- **Split into a shared bot and a separate platform-only bot (post-Phase-8
+  addition): done, pending owner review, no migration.** Prompted by the
+  platform owner's personal Telegram account hitting Telegram's own
+  account-side "restricted access" block (confirmed via `@SpamBot`, not a
+  bug here — `getMe`/`getWebhookInfo` on the shared bot were both healthy
+  the whole time) — the owner's call was a dedicated platform bot rather
+  than depending on any one personal account.
+  **THE RULE: `platform_admin` talks to `TELEGRAM_PLATFORM_BOT_TOKEN`;
+  `agency` and `client` talk to `TELEGRAM_BOT_TOKEN` (the original, shared
+  bot) — structurally, via `botKindFor(recipientType)`
+  (`src/lib/telegram/recipients.ts`), never by reading a global token
+  directly.** Every Bot-API-touching function (`telegramApi`,
+  `sendTelegramText`, `getBotUsername`, `deliver` in `telegram.service.ts`)
+  takes or derives a `TelegramBotKind` (`'shared' | 'platform'`) now,
+  making it impossible to accidentally send a platform notification
+  through the bot agencies and clients also use. The two tokens are
+  independently optional — either bot works with the other unconfigured.
+  New webhook route `src/routes/api/telegram/webhook/platform.ts`,
+  byte-similar to the existing `webhook.ts`, checking
+  `TELEGRAM_PLATFORM_BOT_TOKEN` instead and calling
+  `handleTelegramUpdate(update, 'platform')`. **Both webhooks share
+  `TELEGRAM_WEBHOOK_SECRET`** — deliberate, not an oversight: the two are
+  told apart by which URL Telegram calls, and the secret only proves "this
+  came from Telegram", so a second secret would add a config knob with no
+  security benefit.
+  `handleTelegramUpdate()`/`handleStart()` (`telegram-link.service.ts`) now
+  take the bot kind and **refuse a `/start` token minted for the other
+  bot** rather than silently linking it — Telegram requires replying
+  through the same bot that received a message, so a chat_id reached via
+  bot A means nothing to bot B; linking it anyway would create a
+  subscription that can never actually receive anything, forever, with no
+  visible error beyond a permanently-failing send. `deactivateChat()` and
+  the supergroup-migration handler are now scoped via
+  `recipientTypesForBot(kind)` too — **a private chat's numeric `chat.id`
+  is the SAME value regardless of which bot it's talking to** (it's the
+  person's own Telegram user id, not bot-specific), so an unscoped
+  `my_chat_member`/migration update from bot A could otherwise deactivate
+  or move bot B's subscription for that same person. Same reasoning
+  applies to a group that's added both bots.
+  `getTelegramBotStatusFn`/`registerTelegramWebhookFn` both gained a
+  required `kind` parameter; `TelegramBotStatusCard` gained a `kind` prop
+  and Platform Settings now renders it twice — one card per bot, each with
+  its own Register-webhook action and linked-chat counts scoped to only
+  the recipient types that bot actually serves (showing "30 agency" on the
+  platform bot's own card would describe chats that have nothing to do
+  with it).
+  3 new unit tests (`recipients.test.ts`) for `botKindFor`/
+  `recipientTypesForBot` — including that the two bots' recipient-type
+  sets never overlap. `npm test`: 139/139, typecheck and build clean.
+  **Not yet registered on the live platform bot** — that's the
+  owner's own "Register webhook" click on Platform Settings after this
+  merges and deploys, same as the shared bot's own setup.
 
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT

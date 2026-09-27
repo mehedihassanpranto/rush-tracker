@@ -23,14 +23,24 @@ const serverEnvSchema = z.object({
   CRON_SECRET: z.string().min(1).optional(),
   // Telegram Bot API — optional: unset disables Telegram entirely (every
   // send is logged as failed/skipped, linking is unavailable), same
-  // "optional integration" pattern as the Meta credentials above.
+  // "optional integration" pattern as the Meta credentials above. This is
+  // the SHARED bot — agency and client chats connect to it.
   TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
+  // A second, separate bot for platform-admin chats only — deliberately its
+  // own bot, not a third recipient type on the shared one, per the owner's
+  // explicit choice to keep platform notifications on a bot no agency or
+  // client ever sees. Independently optional: the shared bot works with no
+  // platform bot configured, and vice versa.
+  TELEGRAM_PLATFORM_BOT_TOKEN: z.string().min(1).optional(),
   // Sent by Telegram as X-Telegram-Bot-Api-Secret-Token on every webhook
   // call (set via setWebhook's secret_token). Required for the webhook —
   // without it /api/telegram/webhook refuses every request. Telegram allows
   // 1-256 chars of A-Z a-z 0-9 _ - — checked when registering the webhook,
   // NOT here: a malformed optional value must not make getServerEnv() throw
-  // and take the whole app down with it.
+  // and take the whole app down with it. Shared by both bots' webhooks —
+  // the two are already told apart by which URL Telegram calls
+  // (/api/telegram/webhook vs .../webhook/platform), so one secret is
+  // enough; it authenticates "this really came from Telegram", not which bot.
   TELEGRAM_WEBHOOK_SECRET: z.string().min(1).optional(),
   // LEGACY: the single deployment-wide chat from before per-recipient
   // subscriptions. Read ONLY by the platform's "Import legacy chat" action,
@@ -59,6 +69,7 @@ export function getServerEnv(): ServerEnv {
       META_API_VERSION: process.env.META_API_VERSION,
       CRON_SECRET: process.env.CRON_SECRET,
       TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+      TELEGRAM_PLATFORM_BOT_TOKEN: process.env.TELEGRAM_PLATFORM_BOT_TOKEN,
       TELEGRAM_WEBHOOK_SECRET: process.env.TELEGRAM_WEBHOOK_SECRET,
       TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID,
     })

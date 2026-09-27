@@ -24,6 +24,25 @@ export const SCOPE_RECIPIENT_TYPE: Record<TelegramScope, TelegramRecipientType> 
 }
 
 /**
+ * Two separate bots, deliberately: `platform` is its own bot that no agency
+ * or client chat is ever linked to; `shared` is the one bot agency and
+ * client chats both connect to (unrelated to each other on Telegram's side —
+ * they just happen to share a bot, the way they always have).
+ */
+export type TelegramBotKind = 'shared' | 'platform'
+
+export function botKindFor(recipientType: TelegramRecipientType): TelegramBotKind {
+  return recipientType === 'platform_admin' ? 'platform' : 'shared'
+}
+
+/** The recipient types a given bot's webhook could ever legitimately see —
+ * the inverse of `botKindFor`, used to scope a webhook update to only the
+ * subscriptions that could actually belong to it. */
+export function recipientTypesForBot(kind: TelegramBotKind): Array<TelegramRecipientType> {
+  return kind === 'platform' ? ['platform_admin'] : ['agency', 'client']
+}
+
+/**
  * Extracts the link token from a message's text. Accepts `/start <token>` in
  * a DM and `/start@BotName <token>` in a group (Telegram appends the bot's
  * username to commands sent in groups). Returns null for anything else,
