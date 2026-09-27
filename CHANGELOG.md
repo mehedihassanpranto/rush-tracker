@@ -6,6 +6,47 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-09-28
+
+**Two genuinely missing pieces added on top of the multi-role Telegram system
+(not a rebuild — see the note below on why).** Migration `20260723000049`
+applied to the live project and verified: `telegram_notification_mutes` exists,
+`notification_events.status` now also accepts `skipped_preference_off`.
+
+*Per-chat notification preferences.* Each connected Telegram chat can now mute
+individual event types without disconnecting — a new **Preferences** button
+next to **Disconnect** on every chat row in the Telegram card (Platform/Agency
+Settings, Client Profile). `telegram_notification_mutes` is a mute list, not a
+preference row per event type: absence of a row means enabled, so nothing had
+to be pre-populated for every existing connection. `notifyTelegram()` checks it
+with one batched query per event (not one per subscriber) right before
+delivery and logs `skipped_preference_off` instead of sending when muted — the
+chat stays connected either way. The event-type catalog
+(`src/lib/telegram/event-types.ts`) is a fixed list in code, not a database
+table: every event type is already tied to a specific `notifyTelegram()` call
+site, so a second, editable copy of "what events exist" would just be a second
+place to drift out of sync with the first.
+
+*Platform → Notifications.* A new page (`/platform/notifications`) lists
+`notification_events` — every send attempt, not just successes — filterable by
+status, with connected-chat counts by role at the top. Read-only; connecting
+and disconnecting stays where it already was, in each portal's own Settings.
+
+**Why not the full rebuild that was asked for**: the request that prompted
+this (a "centralized, role-based Telegram Notification System" spec) turned
+out to describe rebuilding what had just been merged the day before — new
+tables duplicating `telegram_subscriptions`/`notification_events`, a new
+central dispatcher duplicating `notifyTelegram()`, and a different connect
+flow (email + in-chat OTP) in place of the working `/start` deep-link tokens.
+It also assumed six roles (`platform_owner`/`platform_admin`/`agency_owner`/
+`agency_admin`/`agency_staff`/`client`) that don't exist here — the real model
+is three (`SUPER_ADMIN`/`ADMIN`/`CLIENT`) plus a separate `is_platform_admin`
+flag. Flagged both mismatches (the spec's own text asked to confirm rather
+than guess on exactly these two points) and got a direct answer: keep the
+working system, add only what it was actually missing. `npm test`: 136/136.
+
+---
+
 ## 2026-09-27
 
 **Migrations `000046` and `000047` applied to the live project**, via

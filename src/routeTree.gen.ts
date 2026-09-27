@@ -54,6 +54,7 @@ import { Route as PlatformAdAccountsAccountIdRouteImport } from './routes/platfo
 import { Route as PlatformFinanceIndexRouteImport } from './routes/platform/finance/index'
 import { Route as PlatformLimitRequestsIndexRouteImport } from './routes/platform/limit-requests/index'
 import { Route as PlatformLimitRequestsRequestIdRouteImport } from './routes/platform/limit-requests/$requestId'
+import { Route as PlatformNotificationsIndexRouteImport } from './routes/platform/notifications/index'
 import { Route as PlatformOrganizationsIndexRouteImport } from './routes/platform/organizations/index'
 import { Route as PlatformSettingsIndexRouteImport } from './routes/platform/settings/index'
 import { Route as PlatformOrganizationsOrganizationIdIndexRouteImport } from './routes/platform/organizations/$organizationId.index'
@@ -294,6 +295,12 @@ const PlatformLimitRequestsRequestIdRoute =
     path: '/limit-requests/$requestId',
     getParentRoute: () => PlatformRouteRoute,
   } as any)
+const PlatformNotificationsIndexRoute =
+  PlatformNotificationsIndexRouteImport.update({
+    id: '/notifications/',
+    path: '/notifications/',
+    getParentRoute: () => PlatformRouteRoute,
+  } as any)
 const PlatformOrganizationsIndexRoute =
   PlatformOrganizationsIndexRouteImport.update({
     id: '/organizations/',
@@ -363,6 +370,7 @@ export interface FileRoutesByFullPath {
   '/platform/ad-accounts/': typeof PlatformAdAccountsIndexRoute
   '/platform/finance/': typeof PlatformFinanceIndexRoute
   '/platform/limit-requests/': typeof PlatformLimitRequestsIndexRoute
+  '/platform/notifications/': typeof PlatformNotificationsIndexRoute
   '/platform/organizations/': typeof PlatformOrganizationsIndexRoute
   '/platform/settings/': typeof PlatformSettingsIndexRoute
   '/platform/organizations/$organizationId/data': typeof PlatformOrganizationsOrganizationIdDataRoute
@@ -410,6 +418,7 @@ export interface FileRoutesByTo {
   '/platform/ad-accounts': typeof PlatformAdAccountsIndexRoute
   '/platform/finance': typeof PlatformFinanceIndexRoute
   '/platform/limit-requests': typeof PlatformLimitRequestsIndexRoute
+  '/platform/notifications': typeof PlatformNotificationsIndexRoute
   '/platform/organizations': typeof PlatformOrganizationsIndexRoute
   '/platform/settings': typeof PlatformSettingsIndexRoute
   '/platform/organizations/$organizationId/data': typeof PlatformOrganizationsOrganizationIdDataRoute
@@ -462,6 +471,7 @@ export interface FileRoutesById {
   '/platform/ad-accounts/': typeof PlatformAdAccountsIndexRoute
   '/platform/finance/': typeof PlatformFinanceIndexRoute
   '/platform/limit-requests/': typeof PlatformLimitRequestsIndexRoute
+  '/platform/notifications/': typeof PlatformNotificationsIndexRoute
   '/platform/organizations/': typeof PlatformOrganizationsIndexRoute
   '/platform/settings/': typeof PlatformSettingsIndexRoute
   '/platform/organizations/$organizationId/data': typeof PlatformOrganizationsOrganizationIdDataRoute
@@ -514,6 +524,7 @@ export interface FileRouteTypes {
     | '/platform/ad-accounts/'
     | '/platform/finance/'
     | '/platform/limit-requests/'
+    | '/platform/notifications/'
     | '/platform/organizations/'
     | '/platform/settings/'
     | '/platform/organizations/$organizationId/data'
@@ -561,6 +572,7 @@ export interface FileRouteTypes {
     | '/platform/ad-accounts'
     | '/platform/finance'
     | '/platform/limit-requests'
+    | '/platform/notifications'
     | '/platform/organizations'
     | '/platform/settings'
     | '/platform/organizations/$organizationId/data'
@@ -612,6 +624,7 @@ export interface FileRouteTypes {
     | '/platform/ad-accounts/'
     | '/platform/finance/'
     | '/platform/limit-requests/'
+    | '/platform/notifications/'
     | '/platform/organizations/'
     | '/platform/settings/'
     | '/platform/organizations/$organizationId/data'
@@ -947,6 +960,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlatformLimitRequestsRequestIdRouteImport
       parentRoute: typeof PlatformRouteRoute
     }
+    '/platform/notifications/': {
+      id: '/platform/notifications/'
+      path: '/notifications'
+      fullPath: '/platform/notifications/'
+      preLoaderRoute: typeof PlatformNotificationsIndexRouteImport
+      parentRoute: typeof PlatformRouteRoute
+    }
     '/platform/organizations/': {
       id: '/platform/organizations/'
       path: '/organizations'
@@ -1074,6 +1094,7 @@ interface PlatformRouteRouteChildren {
   PlatformAdAccountsIndexRoute: typeof PlatformAdAccountsIndexRoute
   PlatformFinanceIndexRoute: typeof PlatformFinanceIndexRoute
   PlatformLimitRequestsIndexRoute: typeof PlatformLimitRequestsIndexRoute
+  PlatformNotificationsIndexRoute: typeof PlatformNotificationsIndexRoute
   PlatformOrganizationsIndexRoute: typeof PlatformOrganizationsIndexRoute
   PlatformSettingsIndexRoute: typeof PlatformSettingsIndexRoute
   PlatformOrganizationsOrganizationIdDataRoute: typeof PlatformOrganizationsOrganizationIdDataRoute
@@ -1088,6 +1109,7 @@ const PlatformRouteRouteChildren: PlatformRouteRouteChildren = {
   PlatformAdAccountsIndexRoute: PlatformAdAccountsIndexRoute,
   PlatformFinanceIndexRoute: PlatformFinanceIndexRoute,
   PlatformLimitRequestsIndexRoute: PlatformLimitRequestsIndexRoute,
+  PlatformNotificationsIndexRoute: PlatformNotificationsIndexRoute,
   PlatformOrganizationsIndexRoute: PlatformOrganizationsIndexRoute,
   PlatformSettingsIndexRoute: PlatformSettingsIndexRoute,
   PlatformOrganizationsOrganizationIdDataRoute:

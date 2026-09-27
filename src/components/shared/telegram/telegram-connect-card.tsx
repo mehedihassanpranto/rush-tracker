@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import { ExternalLink, Send, Unlink, Users } from 'lucide-react'
+import { Bell, ExternalLink, Send, Unlink, Users } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
   createTelegramLinkFn,
   disconnectTelegramChatFn,
   getTelegramConnectionFn,
+  getTelegramPreferencesFn,
   sendTelegramTestFn,
 } from '@/server/telegram/telegram.fns'
 import type { TelegramScope } from '@/lib/telegram/recipients'
@@ -21,6 +22,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { TelegramPreferencesDialog } from './telegram-preferences-dialog'
 
 const DESCRIPTIONS: Record<TelegramScope, string> = {
   platform:
@@ -54,18 +56,27 @@ export function TelegramConnectCard({ scope }: { scope: TelegramScope }) {
   const createLink = useServerFn(createTelegramLinkFn)
   const disconnect = useServerFn(disconnectTelegramChatFn)
   const sendTest = useServerFn(sendTelegramTestFn)
+  const getPreferences = useServerFn(getTelegramPreferencesFn)
   const queryKey = ['telegram-connection', scope]
+  const preferencesQueryKey = ['telegram-preferences', scope]
 
   const [pendingLink, setPendingLink] = useState<{
     url: string
     expiresAt: string
     chatCountAtStart: number
   } | null>(null)
+  const [preferencesFor, setPreferencesFor] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey,
     queryFn: () => getConnection({ data: { scope } }),
     refetchInterval: pendingLink ? POLL_MS : false,
+  })
+
+  const { data: preferences } = useQuery({
+    queryKey: preferencesQueryKey,
+    queryFn: () => getPreferences({ data: { scope } }),
+    enabled: (data?.chats.length ?? 0) > 0,
   })
 
   // A new chat appeared (or the link expired) — the link has done its job.
@@ -155,19 +166,51 @@ export function TelegramConnectCard({ scope }: { scope: TelegramScope }) {
                       {fmtDate(c.linked_at)}
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={disconnectMutation.isPending}
-                    onClick={() => disconnectMutation.mutate(c.id)}
-                  >
-                    <Unlink className="size-4" />
-                    Disconnect
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setPreferencesFor(c.id)}
+                    >
+                      <Bell className="size-4" />
+                      Preferences
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={disconnectMutation.isPending}
+                      onClick={() => disconnectMutation.mutate(c.id)}
+                    >
+                      <Unlink className="size-4" />
+                      Disconnect
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>
           )}
+
+          {preferencesFor &&
+            (() => {
+              const chat = chats.find((c) => c.id === preferencesFor)
+              const chatPrefs = preferences?.find((p) => p.subscription_id === preferencesFor)
+              if (!chat) return null
+              return (
+                <TelegramPreferencesDialog
+                  open
+                  onOpenChange={(open) => {
+                    if (!open) setPreferencesFor(null)
+                  }}
+                  scope={scope}
+                  subscriptionId={preferencesFor}
+                  chatLabel={
+                    chat.telegram_chat_title ??
+                    (chat.telegram_username ? `@${chat.telegram_username}` : 'this chat')
+                  }
+                  eventTypes={chatPrefs?.event_types ?? []}
+                />
+              )
+            })()}
 
           {pendingLink && (
             <div className="rounded-md border border-dashed p-3 text-sm">

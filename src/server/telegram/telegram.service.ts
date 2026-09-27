@@ -133,7 +133,7 @@ async function logEvent(row: {
   subscription_id?: string | null
   telegram_chat_id?: string | null
   payload?: Record<string, unknown> | null
-  status: 'sent' | 'failed' | 'skipped_no_subscription'
+  status: 'sent' | 'failed' | 'skipped_no_subscription' | 'skipped_preference_off'
   telegram_response?: unknown
 }) {
   try {
@@ -221,7 +221,32 @@ export async function notifyTelegram(input: NotifyTelegramInput): Promise<void> 
         continue
       }
 
+      // Muted per-chat, per-event-type — a second, narrower filter on top of
+      // the isolation rule above: this chat IS the right tenant, but whoever
+      // manages it turned this specific event type off. One batched query for
+      // the whole target's subs rather than one per subscription.
+      const { data: muteRows } = await admin
+        .from('telegram_notification_mutes')
+        .select('subscription_id')
+        .eq('event_type', input.eventType)
+        .in(
+          'subscription_id',
+          subs.map((s) => s.id),
+        )
+      const muted = new Set(
+        ((muteRows ?? []) as Array<{ subscription_id: string }>).map((m) => m.subscription_id),
+      )
+
       for (const sub of subs) {
+        if (muted.has(sub.id)) {
+          await logEvent({
+            ...base,
+            subscription_id: sub.id,
+            telegram_chat_id: sub.telegram_chat_id,
+            status: 'skipped_preference_off',
+          })
+          continue
+        }
         const res = await deliver(sub, input.text)
         if (!res.ok) {
           console.error('[telegram] send failed', input.eventType, sub.id, res.description)

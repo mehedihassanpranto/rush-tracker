@@ -14,6 +14,7 @@ import {
 import { writeAudit } from '@/server/audit/audit.service'
 import { telegramDeepLink } from '@/lib/telegram/recipients'
 import type { TelegramScope } from '@/lib/telegram/recipients'
+import { eventTypesFor, isKnownEventType } from '@/lib/telegram/event-types'
 import {
   getBotUsername,
   notifyTelegram,
@@ -119,6 +120,102 @@ export const getTelegramConnectionFn = createServerFn({ method: 'GET' })
       available: Boolean(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_WEBHOOK_SECRET),
       chats: (rows ?? []) as Array<TelegramChatLink>,
     }
+  })
+
+export interface TelegramChatPreferences {
+  subscription_id: string
+  event_types: Array<{ id: string; label: string; enabled: boolean }>
+}
+
+/**
+ * Per-chat mute state, one entry per connected chat in the caller's scope.
+ * Only lists event types that chat's recipient type could ever receive
+ * (`eventTypesFor`) — never a checkbox for something structurally
+ * unreachable, since there'd be nothing real to toggle.
+ */
+export const getTelegramPreferencesFn = createServerFn({ method: 'GET' })
+  .validator(scopeSchema)
+  .handler(async ({ data }): Promise<Array<TelegramChatPreferences>> => {
+    const { columns } = await resolveScope(data.scope)
+    const admin = getSupabaseAdminClient()
+    const { data: subs, error } = await admin
+      .from('telegram_subscriptions')
+      .select('id')
+      .eq('recipient_type', columns.recipient_type)
+      .eq('recipient_id', columns.recipient_id)
+      .eq('is_active', true)
+    if (error) throw new Error(error.message)
+    const subRows = (subs ?? []) as Array<{ id: string }>
+    if (subRows.length === 0) return []
+
+    const { data: mutes } = await admin
+      .from('telegram_notification_mutes')
+      .select('subscription_id, event_type')
+      .in(
+        'subscription_id',
+        subRows.map((s) => s.id),
+      )
+    const mutedSet = new Set(
+      ((mutes ?? []) as Array<{ subscription_id: string; event_type: string }>).map(
+        (m) => `${m.subscription_id}:${m.event_type}`,
+      ),
+    )
+
+    const catalog = eventTypesFor(columns.recipient_type)
+    return subRows.map((s) => ({
+      subscription_id: s.id,
+      event_types: catalog.map((e) => ({
+        id: e.id,
+        label: e.label,
+        enabled: !mutedSet.has(`${s.id}:${e.id}`),
+      })),
+    }))
+  })
+
+/**
+ * Toggle one event type for one connected chat. Same ownership discipline as
+ * `disconnectTelegramChatFn`: the subscription id is re-checked against the
+ * caller's own scope before anything is written, never trusted bare.
+ */
+export const setTelegramEventMuteFn = createServerFn({ method: 'POST' })
+  .validator(
+    scopeSchema.extend({
+      subscription_id: z.uuid(),
+      event_type: z.string().min(1),
+      enabled: z.boolean(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { columns } = await resolveScope(data.scope)
+    if (!isKnownEventType(data.event_type)) throw new Error('Unknown event type')
+
+    const admin = getSupabaseAdminClient()
+    const { data: sub, error: subError } = await admin
+      .from('telegram_subscriptions')
+      .select('id')
+      .eq('id', data.subscription_id)
+      .eq('recipient_type', columns.recipient_type)
+      .eq('recipient_id', columns.recipient_id)
+      .eq('is_active', true)
+      .maybeSingle()
+    if (subError) throw new Error(subError.message)
+    if (!sub) throw new Error('Chat not found')
+
+    if (data.enabled) {
+      const { error } = await admin
+        .from('telegram_notification_mutes')
+        .delete()
+        .eq('subscription_id', data.subscription_id)
+        .eq('event_type', data.event_type)
+      if (error) throw new Error(error.message)
+    } else {
+      const { error } = await admin.from('telegram_notification_mutes').upsert(
+        { subscription_id: data.subscription_id, event_type: data.event_type },
+        { onConflict: 'subscription_id,event_type' },
+      )
+      if (error) throw new Error(error.message)
+    }
+    return { ok: true }
   })
 
 export const createTelegramLinkFn = createServerFn({ method: 'POST' })
