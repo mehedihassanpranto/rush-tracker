@@ -45,8 +45,11 @@ push to `main` and every PR: `scripts/check-migrations.mjs` (name format,
 duplicate versions), typecheck, build, `npm test`, then e2e; live/e2e steps
 skip when the `SUPABASE_TEST_*` secrets are absent. CLAUDE.md gained a
 "Working agreements" section (commit same day; never run destructive checks on
-production; check the linked Supabase ref before `db push`). **Not yet run on
-GitHub** — the workflow is unverified until its first push.
+production; check the linked Supabase ref before `db push`). **Verified on GitHub
+(PR #3):** unit + live-DB 139/139 and e2e 21/21, after two CI-only fixes — the
+`SUPABASE_TEST_*` secrets were missing (e2e silently skips without them), and
+the agency sidebar test needed a 5-minute budget because the dev server
+compiles each route on first visit on a slow runner.
 
 ---
 
