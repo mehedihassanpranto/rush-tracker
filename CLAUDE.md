@@ -27,6 +27,13 @@ bug fixes, and anything else that isn't a whole new named feature.
   run if the URL is production's. Before any `supabase db push`, check
   `supabase/.temp/project-ref` — it must be the project you mean.
 - CI (`.github/workflows/ci.yml`) must be green before merging to `main`.
+- **New database functions are service_role-only by default** (migrations
+  000050–52 changed Supabase's default grants). Never rely on `revoke ... from
+  public` alone — it does not remove the `anon`/`authenticated` grants. A
+  function an RLS policy calls needs an explicit `grant execute ... to
+  authenticated` (and must be added to `POLICY_HELPERS` in
+  `src/server/security/client-exposure.test.ts`, which fails on any other
+  function reachable with the public key).
 
 ## Status
 
