@@ -18,6 +18,9 @@ for (const [role, prefix] of AREAS) {
     test.use(auth(role))
 
     test(`every link under ${prefix} loads cleanly`, async ({ page }) => {
+      // One test walks ~15 pages and the dev server compiles each route on its
+      // first visit, which is slow on a CI runner — budget per page, not 60s.
+      test.setTimeout(5 * 60_000)
       const errors: string[] = []
       page.on('pageerror', (e) => errors.push(`${page.url()} — ${e.message}`))
 
