@@ -53,7 +53,7 @@ compiles each route on first visit on a slow runner.
 
 
 **SECURITY FIX — privileged database functions were callable with the public
-anon key (migrations 000050–000052; applied to staging, NOT YET to production).**
+anon key (migrations 000050–000052; applied to staging AND production, 2026-10-01).**
 Found by the step-3 tenant-isolation audit. Every migration meant its RPCs to be
 service_role-only (`revoke ... from public; grant ... to service_role`), but
 Supabase's default privileges grant EXECUTE on every new `public` function to
@@ -68,6 +68,15 @@ the fixed `00000000-0000-0000-0000-000000000001`, so xRush's data was one
 unauthenticated request away from deletion. Production had the identical grants
 (read-only ACL query: 28 functions executable by anon). No evidence of abuse was
 looked for in this pass.
+**Applied to production 2026-10-01** after a `--dry-run` showed exactly these
+three pending: only the six RLS helpers remain executable by anon/authenticated,
+`reset_all_data`/`approve_payment`/`find_auth_user_by_email` are service_role-only,
+0 tables grant writes to either role, and a probe function created in a
+rolled-back transaction came out locked. Verified WITHOUT calling any
+destructive function on production (read-only ACL queries only). Data proof:
+row counts for 23 tables, the client list and per-client dues were snapshotted
+before and compared after — identical (7 clients, 152 ledger entries, 62
+payments).
 Fix: 000050 revokes EXECUTE from public/anon/authenticated on every `public`
 function except the six read-only helpers RLS policies call (`current_org_id`,
 `has_permission`, `is_admin`, `is_client_member`, `is_org_active`,
