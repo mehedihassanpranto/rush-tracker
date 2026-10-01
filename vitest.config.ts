@@ -13,6 +13,10 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
     environment: 'node',
+    // The live-DB suites make many round trips to the staging project (Tokyo);
+    // from a CI runner a multi-step test can exceed Vitest's 5s default.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
   resolve: {
     alias: {
