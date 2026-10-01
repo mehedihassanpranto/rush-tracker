@@ -51,6 +51,46 @@ production; check the linked Supabase ref before `db push`). **Verified on GitHu
 the agency sidebar test needed a 5-minute budget because the dev server
 compiles each route on first visit on a slow runner.
 
+
+**SECURITY FIX — privileged database functions were callable with the public
+anon key (migrations 000050–000052; applied to staging AND production, 2026-10-01).**
+Found by the step-3 tenant-isolation audit. Every migration meant its RPCs to be
+service_role-only (`revoke ... from public; grant ... to service_role`), but
+Supabase's default privileges grant EXECUTE on every new `public` function to
+`anon` and `authenticated` directly, and revoking from PUBLIC doesn't touch a
+role's own grant. Confirmed by calling them with only the anon key (which ships
+in the browser bundle): `reset_all_data(org)`, `approve_payment`,
+`approve_limit_request`, `assign/release/transfer_ad_account`,
+`create_adjustment`, `reverse_financial_transaction`, `submit_payment`,
+`find_auth_user_by_email` (email -> user id) and the dashboard aggregates all
+executed. `reset_all_data` wipes an agency's business data and org zero's id is
+the fixed `00000000-0000-0000-0000-000000000001`, so xRush's data was one
+unauthenticated request away from deletion. Production had the identical grants
+(read-only ACL query: 28 functions executable by anon). No evidence of abuse was
+looked for in this pass.
+**Applied to production 2026-10-01** after a `--dry-run` showed exactly these
+three pending: only the six RLS helpers remain executable by anon/authenticated,
+`reset_all_data`/`approve_payment`/`find_auth_user_by_email` are service_role-only,
+0 tables grant writes to either role, and a probe function created in a
+rolled-back transaction came out locked. Verified WITHOUT calling any
+destructive function on production (read-only ACL queries only). Data proof:
+row counts for 23 tables, the client list and per-client dues were snapshotted
+before and compared after — identical (7 clients, 152 ledger entries, 62
+payments).
+Fix: 000050 revokes EXECUTE from public/anon/authenticated on every `public`
+function except the six read-only helpers RLS policies call (`current_org_id`,
+`has_permission`, `is_admin`, `is_client_member`, `is_org_active`,
+`is_platform_admin`); 000051 removes the *schema-scoped* default privilege entry
+(000050's global revoke left it, so a function created afterwards was exposed
+again — caught by creating a probe function and reading its ACL); 000052 revokes
+INSERT/UPDATE/DELETE/TRUNCATE on all tables from anon/authenticated (RLS already
+denied writes; this removes the dependency on it) and adds
+`client_exposure_report()` (service_role only). All 33 `.rpc(` call sites go
+through the service-role client, so the app is unaffected. New live test
+`src/server/security/client-exposure.test.ts` asserts the real privileges: only
+the six helpers exposed, no table writes, privileged RPCs return 42501 to anon
+and to a signed-in user. Staging: 149/149 tests, e2e 21/21.
+
 ---
 
 ## 2026-09-28
