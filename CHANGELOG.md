@@ -6,6 +6,53 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-10-01
+
+**Staging-environment groundwork (upgrade plan step 1).** The three live-DB
+integration tests (`pool-isolation`, `offboarding`, `usd-ledger`) each read
+`.env` directly — i.e. production — and wrote real rows to it. They now share
+`src/test/live-env.ts`, which reads only `.env.test` (or `SUPABASE_TEST_*` CI
+variables), never `.env`, and throws if the test URL equals production's. With
+no credentials the suites skip, so `npm test` stays green (109 passed, 30
+skipped). Added `npm run test:live`, `.env.test.example`, gitignore entries,
+and `docs/STAGING.md` (project creation, `supabase db push`, `proofs` bucket,
+rules).
+
+**Staging project created and verified.** `rush-tracker-staging`
+(`coyqcoefivrgsfsmrncq`, ap-northeast-1) has all 48 migrations applied via
+`supabase db push` and a private `proofs` bucket; `.env.test` points at it. The
+CLI was re-linked to production afterwards (`supabase/.temp/project-ref` =
+`fhrvtgizyhmxsduwxfwn`) — **always check the linked ref before a production
+`db push`**. `npm run test:live`: 39/39. One test
+(`pool-isolation` "xRush's own fleet") asserted that org zero already had
+accounts, which only holds on production data; it now seeds its own pool
+account and grant and cleans up. With `.env.test` present `npm test` runs the
+live suites too: 139/139. `SUPABASE_ACCESS_TOKEN` stored in `.env` (gitignored).
+
+
+**Permanent e2e suite + CI (upgrade plan step 2).** Playwright is now a dev
+dependency (`npm run test:e2e`), no longer installed and removed per session.
+`e2e/` seeds throwaway agencies/logins on STAGING, signs them in by password,
+and checks: each role is kept inside its own area (`/platform`, `/agency`,
+`/client`) and signed-out users go to login; agency A never sees agency B's
+client or ad account (list screens and a direct by-id URL); a suspended agency
+lands on the suspended page; every sidebar link of all three areas loads
+without an uncaught error. 21/21 pass; teardown verified to leave zero rows on
+staging and nothing on production. The dev server under test gets explicit
+staging credentials plus inert Meta/Telegram/cron values, so the production
+tokens in `.env` can't be reached. `.github/workflows/ci.yml` (new) runs on
+push to `main` and every PR: `scripts/check-migrations.mjs` (name format,
+duplicate versions), typecheck, build, `npm test`, then e2e; live/e2e steps
+skip when the `SUPABASE_TEST_*` secrets are absent. CLAUDE.md gained a
+"Working agreements" section (commit same day; never run destructive checks on
+production; check the linked Supabase ref before `db push`). **Verified on GitHub
+(PR #3):** unit + live-DB 139/139 and e2e 21/21, after two CI-only fixes — the
+`SUPABASE_TEST_*` secrets were missing (e2e silently skips without them), and
+the agency sidebar test needed a 5-minute budget because the dev server
+compiles each route on first visit on a slow runner.
+
+---
+
 ## 2026-09-28
 
 **Two genuinely missing pieces added on top of the multi-role Telegram system

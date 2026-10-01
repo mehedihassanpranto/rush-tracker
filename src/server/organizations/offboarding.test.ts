@@ -1,8 +1,8 @@
-import { readFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { DEPLOYMENT_ORGANIZATION_ID } from '@/lib/organizations/deployment-org'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { loadLiveTestEnv } from '@/test/live-env'
 
 /**
  * Offboarding an agency is the most destructive action in the app, so the
@@ -17,24 +17,6 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  *
  * Skips cleanly without credentials, like pool-isolation.test.ts.
  */
-function loadEnv(): { url: string; key: string } | null {
-  try {
-    const raw = readFileSync(new URL('../../../.env', import.meta.url), 'utf8')
-    const env: Record<string, string> = {}
-    for (const line of raw.split('\n')) {
-      const t = line.trim()
-      if (!t || t.startsWith('#')) continue
-      const i = t.indexOf('=')
-      env[t.slice(0, i).trim()] = t.slice(i + 1).trim().replace(/^["']|["']$/g, '')
-    }
-    const url = env.VITE_SUPABASE_URL ?? env.SUPABASE_URL
-    const key = env.SUPABASE_SERVICE_ROLE_KEY
-    return url && key ? { url, key } : null
-  } catch {
-    return null
-  }
-}
-
 const OFFBOARD_ORDER = [
   'notifications',
   'audit_logs',
@@ -58,7 +40,7 @@ const OFFBOARD_ORDER = [
   'user_profiles',
 ] as const
 
-const creds = loadEnv()
+const creds = loadLiveTestEnv()
 const SUFFIX = `offboard-${Date.now()}`
 
 describe.skipIf(!creds)('organization offboarding', () => {

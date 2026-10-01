@@ -17,6 +17,17 @@ Status tracks the big, feature-level "what exists now" narrative; the
 changelog tracks day-by-day "what happened," including hardening passes,
 bug fixes, and anything else that isn't a whole new named feature.
 
+## Working agreements
+
+- **Commit and push the same day** you change something — uncommitted work on
+  one machine has already nearly been lost once (Finance & Accounts).
+- **Never run destructive checks against production.** Live-DB tests and
+  Playwright e2e target the staging project only (`.env.test`,
+  `docs/STAGING.md`); `src/test/live-env.ts` and `e2e/support/env.ts` refuse to
+  run if the URL is production's. Before any `supabase db push`, check
+  `supabase/.temp/project-ref` — it must be the project you mean.
+- CI (`.github/workflows/ci.yml`) must be green before merging to `main`.
+
 ## Status
 
 - **Phase 0 (architecture verification): done** — conventions below were

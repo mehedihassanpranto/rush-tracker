@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -10,6 +9,7 @@ import {
 } from './scope.server'
 import { DEPLOYMENT_ORGANIZATION_ID } from '@/lib/organizations/deployment-org'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { loadLiveTestEnv } from '@/test/live-env'
 
 /**
  * Cross-tenant isolation for the platform-owned ad account pool — the core
@@ -27,28 +27,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  * split between DB-independent unit tests and live-project procedures
  * (docs/TESTING.md).
  */
-function loadEnv(): { url: string; key: string } | null {
-  try {
-    const raw = readFileSync(new URL('../../../.env', import.meta.url), 'utf8')
-    const env: Record<string, string> = {}
-    for (const line of raw.split('\n')) {
-      const t = line.trim()
-      if (!t || t.startsWith('#')) continue
-      const i = t.indexOf('=')
-      env[t.slice(0, i).trim()] = t
-        .slice(i + 1)
-        .trim()
-        .replace(/^["']|["']$/g, '')
-    }
-    const url = env.VITE_SUPABASE_URL ?? env.SUPABASE_URL
-    const key = env.SUPABASE_SERVICE_ROLE_KEY
-    return url && key ? { url, key } : null
-  } catch {
-    return null
-  }
-}
-
-const creds = loadEnv()
+const creds = loadLiveTestEnv()
 const SUFFIX = `pooltest-${Date.now()}`
 
 describe.skipIf(!creds)('platform account pool — cross-tenant isolation', () => {
@@ -243,16 +222,41 @@ describe.skipIf(!creds)('platform account pool — cross-tenant isolation', () =
   it("regression: xRush's own fleet is unchanged and still fully reachable", async () => {
     // Every account xRush could see before the pool migration it must still
     // see afterwards — they moved into the pool and were granted straight back.
-    const scope = await adAccountScope(admin, DEPLOYMENT_ORGANIZATION_ID)
-    const { data } = await applyAdAccountScope(
-      admin.from('ad_accounts').select('id, is_platform'),
-      scope,
-    )
-    const visible = data ?? []
-    const granted = await grantedAccountIds(admin, DEPLOYMENT_ORGANIZATION_ID)
-    expect(visible.length).toBe(granted.length)
-    expect(visible.length).toBeGreaterThan(0)
-    // …and none of the throwaway org's accounts leaked in.
-    expect(visible.map((r) => r.id)).not.toContain(ownedByBId)
+    // Seeds its own pool account + grant for org zero rather than relying on
+    // existing rows, so it holds on an empty staging database as well as
+    // production.
+    const { data: seeded, error: seedErr } = await admin
+      .from('ad_accounts')
+      .insert({
+        name: `ZZ Org Zero Pool ${SUFFIX}`,
+        platform: 'META',
+        is_platform: true,
+        organization_id: null,
+        usd_rate: 0,
+      })
+      .select('id')
+      .single()
+    if (seedErr) throw new Error(seedErr.message)
+    try {
+      const { error: gErr } = await admin
+        .from('platform_account_grants')
+        .insert({ ad_account_id: seeded.id, organization_id: DEPLOYMENT_ORGANIZATION_ID })
+      if (gErr) throw new Error(gErr.message)
+
+      const scope = await adAccountScope(admin, DEPLOYMENT_ORGANIZATION_ID)
+      const { data } = await applyAdAccountScope(
+        admin.from('ad_accounts').select('id, is_platform'),
+        scope,
+      )
+      const visible = data ?? []
+      const granted = await grantedAccountIds(admin, DEPLOYMENT_ORGANIZATION_ID)
+      expect(visible.length).toBe(granted.length)
+      expect(visible.map((r) => r.id)).toContain(seeded.id)
+      // …and none of the throwaway org's accounts leaked in.
+      expect(visible.map((r) => r.id)).not.toContain(ownedByBId)
+    } finally {
+      await admin.from('platform_account_grants').delete().eq('ad_account_id', seeded.id)
+      await admin.from('ad_accounts').delete().eq('id', seeded.id)
+    }
   })
 })
