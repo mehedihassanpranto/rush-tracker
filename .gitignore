@@ -16,3 +16,12 @@ todos.json
 # Supabase CLI local state — machine-specific link info (project ref, pooler
 # connection string), not project config. Never commit.
 supabase/.temp/
+
+# Staging credentials for live tests (see docs/STAGING.md)
+.env.test
+.env.staging
+
+# Playwright
+e2e/.auth/
+test-results/
+playwright-report/

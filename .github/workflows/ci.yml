@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Dummy public values so `vite build` has a URL/key to read; nothing in this
+# workflow ever touches production. The live-DB and e2e suites use the STAGING
+# project through the SUPABASE_TEST_* secrets, and skip when those are absent
+# (e.g. pull requests from forks).
+env:
+  VITE_SUPABASE_URL: https://placeholder.supabase.co
+  VITE_SUPABASE_ANON_KEY: placeholder-anon-key-placeholder
+  SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
+  SUPABASE_TEST_URL: ${{ secrets.SUPABASE_TEST_URL }}
+  SUPABASE_TEST_ANON_KEY: ${{ secrets.SUPABASE_TEST_ANON_KEY }}
+  SUPABASE_TEST_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TEST_SERVICE_ROLE_KEY }}
+
+jobs:
+  check:
+    name: Typecheck, build, tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Migration files
+        run: node scripts/check-migrations.mjs
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Unit + live-DB tests
+        run: npm test
+
+  e2e:
+    name: Playwright e2e (staging)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Check for staging secrets
+        id: gate
+        run: |
+          if [ -n "$SUPABASE_TEST_URL" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; else echo "::notice::SUPABASE_TEST_* secrets not set — skipping e2e"; fi
+      - if: steps.gate.outputs.run == 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.gate.outputs.run == 'true'
+        run: npm run test:e2e
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7

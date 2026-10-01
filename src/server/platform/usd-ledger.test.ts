@@ -1,8 +1,8 @@
-import { readFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { dec } from '@/lib/money/money'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { loadLiveTestEnv } from '@/test/live-env'
 
 /**
  * The platform's USD/BDT stock ledger against the real project (migration
@@ -22,26 +22,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  * test), and everything is deleted afterwards. Skips without credentials, like
  * pool-isolation.test.ts.
  */
-function loadEnv(): { url: string; serviceKey: string; anonKey: string } | null {
-  try {
-    const raw = readFileSync(new URL('../../../.env', import.meta.url), 'utf8')
-    const env: Record<string, string> = {}
-    for (const line of raw.split('\n')) {
-      const t = line.trim()
-      if (!t || t.startsWith('#')) continue
-      const i = t.indexOf('=')
-      env[t.slice(0, i).trim()] = t.slice(i + 1).trim().replace(/^["']|["']$/g, '')
-    }
-    const url = env.VITE_SUPABASE_URL ?? env.SUPABASE_URL
-    const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY
-    const anonKey = env.VITE_SUPABASE_ANON_KEY
-    return url && serviceKey && anonKey ? { url, serviceKey, anonKey } : null
-  } catch {
-    return null
-  }
-}
-
-const creds = loadEnv()
+const creds = loadLiveTestEnv()
 const SUFFIX = `usdtest-${Date.now()}`
 const noSession = { auth: { persistSession: false, autoRefreshToken: false } }
 
