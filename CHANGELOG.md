@@ -91,6 +91,26 @@ through the service-role client, so the app is unaffected. New live test
 the six helpers exposed, no table writes, privileged RPCs return 42501 to anon
 and to a signed-in user. Staging: 149/149 tests, e2e 21/21.
 
+
+**Tenant-isolation sweep finished (upgrade plan step 3).** Beyond the privilege
+lockdown above: (1) audited every `public` function body that compares an
+organization id — all nine IDOR guards compare against `NOT NULL` columns
+(`limit_requests`, `payments`, `ledger_entries`, `clients`), and
+assign/release/transfer use the NULL-safe `org_can_use_ad_account`, so the
+earlier pool-account bug class has no other instance. **Residual, accepted:**
+those guards use `<>`, so a NULL `p_organization_id` would skip them; the
+functions are service_role-only now and every caller passes a non-null
+`actor.organizationId`, so it isn't reachable — switch to `IS DISTINCT FROM`
+if these functions are ever rewritten. (2) New live test
+`src/server/security/rls-isolation.test.ts` (33 tests): seeds two agencies, each
+with an admin, a client login and rows in 15 tables, then reads every table
+through the anon key as each user. Asserts each admin sees its own rows (so a
+blanket-deny can't pass) and none of the other agency's, a client login sees
+only its own client's money rows, and no tenant user can read
+`app_settings`/`platform_settings`/`organizations`. 33/33 on staging; teardown
+leaves nothing. Not covered (need long FK chains to seed): `limit_requests`,
+`ad_account_assignments`.
+
 ---
 
 ## 2026-09-28
