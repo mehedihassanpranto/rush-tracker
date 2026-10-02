@@ -103,6 +103,21 @@ export const TELEGRAM_EVENT_TYPES: Array<TelegramEventType> = [
     label: 'Ad account low on Meta spend headroom',
     recipientTypes: ['agency', 'platform_admin'],
   },
+  {
+    id: 'meta.token_problem',
+    label: 'Meta token invalid or about to expire',
+    recipientTypes: ['agency', 'platform_admin'],
+  },
+  {
+    id: 'system.cron_failed',
+    label: 'Background job failed',
+    recipientTypes: ['platform_admin'],
+  },
+  {
+    id: 'system.errors_digest',
+    label: 'Daily count of server errors',
+    recipientTypes: ['platform_admin'],
+  },
 ]
 
 /** Every event type a chat of this recipient type could ever receive. */

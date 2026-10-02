@@ -17,6 +17,8 @@ export const ORG_ZERO = '00000000-0000-0000-0000-000000000001'
 export type Role = 'platform' | 'agencyA' | 'agencyB' | 'client' | 'suspended'
 export type Fixtures = {
   run: string
+  /** ISO time seeding started — monitoring rows from this run are newer. */
+  startedAt: string
   orgA: string
   orgB: string
   orgS: string
@@ -53,6 +55,7 @@ async function makeUser(admin: SupabaseClient, email: string, name: string) {
 }
 
 export async function seed(env: E2EEnv, run: string): Promise<Fixtures> {
+  const startedAt = new Date().toISOString()
   const admin = adminClient(env)
   const roles = await must(admin.from('roles').select('id, key'), 'roles')
   const roleId = (k: string) => roles.find((r) => r.key === k)!.id
@@ -127,7 +130,7 @@ export async function seed(env: E2EEnv, run: string): Promise<Fixtures> {
     'ad_accounts',
   )
 
-  return { run, orgA, orgB, orgS, clientA, clientB, clientAName, clientBName, accountAName, accountBName, users }
+  return { run, startedAt, orgA, orgB, orgS, clientA, clientB, clientAName, clientBName, accountAName, accountBName, users }
 }
 
 /** Deletes everything seed() created (and the audit/notification rows the app wrote for it). */
@@ -153,6 +156,12 @@ export async function teardown(env: E2EEnv, f: Fixtures): Promise<void> {
   await admin.from('user_profiles').delete().in('user_id', userIds)
   for (const id of userIds) await admin.auth.admin.deleteUser(id)
   await admin.from('organizations').delete().in('id', orgIds)
+  // Monitoring rows this run caused (cron calls, captured errors, token checks).
+  if (f.startedAt) {
+    await admin.from('app_errors').delete().gte('occurred_at', f.startedAt)
+    await admin.from('cron_runs').delete().gte('started_at', f.startedAt)
+    await admin.from('integration_health').delete().gte('checked_at', f.startedAt)
+  }
 }
 
 /** Signs a user in with their password and returns the exact cookies the app's own SSR client would set. */

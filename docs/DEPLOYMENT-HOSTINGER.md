@@ -183,6 +183,14 @@ curl -s -H "Authorization: Bearer YOUR_CRON_SECRET" https://yourdomain/api/cron/
 
 The endpoint is idempotent — running it twice is safe.
 
+**Ongoing check: Platform → System health.** Every run is recorded, so that
+page shows the last successful run and turns red ("Stale") when there hasn't
+been one for 26 hours — the signal that the cron entry is missing or broken.
+A run that fails (fully or partly) is also sent to platform admins in-app and on
+the platform Telegram bot. If the page says recent runs came from more than one
+host, two schedulers are calling the job — usually a leftover Vercel project
+whose cron still fires; delete or disconnect it.
+
 ---
 
 ## 6. Post-deploy verification

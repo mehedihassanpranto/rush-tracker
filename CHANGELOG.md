@@ -8,6 +8,41 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-03
 
+**Monitoring (upgrade plan step 5, migration `20260723000054`).** Prompted by
+the move from Vercel to Hostinger: the daily Meta sync used to be scheduled by
+Vercel Cron, and the only evidence it still runs was an indirect digest
+notification. Now:
+- *Cron run log* (`cron_runs`): every `/api/cron/meta-sync` call records start,
+  finish, status (`success`/`partial`/`failed`), a summary and who called it
+  (host + user agent). A run is `partial` when any part fails — including one
+  portfolio failing inside an otherwise-finished sync, which previously looked
+  like success because `syncMetaAdAccounts()` reports per-portfolio failures in
+  `skipped` instead of throwing. Failures alert platform admins (in-app + the
+  platform Telegram bot). Runs kept 90 days.
+- *Meta token health* (`integration_health`): each run (and a "Check now"
+  button) asks Meta's `debug_token` about the platform token and every active
+  agency's own token. Invalid, or expiring within 7 days, alerts the owner of
+  that token (platform admins, or that agency's admins) **once per change of
+  state**, not every day. A network failure is "couldn't check", never a false
+  "invalid".
+- *Server error log* (`app_errors`): a global server-function middleware
+  (`src/start.ts` → `src/server/monitoring/error-capture.ts`) records any
+  unexpected error with the function name, then rethrows it unchanged. Expected
+  errors (auth, plan limits, validation, router redirects, Meta not connected)
+  are skipped. The cron sends platform admins a daily count with the top
+  messages when there were any. Kept 30 days.
+- **Platform → System health** shows all three: a red "Stale" banner when no
+  successful run for 26 h, token status per portfolio, and errors grouped by
+  message.
+All three tables: RLS on, zero policies, no foreign keys (a log write must never
+fail, and logs outlive what they describe); monitoring writes never throw.
+Three new Telegram event types (`meta.token_problem`, `system.cron_failed`,
+`system.errors_digest`), mutable per chat like the rest. Verified on staging:
+the middleware captures a real server-fn error, the cron records a `partial`
+run against an invalid token, two runs produce exactly one token alert, and
+the health page renders it; 16 new unit tests. `npm test` 221/221, e2e 29/29,
+client bundle confirmed free of the service-role code.
+
 **Subscription plans live in production.** Migration `20260723000053` applied
 to production *before* merging PR #7 — the new code reads the plan tables when
 adding clients/staff/ad accounts, so deploying it first would have broken those

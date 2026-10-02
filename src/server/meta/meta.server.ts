@@ -340,3 +340,65 @@ export async function updateMetaAdAccountSpendCap(
     : `act_${externalAccountId}`
   await graphPost(actId, { spend_cap: spendCapMajorUnits }, config)
 }
+
+export interface MetaTokenHealth {
+  configured: boolean
+  /** null when the check itself couldn't reach a verdict */
+  valid: boolean | null
+  /** ISO; null = never expires (Meta reports 0) or unknown */
+  expiresAt: string | null
+  dataAccessExpiresAt: string | null
+  error: string | null
+}
+
+/**
+ * Asks Meta about one credential set's token: is it valid, and when does it
+ * (or its data access) expire? Uses `debug_token` on the token itself, which a
+ * token is allowed to do for itself. Never throws — monitoring must report a
+ * broken token, not crash on it.
+ */
+export async function checkMetaToken(
+  scope: MetaCredentialScope,
+): Promise<MetaTokenHealth> {
+  let config: MetaConfig
+  try {
+    config = await getMetaConfig(scope)
+  } catch (err) {
+    if (err instanceof MetaNotConfiguredError) {
+      return { configured: false, valid: null, expiresAt: null, dataAccessExpiresAt: null, error: null }
+    }
+    return { configured: true, valid: null, expiresAt: null, dataAccessExpiresAt: null, error: (err as Error).message }
+  }
+  try {
+    const res = await graphGet<{
+      data?: {
+        is_valid?: boolean
+        expires_at?: number
+        data_access_expires_at?: number
+        error?: { message?: string }
+      }
+    }>('debug_token', { input_token: config.token }, config)
+    const d = res.data ?? {}
+    const toIso = (s?: number) => (s ? new Date(s * 1000).toISOString() : null)
+    return {
+      configured: true,
+      valid: d.is_valid === true,
+      expiresAt: toIso(d.expires_at),
+      dataAccessExpiresAt: toIso(d.data_access_expires_at),
+      error: d.is_valid === true ? null : (d.error?.message ?? 'Meta reports this token as invalid'),
+    }
+  } catch (err) {
+    // A revoked/expired token fails the call itself with an access-token
+    // (OAuth 190) error — that's a real verdict. Anything else (network,
+    // Meta outage) is "couldn't tell", which must not page anyone.
+    const message = (err as Error).message
+    const tokenRejected = /access token|oauth|session has expired|invalid token/i.test(message)
+    return {
+      configured: true,
+      valid: tokenRejected ? false : null,
+      expiresAt: null,
+      dataAccessExpiresAt: null,
+      error: (err as Error).message,
+    }
+  }
+}
