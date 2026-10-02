@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { ResetDataDialog } from '@/components/admin/settings/reset-data-dialog'
 import { IntegrationSettingsCard } from '@/components/shared/integration-settings/integration-settings-card'
 import { TelegramConnectCard } from '@/components/shared/telegram/telegram-connect-card'
+import { MyPlanCard } from '@/components/admin/settings/my-plan-card'
 
 export const Route = createFileRoute('/agency/settings/')({
   component: SettingsPage,
@@ -27,6 +28,8 @@ function SettingsPage() {
         title="Settings"
         description="System configuration. The USD rate is now set per client, on each client's profile."
       />
+
+      <MyPlanCard />
 
       {canManageIntegrations && <IntegrationSettingsCard />}
       {/* Same permission as the server fns: a linked chat receives client

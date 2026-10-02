@@ -6,6 +6,46 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-10-02
+
+**Subscription plans with limits + agency payments ledger (upgrade plan step 4,
+owner-approved design; migration `20260723000053`).** Four starting plans:
+Basic ৳1,500 (5 active clients / 15 ad accounts / 2 staff logins), Standard
+৳4,000 (20/60/5), Advance ৳8,000 (60/200/15) and Unlimited ৳15,000 (no limits)
+— all editable from the new **Platform → Plans** page. xRush Agency is on
+Unlimited and `billing_exempt`; agencies with no plan have no limits, so nothing
+changed for anyone on the day this shipped.
+*Limits are hard blocks on adding*, never removals: an agency at or over a limit
+(e.g. after a downgrade) keeps everything and just can't add more. Enforced
+server-side in one place (`src/server/subscription/plan-limits.service.ts`) and
+called from every path that adds a countable thing — client create/edit/
+reactivate, Meta import (checked as a whole batch), pool grant and account-
+request fulfilment, staff create/reactivate, and the platform's "Add admin" /
+admin reactivation. What counts: ACTIVE clients; owned + granted ad accounts;
+ACTIVE ADMIN/SUPER_ADMIN profiles excluding platform operators. Accepted
+limitation: check-then-insert isn't one transaction, so two simultaneous adds
+can land one over — quotas, not money.
+*Payments ledger* (`subscription_payments`): append-only, one row per payment
+covering a period; "paid through" is derived from the latest period end, never
+stored. Billing status (Paid / Overdue / No payment yet / Billing exempt / No
+paid plan) shows as a badge on the organizations list and the agency profile's
+new **Plan & billing** card (usage meters, Change plan, Record payment — period
+prefilled to continue from the paid-through date, amount from the plan fee).
+Overdue is a badge only; suspension stays manual. Agencies see their own plan,
+usage and paid-through read-only on **Settings → Your plan**. Both new tables:
+RLS on, zero policies (server layer only), payments cascade on agency delete so
+offboarding still works. Plan changes and payments are audited into the
+agency's own audit log.
+Tests: 18 unit (limit maths, billing status, Dhaka business day, period
+roll-over), 5 live (what counts toward each limit, refusal at the limit, payment
+constraints), 4 e2e (plans page, change plan + record payment through the real
+dialogs, agency's read-only view). Found and fixed in the e2e teardown: a
+recorded payment's `recorded_by` blocked deleting the platform test user, so
+teardown now removes subscription payments first. `npm test` 205/205, e2e
+25/25, typecheck and build clean.
+
+---
+
 ## 2026-10-01
 
 **Staging-environment groundwork (upgrade plan step 1).** The three live-DB

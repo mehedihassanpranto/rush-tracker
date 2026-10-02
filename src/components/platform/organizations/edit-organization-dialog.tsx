@@ -115,9 +115,9 @@ export function EditOrganizationDialog({
               name="plan"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Plan (optional)</FormLabel>
+                  <FormLabel>Plan note (optional, free text)</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g. Standard, Pro" {...field} />
+                    <Input placeholder="Informational only — set the real plan under Plan & billing" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

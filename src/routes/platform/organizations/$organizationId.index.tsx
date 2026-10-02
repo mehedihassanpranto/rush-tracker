@@ -26,6 +26,7 @@ import { EditOrganizationDialog } from '@/components/platform/organizations/edit
 import { AddOrganizationAdminDialog } from '@/components/platform/organizations/add-organization-admin-dialog'
 import { DeleteOrganizationAdminDialog } from '@/components/platform/organizations/delete-organization-admin-dialog'
 import { DeleteOrganizationDialog } from '@/components/platform/organizations/delete-organization-dialog'
+import { SubscriptionCard } from '@/components/platform/subscription/subscription-card'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -211,6 +212,8 @@ function OrganizationProfilePage() {
         />
       </div>
 
+      <SubscriptionCard organizationId={org.id} organizationName={org.name} />
+
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -218,7 +221,7 @@ function OrganizationProfilePage() {
           </CardHeader>
           <CardContent>
             <dl className="divide-y">
-              <InfoRow label="Plan" value={org.plan ?? '—'} />
+              {org.plan && <InfoRow label="Plan note (legacy)" value={org.plan} />}
               <InfoRow
                 label="Status"
                 value={<StatusBadge status={org.subscription_status.toUpperCase()} />}

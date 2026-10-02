@@ -3490,6 +3490,23 @@ bug fixes, and anything else that isn't a whole new named feature.
   owner's own "Register webhook" click on Platform Settings after this
   merges and deploys, same as the shared bot's own setup.
 
+- **Subscription plans + payments ledger (post-Phase-8 addition, upgrade
+  plan step 4): done, pending owner review. Migration `20260723000053`.**
+  `subscription_plans` (fee + `max_clients`/`max_ad_accounts`/`max_staff`,
+  NULL = unlimited), `organizations.plan_id` (NULL = no limits) and
+  `organizations.billing_exempt`, and append-only `subscription_payments`
+  (period-based; paid-through derived, never stored). **All limit enforcement
+  goes through `assertPlanAllows()` in
+  `src/server/subscription/plan-limits.service.ts` — any NEW path that adds an
+  active client, an ad account (owned or granted) or an active staff login
+  must call it**, or it becomes a way around the plan. Definitions of what
+  counts live in `getOrganizationUsage()` only. Limits block adding, never
+  remove anything. The free-text `organizations.plan` column is legacy
+  ("Plan note"); the enforced plan is `plan_id`. Platform UI: `/platform/plans`
+  and the Plan & billing card on the agency profile; agency UI: read-only "Your
+  plan" on Settings. Pure rules (limit checks, billing status, Asia/Dhaka
+  business day, period roll-over) in `src/lib/subscription/plans.ts`.
+
 ### Phase 8 conventions
 - Tests run via Vitest with a **standalone `vitest.config.ts`** that does NOT
   load the TanStack Start / Nitro plugins (pure unit tests only); `@` alias is

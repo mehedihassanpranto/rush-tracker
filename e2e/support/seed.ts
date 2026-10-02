@@ -137,6 +137,10 @@ export async function teardown(env: E2EEnv, f: Fixtures): Promise<void> {
   const userIds = Object.values(f.users).map((u) => u.id)
   // Child → parent, mirroring OFFBOARD_ORDER's constraints.
   for (const t of [
+    // subscription_payments first: recorded_by names the platform test user,
+    // so it must go before that user can be deleted (it would otherwise only
+    // cascade away with the agency, after the user delete already failed).
+    'subscription_payments',
     'notifications', 'audit_logs', 'adjustments', 'ledger_entries', 'payments', 'payment_requests',
     'limit_requests', 'platform_account_requests', 'ad_account_assignments', 'attachments',
   ]) {
