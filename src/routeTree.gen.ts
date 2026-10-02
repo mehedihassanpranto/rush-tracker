@@ -56,6 +56,7 @@ import { Route as PlatformLimitRequestsIndexRouteImport } from './routes/platfor
 import { Route as PlatformLimitRequestsRequestIdRouteImport } from './routes/platform/limit-requests/$requestId'
 import { Route as PlatformNotificationsIndexRouteImport } from './routes/platform/notifications/index'
 import { Route as PlatformOrganizationsIndexRouteImport } from './routes/platform/organizations/index'
+import { Route as PlatformPlansIndexRouteImport } from './routes/platform/plans/index'
 import { Route as PlatformSettingsIndexRouteImport } from './routes/platform/settings/index'
 import { Route as ApiTelegramWebhookPlatformRouteImport } from './routes/api/telegram/webhook/platform'
 import { Route as PlatformOrganizationsOrganizationIdIndexRouteImport } from './routes/platform/organizations/$organizationId.index'
@@ -308,6 +309,11 @@ const PlatformOrganizationsIndexRoute =
     path: '/organizations/',
     getParentRoute: () => PlatformRouteRoute,
   } as any)
+const PlatformPlansIndexRoute = PlatformPlansIndexRouteImport.update({
+  id: '/plans/',
+  path: '/plans/',
+  getParentRoute: () => PlatformRouteRoute,
+} as any)
 const PlatformSettingsIndexRoute = PlatformSettingsIndexRouteImport.update({
   id: '/settings/',
   path: '/settings/',
@@ -379,6 +385,7 @@ export interface FileRoutesByFullPath {
   '/platform/limit-requests/': typeof PlatformLimitRequestsIndexRoute
   '/platform/notifications/': typeof PlatformNotificationsIndexRoute
   '/platform/organizations/': typeof PlatformOrganizationsIndexRoute
+  '/platform/plans/': typeof PlatformPlansIndexRoute
   '/platform/settings/': typeof PlatformSettingsIndexRoute
   '/api/telegram/webhook/platform': typeof ApiTelegramWebhookPlatformRoute
   '/platform/organizations/$organizationId/data': typeof PlatformOrganizationsOrganizationIdDataRoute
@@ -428,6 +435,7 @@ export interface FileRoutesByTo {
   '/platform/limit-requests': typeof PlatformLimitRequestsIndexRoute
   '/platform/notifications': typeof PlatformNotificationsIndexRoute
   '/platform/organizations': typeof PlatformOrganizationsIndexRoute
+  '/platform/plans': typeof PlatformPlansIndexRoute
   '/platform/settings': typeof PlatformSettingsIndexRoute
   '/api/telegram/webhook/platform': typeof ApiTelegramWebhookPlatformRoute
   '/platform/organizations/$organizationId/data': typeof PlatformOrganizationsOrganizationIdDataRoute
@@ -482,6 +490,7 @@ export interface FileRoutesById {
   '/platform/limit-requests/': typeof PlatformLimitRequestsIndexRoute
   '/platform/notifications/': typeof PlatformNotificationsIndexRoute
   '/platform/organizations/': typeof PlatformOrganizationsIndexRoute
+  '/platform/plans/': typeof PlatformPlansIndexRoute
   '/platform/settings/': typeof PlatformSettingsIndexRoute
   '/api/telegram/webhook/platform': typeof ApiTelegramWebhookPlatformRoute
   '/platform/organizations/$organizationId/data': typeof PlatformOrganizationsOrganizationIdDataRoute
@@ -536,6 +545,7 @@ export interface FileRouteTypes {
     | '/platform/limit-requests/'
     | '/platform/notifications/'
     | '/platform/organizations/'
+    | '/platform/plans/'
     | '/platform/settings/'
     | '/api/telegram/webhook/platform'
     | '/platform/organizations/$organizationId/data'
@@ -585,6 +595,7 @@ export interface FileRouteTypes {
     | '/platform/limit-requests'
     | '/platform/notifications'
     | '/platform/organizations'
+    | '/platform/plans'
     | '/platform/settings'
     | '/api/telegram/webhook/platform'
     | '/platform/organizations/$organizationId/data'
@@ -638,6 +649,7 @@ export interface FileRouteTypes {
     | '/platform/limit-requests/'
     | '/platform/notifications/'
     | '/platform/organizations/'
+    | '/platform/plans/'
     | '/platform/settings/'
     | '/api/telegram/webhook/platform'
     | '/platform/organizations/$organizationId/data'
@@ -987,6 +999,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlatformOrganizationsIndexRouteImport
       parentRoute: typeof PlatformRouteRoute
     }
+    '/platform/plans/': {
+      id: '/platform/plans/'
+      path: '/plans'
+      fullPath: '/platform/plans/'
+      preLoaderRoute: typeof PlatformPlansIndexRouteImport
+      parentRoute: typeof PlatformRouteRoute
+    }
     '/platform/settings/': {
       id: '/platform/settings/'
       path: '/settings'
@@ -1116,6 +1135,7 @@ interface PlatformRouteRouteChildren {
   PlatformLimitRequestsIndexRoute: typeof PlatformLimitRequestsIndexRoute
   PlatformNotificationsIndexRoute: typeof PlatformNotificationsIndexRoute
   PlatformOrganizationsIndexRoute: typeof PlatformOrganizationsIndexRoute
+  PlatformPlansIndexRoute: typeof PlatformPlansIndexRoute
   PlatformSettingsIndexRoute: typeof PlatformSettingsIndexRoute
   PlatformOrganizationsOrganizationIdDataRoute: typeof PlatformOrganizationsOrganizationIdDataRoute
   PlatformOrganizationsOrganizationIdIndexRoute: typeof PlatformOrganizationsOrganizationIdIndexRoute
@@ -1131,6 +1151,7 @@ const PlatformRouteRouteChildren: PlatformRouteRouteChildren = {
   PlatformLimitRequestsIndexRoute: PlatformLimitRequestsIndexRoute,
   PlatformNotificationsIndexRoute: PlatformNotificationsIndexRoute,
   PlatformOrganizationsIndexRoute: PlatformOrganizationsIndexRoute,
+  PlatformPlansIndexRoute: PlatformPlansIndexRoute,
   PlatformSettingsIndexRoute: PlatformSettingsIndexRoute,
   PlatformOrganizationsOrganizationIdDataRoute:
     PlatformOrganizationsOrganizationIdDataRoute,

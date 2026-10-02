@@ -8,6 +8,7 @@ import {
 } from '@/server/ad-accounts/scope.server'
 import { requireAdmin } from '@/server/auth/guards.server'
 import { writeAudit } from '@/server/audit/audit.service'
+import { assertPlanAllows } from '@/server/subscription/plan-limits.service'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import {
   adAccountCreateSchema,
@@ -150,6 +151,7 @@ export const createAdAccountFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<AdAccount> => {
     const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
     const admin = getSupabaseAdminClient()
+    await assertPlanAllows(admin, actor.organizationId, 'adAccounts')
     const { data: account, error } = await admin
       .from('ad_accounts')
       .insert({

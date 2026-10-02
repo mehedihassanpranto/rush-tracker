@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { requirePlatformAdmin } from '@/server/auth/guards.server'
 import { writeAudit } from '@/server/audit/audit.service'
+import { assertPlanAllows } from '@/server/subscription/plan-limits.service'
 import { DEPLOYMENT_ORGANIZATION_ID } from '@/lib/organizations/deployment-org'
 import {
   organizationAdminCreateSchema,
@@ -325,6 +326,9 @@ export const createOrganizationAdminFn = createServerFn({ method: 'POST' })
     if (!org) throw new Error('Organization not found')
 
     await assertEmailAvailable(admin, data.email)
+    // Applies to the platform too: an agency at its staff limit needs a
+    // larger plan (or an existing admin deactivated) before another is added.
+    await assertPlanAllows(admin, data.organization_id, 'staff')
 
     const userId = await provisionOrganizationSuperAdmin(admin, {
       organizationId: data.organization_id,
@@ -410,6 +414,9 @@ export const setOrganizationAdminStatusFn = createServerFn({ method: 'POST' })
       data.organization_id,
       data.user_id,
     )
+    if (data.status === 'ACTIVE' && target.status !== 'ACTIVE') {
+      await assertPlanAllows(admin, data.organization_id, 'staff')
+    }
 
     const { error } = await admin
       .from('user_profiles')

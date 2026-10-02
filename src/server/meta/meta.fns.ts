@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { requireAdmin, requireClientMembership } from '@/server/auth/guards.server'
 import { writeAudit } from '@/server/audit/audit.service'
+import { assertPlanAllows } from '@/server/subscription/plan-limits.service'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { dec } from '@/lib/money/money'
 import {
@@ -325,6 +326,12 @@ export const importMetaAdAccountsFn = createServerFn({ method: 'POST' })
         'All selected accounts were already imported (likely by another admin just now) — nothing new to add.',
       )
     }
+    await assertPlanAllows(
+      admin,
+      actor.organizationId,
+      'adAccounts',
+      toInsert.length,
+    )
 
     const { data: accounts, error } = await admin
       .from('ad_accounts')

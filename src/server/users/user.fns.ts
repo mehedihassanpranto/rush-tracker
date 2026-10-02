@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { requireAdmin } from '@/server/auth/guards.server'
 import { writeAudit } from '@/server/audit/audit.service'
+import { assertPlanAllows } from '@/server/subscription/plan-limits.service'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import {
   setUserPermissionsSchema,
@@ -131,6 +132,7 @@ export const createStaffUserFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<{ user_id: string }> => {
     const actor = await requireAdmin(PERMISSIONS.USERS_MANAGE)
     const admin = getSupabaseAdminClient()
+    await assertPlanAllows(admin, actor.organizationId, 'staff')
 
     const { data: created, error } = await admin.auth.admin.createUser({
       email: data.email,
@@ -222,6 +224,24 @@ export const setUserStatusFn = createServerFn({ method: 'POST' })
       throw new Error('You cannot change your own status')
     }
     const admin = getSupabaseAdminClient()
+
+    if (data.status === 'ACTIVE') {
+      const { data: before } = await admin
+        .from('user_profiles')
+        .select('status, is_platform_admin, role:roles(key)')
+        .eq('user_id', data.user_id)
+        .eq('organization_id', actor.organizationId)
+        .maybeSingle()
+      const b = before as unknown as {
+        status: string
+        is_platform_admin: boolean | null
+        role: { key: string } | null
+      } | null
+      const isStaff = b?.role?.key === 'ADMIN' || b?.role?.key === 'SUPER_ADMIN'
+      if (b && b.status !== 'ACTIVE' && isStaff && !b.is_platform_admin) {
+        await assertPlanAllows(admin, actor.organizationId, 'staff')
+      }
+    }
 
     const { error } = await admin
       .from('user_profiles')

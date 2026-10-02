@@ -9,6 +9,8 @@ import {
   listOrganizationsFn,
   updateOrganizationSubscriptionStatusFn,
 } from '@/server/organizations/organization.fns'
+import { listOrganizationBillingFn } from '@/server/platform/subscription.fns'
+import { BillingBadge } from '@/components/shared/subscription/billing-badge'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EditOrganizationDialog } from '@/components/platform/organizations/edit-organization-dialog'
@@ -81,6 +83,11 @@ function OrganizationsPage() {
     queryKey: ['organizations'],
     queryFn: () => listOrganizations(),
   })
+  const listBilling = useServerFn(listOrganizationBillingFn)
+  const { data: billing } = useQuery({
+    queryKey: ['organization-billing'],
+    queryFn: () => listBilling(),
+  })
 
   const statusMutation = useMutation({
     mutationFn: (input: { id: string; subscription_status: OrganizationSubscriptionStatus }) =>
@@ -152,6 +159,7 @@ function OrganizationsPage() {
               <TableHead>Name</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Plan</TableHead>
+              <TableHead>Billing</TableHead>
               <TableHead>Notes</TableHead>
               <TableHead>Created</TableHead>
               <TableHead className="w-10" />
@@ -161,7 +169,7 @@ function OrganizationsPage() {
             {isLoading &&
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={7}>
                     <Skeleton className="h-6 w-full" />
                   </TableCell>
                 </TableRow>
@@ -169,7 +177,7 @@ function OrganizationsPage() {
 
             {!isLoading && filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6}>
+                <TableCell colSpan={7}>
                   <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
                     <Shield className="size-8 opacity-40" />
                     No organizations found.
@@ -193,7 +201,14 @@ function OrganizationsPage() {
                   <StatusBadge status={org.subscription_status.toUpperCase()} />
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {org.plan ?? '—'}
+                  {billing?.[org.id]?.plan_name ?? 'No plan'}
+                </TableCell>
+                <TableCell>
+                  {billing?.[org.id] ? (
+                    <BillingBadge status={billing[org.id].billing_status} />
+                  ) : (
+                    '—'
+                  )}
                 </TableCell>
                 <TableCell
                   className="max-w-xs truncate text-muted-foreground"

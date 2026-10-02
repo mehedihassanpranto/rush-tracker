@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { writeAudit } from '@/server/audit/audit.service'
+import { assertPlanAllows } from '@/server/subscription/plan-limits.service'
 
 /**
  * Grants one platform-pool account to one agency. Shared by the manual
@@ -57,6 +58,9 @@ export async function grantPoolAccountToOrganization(
       `That account is already granted to ${holder ?? 'another agency'}. Revoke it first.`,
     )
   }
+
+  // The receiving agency's plan caps how many ad accounts it may hold.
+  await assertPlanAllows(admin, organizationId, 'adAccounts')
 
   const { error } = await admin.from('platform_account_grants').insert({
     ad_account_id: adAccountId,
