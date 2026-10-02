@@ -27,6 +27,15 @@ bug fixes, and anything else that isn't a whole new named feature.
   run if the URL is production's. Before any `supabase db push`, check
   `supabase/.temp/project-ref` — it must be the project you mean.
 - CI (`.github/workflows/ci.yml`) must be green before merging to `main`.
+- **Production runs on Hostinger** (pulls `main`); the Vercel check on PRs is a
+  leftover. A migration the new code depends on must be applied to production
+  BEFORE merging, since the merge is the deploy.
+- **Monitoring** (migration 000054): any new scheduled job should record itself
+  with `startCronRun`/`finishCronRun` (`src/server/monitoring/monitoring.service.ts`)
+  so it appears on Platform → System health; server-fn errors are captured
+  automatically by the global middleware in `src/start.ts` — add an error's
+  `name` to `isExpectedError()` (`src/lib/monitoring/health.ts`) only if it is
+  genuinely part of normal operation.
 - **New database functions are service_role-only by default** (migrations
   000050–52 changed Supabase's default grants). Never rely on `revoke ... from
   public` alone — it does not remove the `anon`/`authenticated` grants. A

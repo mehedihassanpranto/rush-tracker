@@ -1,4 +1,5 @@
 import {
+  Activity,
   BarChart3,
   Bell,
   BookText,
@@ -62,6 +63,7 @@ export const PLATFORM_NAV: Array<NavItem> = [
   { label: 'Limit Requests', icon: Gauge, to: '/platform/limit-requests' },
   { label: 'Finance & Accounts', icon: Landmark, to: '/platform/finance' },
   { label: 'Notifications', icon: Bell, to: '/platform/notifications' },
+  { label: 'System Health', icon: Activity, to: '/platform/health' },
   { label: 'Settings', icon: Settings, to: '/platform/settings' },
 ]
 

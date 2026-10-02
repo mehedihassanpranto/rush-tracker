@@ -52,6 +52,7 @@ import { Route as PlatformAccountRequestsIndexRouteImport } from './routes/platf
 import { Route as PlatformAdAccountsIndexRouteImport } from './routes/platform/ad-accounts/index'
 import { Route as PlatformAdAccountsAccountIdRouteImport } from './routes/platform/ad-accounts/$accountId'
 import { Route as PlatformFinanceIndexRouteImport } from './routes/platform/finance/index'
+import { Route as PlatformHealthIndexRouteImport } from './routes/platform/health/index'
 import { Route as PlatformLimitRequestsIndexRouteImport } from './routes/platform/limit-requests/index'
 import { Route as PlatformLimitRequestsRequestIdRouteImport } from './routes/platform/limit-requests/$requestId'
 import { Route as PlatformNotificationsIndexRouteImport } from './routes/platform/notifications/index'
@@ -285,6 +286,11 @@ const PlatformFinanceIndexRoute = PlatformFinanceIndexRouteImport.update({
   path: '/finance/',
   getParentRoute: () => PlatformRouteRoute,
 } as any)
+const PlatformHealthIndexRoute = PlatformHealthIndexRouteImport.update({
+  id: '/health/',
+  path: '/health/',
+  getParentRoute: () => PlatformRouteRoute,
+} as any)
 const PlatformLimitRequestsIndexRoute =
   PlatformLimitRequestsIndexRouteImport.update({
     id: '/limit-requests/',
@@ -382,6 +388,7 @@ export interface FileRoutesByFullPath {
   '/platform/account-requests/': typeof PlatformAccountRequestsIndexRoute
   '/platform/ad-accounts/': typeof PlatformAdAccountsIndexRoute
   '/platform/finance/': typeof PlatformFinanceIndexRoute
+  '/platform/health/': typeof PlatformHealthIndexRoute
   '/platform/limit-requests/': typeof PlatformLimitRequestsIndexRoute
   '/platform/notifications/': typeof PlatformNotificationsIndexRoute
   '/platform/organizations/': typeof PlatformOrganizationsIndexRoute
@@ -432,6 +439,7 @@ export interface FileRoutesByTo {
   '/platform/account-requests': typeof PlatformAccountRequestsIndexRoute
   '/platform/ad-accounts': typeof PlatformAdAccountsIndexRoute
   '/platform/finance': typeof PlatformFinanceIndexRoute
+  '/platform/health': typeof PlatformHealthIndexRoute
   '/platform/limit-requests': typeof PlatformLimitRequestsIndexRoute
   '/platform/notifications': typeof PlatformNotificationsIndexRoute
   '/platform/organizations': typeof PlatformOrganizationsIndexRoute
@@ -487,6 +495,7 @@ export interface FileRoutesById {
   '/platform/account-requests/': typeof PlatformAccountRequestsIndexRoute
   '/platform/ad-accounts/': typeof PlatformAdAccountsIndexRoute
   '/platform/finance/': typeof PlatformFinanceIndexRoute
+  '/platform/health/': typeof PlatformHealthIndexRoute
   '/platform/limit-requests/': typeof PlatformLimitRequestsIndexRoute
   '/platform/notifications/': typeof PlatformNotificationsIndexRoute
   '/platform/organizations/': typeof PlatformOrganizationsIndexRoute
@@ -542,6 +551,7 @@ export interface FileRouteTypes {
     | '/platform/account-requests/'
     | '/platform/ad-accounts/'
     | '/platform/finance/'
+    | '/platform/health/'
     | '/platform/limit-requests/'
     | '/platform/notifications/'
     | '/platform/organizations/'
@@ -592,6 +602,7 @@ export interface FileRouteTypes {
     | '/platform/account-requests'
     | '/platform/ad-accounts'
     | '/platform/finance'
+    | '/platform/health'
     | '/platform/limit-requests'
     | '/platform/notifications'
     | '/platform/organizations'
@@ -646,6 +657,7 @@ export interface FileRouteTypes {
     | '/platform/account-requests/'
     | '/platform/ad-accounts/'
     | '/platform/finance/'
+    | '/platform/health/'
     | '/platform/limit-requests/'
     | '/platform/notifications/'
     | '/platform/organizations/'
@@ -971,6 +983,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlatformFinanceIndexRouteImport
       parentRoute: typeof PlatformRouteRoute
     }
+    '/platform/health/': {
+      id: '/platform/health/'
+      path: '/health'
+      fullPath: '/platform/health/'
+      preLoaderRoute: typeof PlatformHealthIndexRouteImport
+      parentRoute: typeof PlatformRouteRoute
+    }
     '/platform/limit-requests/': {
       id: '/platform/limit-requests/'
       path: '/limit-requests'
@@ -1132,6 +1151,7 @@ interface PlatformRouteRouteChildren {
   PlatformAccountRequestsIndexRoute: typeof PlatformAccountRequestsIndexRoute
   PlatformAdAccountsIndexRoute: typeof PlatformAdAccountsIndexRoute
   PlatformFinanceIndexRoute: typeof PlatformFinanceIndexRoute
+  PlatformHealthIndexRoute: typeof PlatformHealthIndexRoute
   PlatformLimitRequestsIndexRoute: typeof PlatformLimitRequestsIndexRoute
   PlatformNotificationsIndexRoute: typeof PlatformNotificationsIndexRoute
   PlatformOrganizationsIndexRoute: typeof PlatformOrganizationsIndexRoute
@@ -1148,6 +1168,7 @@ const PlatformRouteRouteChildren: PlatformRouteRouteChildren = {
   PlatformAccountRequestsIndexRoute: PlatformAccountRequestsIndexRoute,
   PlatformAdAccountsIndexRoute: PlatformAdAccountsIndexRoute,
   PlatformFinanceIndexRoute: PlatformFinanceIndexRoute,
+  PlatformHealthIndexRoute: PlatformHealthIndexRoute,
   PlatformLimitRequestsIndexRoute: PlatformLimitRequestsIndexRoute,
   PlatformNotificationsIndexRoute: PlatformNotificationsIndexRoute,
   PlatformOrganizationsIndexRoute: PlatformOrganizationsIndexRoute,
