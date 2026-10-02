@@ -6,6 +6,22 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-10-03
+
+**Subscription plans live in production.** Migration `20260723000053` applied
+to production *before* merging PR #7 — the new code reads the plan tables when
+adding clients/staff/ad accounts, so deploying it first would have broken those
+paths. Verified after: 4 plans present, xRush Agency on Unlimited and billing
+exempt, Arrow Solutions / xRush Digital on no plan (no limits), both new tables
+RLS-on with zero policies; row counts for 18 tables, the client list and
+per-client dues identical before and after. **Hosting note:** production runs
+on Hostinger (pulls `main`). The Vercel check on PRs is a leftover integration
+— its failure on PR #7 (while the same commit built cleanly with the Vercel
+preset locally and in CI) has no effect on production; disconnect the Vercel
+project if the red check is distracting.
+
+---
+
 ## 2026-10-02
 
 **Subscription plans with limits + agency payments ledger (upgrade plan step 4,
