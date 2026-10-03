@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { E2EEnv } from './env'
+import { totp } from './totp'
 
 /**
  * Throwaway fixtures for the e2e suite, created on STAGING only:
@@ -15,6 +16,8 @@ export const PASSWORD = 'E2e-Pass-1234!'
 export const ORG_ZERO = '00000000-0000-0000-0000-000000000001'
 
 export type Role = 'platform' | 'agencyA' | 'agencyB' | 'client' | 'suspended'
+/** Extra accounts used only by the security tests (signed in through the UI). */
+export type SecurityUser = 'mfaUser' | 'platformNew' | 'lockout' | 'pwUser'
 export type Fixtures = {
   run: string
   /** ISO time seeding started — monitoring rows from this run are newer. */
@@ -29,6 +32,9 @@ export type Fixtures = {
   accountAName: string
   accountBName: string
   users: Record<Role, { id: string; email: string }>
+  securityUsers: Record<SecurityUser, { id: string; email: string }>
+  /** TOTP secret of the platform test account (2FA is mandatory for it). */
+  platformTotpSecret?: string
 }
 
 const noSession = { auth: { persistSession: false, autoRefreshToken: false } }
@@ -84,6 +90,13 @@ export async function seed(env: E2EEnv, run: string): Promise<Fixtures> {
     suspended: { id: await makeUser(admin, mk('suspended'), 'E2E Suspended Admin'), email: mk('suspended') },
   }
 
+  const securityUsers = {
+    mfaUser: { id: await makeUser(admin, mk('mfa'), 'E2E MFA User'), email: mk('mfa') },
+    platformNew: { id: await makeUser(admin, mk('platform-new'), 'E2E New Platform'), email: mk('platform-new') },
+    lockout: { id: await makeUser(admin, mk('lockout'), 'E2E Lockout'), email: mk('lockout') },
+    pwUser: { id: await makeUser(admin, mk('pw'), 'E2E Password'), email: mk('pw') },
+  }
+
   // The signup trigger lands every new account in org zero as a CLIENT; an
   // agency admin needs an explicit organization AND role (see createOrganizationFn).
   const setProfile = (id: string, patch: Record<string, unknown>) =>
@@ -92,6 +105,10 @@ export async function seed(env: E2EEnv, run: string): Promise<Fixtures> {
   await setProfile(users.agencyA.id, { organization_id: orgA, role_id: roleId('SUPER_ADMIN') })
   await setProfile(users.agencyB.id, { organization_id: orgB, role_id: roleId('SUPER_ADMIN') })
   await setProfile(users.suspended.id, { organization_id: orgS, role_id: roleId('SUPER_ADMIN') })
+  for (const k of ['mfaUser', 'lockout', 'pwUser'] as const) {
+    await setProfile(securityUsers[k].id, { organization_id: orgA, role_id: roleId('ADMIN') })
+  }
+  await setProfile(securityUsers.platformNew.id, { is_platform_admin: true })
 
   const clientAName = `ZZ E2E Client A ${run}`
   const clientBName = `ZZ E2E Client B ${run}`
@@ -130,14 +147,17 @@ export async function seed(env: E2EEnv, run: string): Promise<Fixtures> {
     'ad_accounts',
   )
 
-  return { run, startedAt, orgA, orgB, orgS, clientA, clientB, clientAName, clientBName, accountAName, accountBName, users }
+  return { run, startedAt, securityUsers, orgA, orgB, orgS, clientA, clientB, clientAName, clientBName, accountAName, accountBName, users }
 }
 
 /** Deletes everything seed() created (and the audit/notification rows the app wrote for it). */
 export async function teardown(env: E2EEnv, f: Fixtures): Promise<void> {
   const admin = adminClient(env)
   const orgIds = [f.orgA, f.orgB, f.orgS]
-  const userIds = Object.values(f.users).map((u) => u.id)
+  const userIds = [
+    ...Object.values(f.users).map((u) => u.id),
+    ...Object.values(f.securityUsers ?? {}).map((u) => u.id),
+  ]
   // Child → parent, mirroring OFFBOARD_ORDER's constraints.
   for (const t of [
     // subscription_payments first: recorded_by names the platform test user,
@@ -161,11 +181,17 @@ export async function teardown(env: E2EEnv, f: Fixtures): Promise<void> {
     await admin.from('app_errors').delete().gte('occurred_at', f.startedAt)
     await admin.from('cron_runs').delete().gte('started_at', f.startedAt)
     await admin.from('integration_health').delete().gte('checked_at', f.startedAt)
+    await admin.from('auth_attempts').delete().gte('attempted_at', f.startedAt)
   }
 }
 
-/** Signs a user in with their password and returns the exact cookies the app's own SSR client would set. */
-export async function sessionCookies(env: E2EEnv, email: string) {
+/**
+ * Signs a user in with their password and returns the exact cookies the app's
+ * own SSR client would set. With `enrollTotp`, also sets up an authenticator
+ * and completes the 2FA step, so the cookies are a fully signed-in (aal2)
+ * session — required for platform accounts.
+ */
+export async function sessionCookies(env: E2EEnv, email: string, opts: { enrollTotp?: boolean } = {}) {
   const jar = new Map<string, { value: string; options: Record<string, unknown> }>()
   const sb = createServerClient(env.url, env.anonKey, {
     cookies: {
@@ -175,5 +201,16 @@ export async function sessionCookies(env: E2EEnv, email: string) {
   })
   const { error } = await sb.auth.signInWithPassword({ email, password: PASSWORD })
   if (error) throw new Error(`sign in ${email}: ${error.message}`)
-  return [...jar].map(([name, c]) => ({ name, value: c.value, url: BASE_URL }))
+  let totpSecret: string | undefined
+  if (opts.enrollTotp) {
+    const { data: enr, error: enrErr } = await sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'e2e' })
+    if (enrErr || !enr) throw new Error(`enroll ${email}: ${enrErr?.message}`)
+    totpSecret = enr.totp.secret
+    const { error: vErr } = await sb.auth.mfa.challengeAndVerify({ factorId: enr.id, code: totp(totpSecret) })
+    if (vErr) throw new Error(`verify ${email}: ${vErr.message}`)
+  }
+  return {
+    cookies: [...jar].map(([name, c]) => ({ name, value: c.value, url: BASE_URL })),
+    totpSecret,
+  }
 }

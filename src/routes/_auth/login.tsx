@@ -61,10 +61,13 @@ function LoginPage() {
       return
     }
     // Only allow same-app relative redirect targets.
+    // The two-factor step always comes first, whatever ?redirect= says.
     const target =
-      search.redirect && search.redirect.startsWith('/')
-        ? search.redirect
-        : result.redirectTo
+      result.redirectTo.startsWith('/mfa')
+        ? result.redirectTo
+        : search.redirect && search.redirect.startsWith('/')
+          ? search.redirect
+          : result.redirectTo
     await router.invalidate()
     await router.navigate({ to: target })
   }
@@ -80,6 +83,7 @@ function LoginPage() {
       <CardContent>
         <Form {...form}>
           <form
+            method="post"
             onSubmit={form.handleSubmit(onSubmit)}
             className="space-y-4"
             noValidate

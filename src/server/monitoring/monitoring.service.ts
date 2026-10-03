@@ -82,7 +82,8 @@ export async function recordAppError(
   }
 }
 
-/** Keep the error log to the last 30 days, and cron history to 90. */
+/** Keep the error log to the last 30 days, cron history to 90, and sign-in
+ * attempts to 7 (rate limits only look back an hour). */
 export async function pruneMonitoringTables(admin: SupabaseClient): Promise<void> {
   try {
     const day = 86_400_000
@@ -94,6 +95,10 @@ export async function pruneMonitoringTables(admin: SupabaseClient): Promise<void
       .from('cron_runs')
       .delete()
       .lt('started_at', new Date(Date.now() - 90 * day).toISOString())
+    await admin
+      .from('auth_attempts')
+      .delete()
+      .lt('attempted_at', new Date(Date.now() - 7 * day).toISOString())
   } catch (err) {
     console.error('[monitoring] prune failed', err)
   }

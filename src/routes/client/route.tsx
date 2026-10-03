@@ -2,7 +2,7 @@
 import { useServerFn } from '@tanstack/react-start'
 import { ShieldAlert } from 'lucide-react'
 
-import { activeMemberships, isAdminRole } from '@/lib/auth/types'
+import { securityGatePath, activeMemberships, isAdminRole } from '@/lib/auth/types'
 import { logoutFn } from '@/server/auth/auth.fns'
 import { CLIENT_NAV } from '@/components/layout/nav'
 import { AppShell } from '@/components/layout/app-shell'
@@ -25,6 +25,9 @@ export const Route = createFileRoute('/client')({
     if (!context.user) {
       throw redirect({ to: '/login', search: { redirect: location.href } })
     }
+    // Two-factor step first (UX only — the server guards enforce it too).
+    const gate = securityGatePath(context.user)
+    if (gate) throw redirect({ to: gate })
     if (isAdminRole(context.user.role)) {
       throw redirect({ to: '/agency' })
     }

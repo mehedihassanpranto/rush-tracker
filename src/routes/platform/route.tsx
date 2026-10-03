@@ -1,5 +1,5 @@
 import { Outlet, createFileRoute, redirect } from '@tanstack/react-router'
-import { homePathForUser } from '@/lib/auth/types'
+import { securityGatePath, homePathForUser } from '@/lib/auth/types'
 import { PLATFORM_NAV } from '@/components/layout/nav'
 import { AppShell } from '@/components/layout/app-shell'
 
@@ -23,6 +23,9 @@ export const Route = createFileRoute('/platform')({
     if (!context.user) {
       throw redirect({ to: '/login', search: { redirect: location.href } })
     }
+    // Two-factor step first (UX only — the server guards enforce it too).
+    const gate = securityGatePath(context.user)
+    if (gate) throw redirect({ to: gate })
     if (!context.user.isPlatformAdmin) {
       throw redirect({ to: homePathForUser(context.user) })
     }

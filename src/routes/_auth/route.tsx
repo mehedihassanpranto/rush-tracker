@@ -1,10 +1,12 @@
 import { Outlet, createFileRoute, redirect } from '@tanstack/react-router'
-import { homePathForUser } from '@/lib/auth/types'
+import { homePathForUser, securityGatePath } from '@/lib/auth/types'
 
 export const Route = createFileRoute('/_auth')({
   beforeLoad: ({ context }) => {
     if (context.user) {
-      throw redirect({ to: homePathForUser(context.user) })
+      throw redirect({
+        to: securityGatePath(context.user) ?? homePathForUser(context.user),
+      })
     }
   },
   component: AuthLayout,

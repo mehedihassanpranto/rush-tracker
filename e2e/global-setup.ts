@@ -9,7 +9,12 @@ export default async function globalSetup() {
   mkdirSync('e2e/.auth', { recursive: true })
   writeFileSync('e2e/.auth/fixtures.json', JSON.stringify(f, null, 2))
   for (const role of Object.keys(f.users) as Role[]) {
-    const cookies = await sessionCookies(env, f.users[role].email)
+    // Platform accounts must have 2FA, so theirs is enrolled and verified.
+    const { cookies, totpSecret } = await sessionCookies(env, f.users[role].email, {
+      enrollTotp: role === 'platform',
+    })
+    if (totpSecret) f.platformTotpSecret = totpSecret
     writeFileSync(`e2e/.auth/${role}.json`, JSON.stringify({ cookies, origins: [] }))
   }
+  writeFileSync('e2e/.auth/fixtures.json', JSON.stringify(f, null, 2))
 }
