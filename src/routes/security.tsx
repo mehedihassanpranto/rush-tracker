@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ArrowLeft, Loader2, ShieldCheck, ShieldOff } from 'lucide-react'
+import { ArrowLeft, Loader2, MailCheck, ShieldCheck, ShieldOff } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
@@ -12,7 +12,8 @@ import {
   getMfaStatusFn,
   removeMfaFactorFn,
 } from '@/server/auth/mfa.fns'
-import { changePasswordSchema } from '@/schemas/security'
+import { getEmailStatusFn, requestEmailChangeFn } from '@/server/auth/email-change.fns'
+import { changeEmailSchema, changePasswordSchema } from '@/schemas/security'
 import { homePathForUser, securityGatePath } from '@/lib/auth/types'
 import { MfaEnrollPanel } from '@/components/security/mfa-enroll-panel'
 import { StandaloneLayout } from '@/components/security/standalone-layout'
@@ -63,6 +64,7 @@ function SecurityPage() {
       <div className="space-y-6">
         <TwoFactorCard />
         <ChangePasswordCard />
+        <ChangeEmailCard />
       </div>
     </StandaloneLayout>
   )
@@ -209,6 +211,98 @@ function ChangePasswordCard() {
             <Button type="submit" disabled={mutation.isPending}>
               {mutation.isPending && <Loader2 className="size-4 animate-spin" />}
               Change password
+            </Button>
+          </form>
+        </Form>
+      </CardContent>
+    </Card>
+  )
+}
+
+type EmailValues = z.input<typeof changeEmailSchema>
+
+function ChangeEmailCard() {
+  const queryClient = useQueryClient()
+  const getStatus = useServerFn(getEmailStatusFn)
+  const requestChange = useServerFn(requestEmailChangeFn)
+  const { data } = useQuery({ queryKey: ['email-status'], queryFn: () => getStatus() })
+  const form = useForm<EmailValues>({
+    resolver: zodResolver(changeEmailSchema),
+    defaultValues: { new_email: '', current_password: '' },
+  })
+  const mutation = useMutation({
+    mutationFn: (v: EmailValues) => requestChange({ data: v }),
+    onSuccess: async () => {
+      toast.success('Confirmation links sent')
+      form.reset({ new_email: '', current_password: '' })
+      await queryClient.invalidateQueries({ queryKey: ['email-status'] })
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to change email'),
+  })
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Sign-in email</CardTitle>
+        <CardDescription>
+          {data ? (
+            <>
+              You sign in with <span className="font-medium text-foreground">{data.email}</span>.
+            </>
+          ) : (
+            'The address you sign in with.'
+          )}{' '}
+          To change it, we email a link to both your current and your new
+          address — it changes once both are confirmed.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {data?.pending_email && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            <MailCheck className="mt-0.5 size-4 shrink-0" />
+            <span>
+              Waiting for confirmation to change to <strong>{data.pending_email}</strong>.
+              Open the links in both inboxes. Didn't get them? Send again below.
+            </span>
+          </div>
+        )}
+        <Form {...form}>
+          <form
+            method="post"
+            onSubmit={form.handleSubmit((v) => mutation.mutate(v))}
+            className="space-y-4"
+            noValidate
+            autoComplete="off"
+          >
+            <FormField
+              control={form.control}
+              name="new_email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>New email</FormLabel>
+                  <FormControl>
+                    <Input type="email" autoComplete="email" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="current_password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Your password</FormLabel>
+                  <FormControl>
+                    <Input type="password" autoComplete="current-password" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending && <Loader2 className="size-4 animate-spin" />}
+              Send confirmation links
             </Button>
           </form>
         </Form>

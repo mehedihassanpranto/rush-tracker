@@ -1,19 +1,8 @@
 import { expect, test } from '@playwright/test'
-import type { Page } from '@playwright/test'
 import { auth, fixtures } from './support/fixtures'
 import { PASSWORD } from './support/seed'
+import { signIn } from './support/sign-in'
 import { totp } from './support/totp'
-
-// Signs in through the real login form (no injected session), like a person.
-async function signIn(page: Page, email: string, password = PASSWORD) {
-  await page.goto('/login')
-  // Wait for the app's JS, so the form is handled by the app rather than
-  // the browser's native submit.
-  await page.waitForLoadState('networkidle')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-}
 
 test('credential forms never fall back to GET (no password in the URL)', async ({ request }) => {
   // Server-rendered HTML — what a browser submits if clicked before the JS

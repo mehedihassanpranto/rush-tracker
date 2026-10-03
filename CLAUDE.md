@@ -37,7 +37,9 @@ bug fixes, and anything else that isn't a whole new named feature.
   takes a password or code must render its `<form method="post">` (a native
   pre-JS submit must never put credentials in the URL — e2e checks /login and
   /forgot-password). Public signup is disabled in Supabase on purpose; create
-  accounts with the admin API.
+  accounts with the admin API. Auth emails go through Hostinger SMTP, and the
+  "Change email address" template must link to `/confirm-email?token_hash=…`,
+  never `{{ .ConfirmationURL }}` (`docs/DEPLOYMENT-HOSTINGER.md` §4).
 - **Monitoring** (migration 000054): any new scheduled job should record itself
   with `startCronRun`/`finishCronRun` (`src/server/monitoring/monitoring.service.ts`)
   so it appears on Platform → System health; server-fn errors are captured

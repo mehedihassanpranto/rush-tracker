@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
+import { createHash } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { E2EEnv } from './env'
@@ -17,7 +18,7 @@ export const ORG_ZERO = '00000000-0000-0000-0000-000000000001'
 
 export type Role = 'platform' | 'agencyA' | 'agencyB' | 'client' | 'suspended'
 /** Extra accounts used only by the security tests (signed in through the UI). */
-export type SecurityUser = 'mfaUser' | 'platformNew' | 'lockout' | 'pwUser'
+export type SecurityUser = 'mfaUser' | 'platformNew' | 'lockout' | 'pwUser' | 'emailUser'
 export type Fixtures = {
   run: string
   /** ISO time seeding started — monitoring rows from this run are newer. */
@@ -95,6 +96,7 @@ export async function seed(env: E2EEnv, run: string): Promise<Fixtures> {
     platformNew: { id: await makeUser(admin, mk('platform-new'), 'E2E New Platform'), email: mk('platform-new') },
     lockout: { id: await makeUser(admin, mk('lockout'), 'E2E Lockout'), email: mk('lockout') },
     pwUser: { id: await makeUser(admin, mk('pw'), 'E2E Password'), email: mk('pw') },
+    emailUser: { id: await makeUser(admin, mk('email'), 'E2E Email Change'), email: mk('email') },
   }
 
   // The signup trigger lands every new account in org zero as a CLIENT; an
@@ -105,7 +107,7 @@ export async function seed(env: E2EEnv, run: string): Promise<Fixtures> {
   await setProfile(users.agencyA.id, { organization_id: orgA, role_id: roleId('SUPER_ADMIN') })
   await setProfile(users.agencyB.id, { organization_id: orgB, role_id: roleId('SUPER_ADMIN') })
   await setProfile(users.suspended.id, { organization_id: orgS, role_id: roleId('SUPER_ADMIN') })
-  for (const k of ['mfaUser', 'lockout', 'pwUser'] as const) {
+  for (const k of ['mfaUser', 'lockout', 'pwUser', 'emailUser'] as const) {
     await setProfile(securityUsers[k].id, { organization_id: orgA, role_id: roleId('ADMIN') })
   }
   await setProfile(securityUsers.platformNew.id, { is_platform_admin: true })
@@ -212,5 +214,33 @@ export async function sessionCookies(env: E2EEnv, email: string, opts: { enrollT
   return {
     cookies: [...jar].map(([name, c]) => ({ name, value: c.value, url: BASE_URL })),
     totpSecret,
+  }
+}
+
+/**
+ * The two confirmation tokens Supabase would email for an email change
+ * (current address + new address) — generated without sending anything, since
+ * the test addresses aren't real inboxes.
+ *
+ * Built as sha224(address + one-time code), which is what Supabase stores and
+ * what the {{ .TokenHash }} in each real email is. Not taken from
+ * generateLink's `hashed_token`: for the NEW address that field is computed
+ * from the OLD address and never verifies (a Supabase quirk, checked
+ * 2026-10-03 against the stored token).
+ */
+export async function emailChangeTokens(
+  env: E2EEnv,
+  email: string,
+  newEmail: string,
+): Promise<{ current: string; next: string }> {
+  const admin = adminClient(env)
+  const hash = (s: string) => createHash('sha224').update(s).digest('hex')
+  const cur = await admin.auth.admin.generateLink({ type: 'email_change_current', email, newEmail })
+  if (cur.error) throw new Error(`generateLink current: ${cur.error.message}`)
+  const nxt = await admin.auth.admin.generateLink({ type: 'email_change_new', email, newEmail })
+  if (nxt.error) throw new Error(`generateLink new: ${nxt.error.message}`)
+  return {
+    current: hash(email + cur.data.properties.email_otp),
+    next: hash(newEmail + nxt.data.properties.email_otp),
   }
 }
