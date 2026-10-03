@@ -3,6 +3,7 @@ import {
   activeMemberships,
   hasPermission,
   isAdminRole,
+  securityGatePath,
 } from '@/lib/auth/types'
 import { getCurrentUserFn } from './auth.fns'
 import type { PermissionKey } from '@/lib/permissions/permissions'
@@ -17,7 +18,11 @@ import type { SessionMembership, SessionUser } from '@/lib/auth/types'
 
 export class AuthError extends Error {
   constructor(
-    public readonly code: 'UNAUTHENTICATED' | 'FORBIDDEN' | 'SUBSCRIPTION_SUSPENDED',
+    public readonly code:
+      | 'UNAUTHENTICATED'
+      | 'FORBIDDEN'
+      | 'SUBSCRIPTION_SUSPENDED'
+      | 'MFA_REQUIRED',
     message: string,
   ) {
     super(message)
@@ -25,10 +30,36 @@ export class AuthError extends Error {
   }
 }
 
+/**
+ * Signed in, but nothing more — for the handful of fns that must work BEFORE
+ * the two-factor step is done (setting it up, entering the code). Everything
+ * else goes through a guard that also requires the step to be complete.
+ */
+export async function requireSignedIn(): Promise<SessionUser> {
+  const user = await getCurrentUserFn()
+  if (!user) throw new AuthError('UNAUTHENTICATED', 'Not signed in')
+  return user
+}
+
+/** The two-factor gate: an enrolled account that hasn't entered this
+ * session's code — or a platform admin who hasn't set 2FA up — is only half
+ * signed in and may not use the app. Server-side, so skipping the /mfa page
+ * doesn't help. */
+function assertSecurityGate(user: SessionUser): void {
+  const gate = securityGatePath(user)
+  if (gate === '/mfa') {
+    throw new AuthError('MFA_REQUIRED', 'Enter your two-factor code to continue')
+  }
+  if (gate === '/mfa/setup') {
+    throw new AuthError('MFA_REQUIRED', 'Set up two-factor sign-in to continue')
+  }
+}
+
 async function loadUserOrThrow(): Promise<SessionUser> {
   // getCurrentUserFn re-validates the JWT via supabase.auth.getUser().
   const user = await getCurrentUserFn()
   if (!user) throw new AuthError('UNAUTHENTICATED', 'Not signed in')
+  assertSecurityGate(user)
   // Multi-tenant subscription gate (Phase 3): the actual enforcement point
   // for "flipping the toggle takes effect immediately" — organizationSubscriptionStatus
   // is fetched fresh on every session load (auth.fns.ts), never from a
@@ -63,6 +94,7 @@ export async function requirePlatformAdmin(): Promise<SessionUser> {
   if (!user.isPlatformAdmin) {
     throw new AuthError('FORBIDDEN', 'Platform admin access required')
   }
+  assertSecurityGate(user)
   return user
 }
 

@@ -15,11 +15,14 @@ import { Route as AgencyRouteRouteImport } from './routes/agency/route'
 import { Route as ClientRouteRouteImport } from './routes/client/route'
 import { Route as PlatformRouteRouteImport } from './routes/platform/route'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as SecurityRouteImport } from './routes/security'
 import { Route as SubscriptionSuspendedRouteImport } from './routes/subscription-suspended'
 import { Route as AuthForgotPasswordRouteImport } from './routes/_auth/forgot-password'
 import { Route as AuthLoginRouteImport } from './routes/_auth/login'
 import { Route as AgencyIndexRouteImport } from './routes/agency/index'
 import { Route as ClientIndexRouteImport } from './routes/client/index'
+import { Route as MfaIndexRouteImport } from './routes/mfa/index'
+import { Route as MfaSetupRouteImport } from './routes/mfa/setup'
 import { Route as PlatformIndexRouteImport } from './routes/platform/index'
 import { Route as AgencyAdAccountsIndexRouteImport } from './routes/agency/ad-accounts/index'
 import { Route as AgencyAdAccountsAccountIdRouteImport } from './routes/agency/ad-accounts/$accountId'
@@ -92,6 +95,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SecurityRoute = SecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SubscriptionSuspendedRoute = SubscriptionSuspendedRouteImport.update({
   id: '/subscription-suspended',
   path: '/subscription-suspended',
@@ -116,6 +124,16 @@ const ClientIndexRoute = ClientIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ClientRouteRoute,
+} as any)
+const MfaIndexRoute = MfaIndexRouteImport.update({
+  id: '/mfa/',
+  path: '/mfa/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MfaSetupRoute = MfaSetupRouteImport.update({
+  id: '/mfa/setup',
+  path: '/mfa/setup',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const PlatformIndexRoute = PlatformIndexRouteImport.update({
   id: '/',
@@ -350,11 +368,14 @@ export interface FileRoutesByFullPath {
   '/client': typeof ClientRouteRouteWithChildren
   '/platform': typeof PlatformRouteRouteWithChildren
   '/reset-password': typeof ResetPasswordRoute
+  '/security': typeof SecurityRoute
   '/subscription-suspended': typeof SubscriptionSuspendedRoute
   '/forgot-password': typeof AuthForgotPasswordRoute
   '/login': typeof AuthLoginRoute
+  '/mfa/setup': typeof MfaSetupRoute
   '/agency/': typeof AgencyIndexRoute
   '/client/': typeof ClientIndexRoute
+  '/mfa/': typeof MfaIndexRoute
   '/platform/': typeof PlatformIndexRoute
   '/agency/ad-accounts/$accountId': typeof AgencyAdAccountsAccountIdRoute
   '/agency/clients/$clientId': typeof AgencyClientsClientIdRoute
@@ -401,11 +422,14 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/security': typeof SecurityRoute
   '/subscription-suspended': typeof SubscriptionSuspendedRoute
   '/forgot-password': typeof AuthForgotPasswordRoute
   '/login': typeof AuthLoginRoute
+  '/mfa/setup': typeof MfaSetupRoute
   '/agency': typeof AgencyIndexRoute
   '/client': typeof ClientIndexRoute
+  '/mfa': typeof MfaIndexRoute
   '/platform': typeof PlatformIndexRoute
   '/agency/ad-accounts/$accountId': typeof AgencyAdAccountsAccountIdRoute
   '/agency/clients/$clientId': typeof AgencyClientsClientIdRoute
@@ -457,11 +481,14 @@ export interface FileRoutesById {
   '/client': typeof ClientRouteRouteWithChildren
   '/platform': typeof PlatformRouteRouteWithChildren
   '/reset-password': typeof ResetPasswordRoute
+  '/security': typeof SecurityRoute
   '/subscription-suspended': typeof SubscriptionSuspendedRoute
   '/_auth/forgot-password': typeof AuthForgotPasswordRoute
   '/_auth/login': typeof AuthLoginRoute
+  '/mfa/setup': typeof MfaSetupRoute
   '/agency/': typeof AgencyIndexRoute
   '/client/': typeof ClientIndexRoute
+  '/mfa/': typeof MfaIndexRoute
   '/platform/': typeof PlatformIndexRoute
   '/agency/ad-accounts/$accountId': typeof AgencyAdAccountsAccountIdRoute
   '/agency/clients/$clientId': typeof AgencyClientsClientIdRoute
@@ -513,11 +540,14 @@ export interface FileRouteTypes {
     | '/client'
     | '/platform'
     | '/reset-password'
+    | '/security'
     | '/subscription-suspended'
     | '/forgot-password'
     | '/login'
+    | '/mfa/setup'
     | '/agency/'
     | '/client/'
+    | '/mfa/'
     | '/platform/'
     | '/agency/ad-accounts/$accountId'
     | '/agency/clients/$clientId'
@@ -564,11 +594,14 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/reset-password'
+    | '/security'
     | '/subscription-suspended'
     | '/forgot-password'
     | '/login'
+    | '/mfa/setup'
     | '/agency'
     | '/client'
+    | '/mfa'
     | '/platform'
     | '/agency/ad-accounts/$accountId'
     | '/agency/clients/$clientId'
@@ -619,11 +652,14 @@ export interface FileRouteTypes {
     | '/client'
     | '/platform'
     | '/reset-password'
+    | '/security'
     | '/subscription-suspended'
     | '/_auth/forgot-password'
     | '/_auth/login'
+    | '/mfa/setup'
     | '/agency/'
     | '/client/'
+    | '/mfa/'
     | '/platform/'
     | '/agency/ad-accounts/$accountId'
     | '/agency/clients/$clientId'
@@ -675,7 +711,10 @@ export interface RootRouteChildren {
   ClientRouteRoute: typeof ClientRouteRouteWithChildren
   PlatformRouteRoute: typeof PlatformRouteRouteWithChildren
   ResetPasswordRoute: typeof ResetPasswordRoute
+  SecurityRoute: typeof SecurityRoute
   SubscriptionSuspendedRoute: typeof SubscriptionSuspendedRoute
+  MfaSetupRoute: typeof MfaSetupRoute
+  MfaIndexRoute: typeof MfaIndexRoute
   ApiCronMetaSyncRoute: typeof ApiCronMetaSyncRoute
   ApiTelegramWebhookRoute: typeof ApiTelegramWebhookRouteWithChildren
 }
@@ -724,6 +763,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/security': {
+      id: '/security'
+      path: '/security'
+      fullPath: '/security'
+      preLoaderRoute: typeof SecurityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/subscription-suspended': {
       id: '/subscription-suspended'
       path: '/subscription-suspended'
@@ -758,6 +804,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/client/'
       preLoaderRoute: typeof ClientIndexRouteImport
       parentRoute: typeof ClientRouteRoute
+    }
+    '/mfa/': {
+      id: '/mfa/'
+      path: '/mfa'
+      fullPath: '/mfa/'
+      preLoaderRoute: typeof MfaIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mfa/setup': {
+      id: '/mfa/setup'
+      path: '/mfa/setup'
+      fullPath: '/mfa/setup'
+      preLoaderRoute: typeof MfaSetupRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/platform/': {
       id: '/platform/'
@@ -1202,7 +1262,10 @@ const rootRouteChildren: RootRouteChildren = {
   ClientRouteRoute: ClientRouteRouteWithChildren,
   PlatformRouteRoute: PlatformRouteRouteWithChildren,
   ResetPasswordRoute: ResetPasswordRoute,
+  SecurityRoute: SecurityRoute,
   SubscriptionSuspendedRoute: SubscriptionSuspendedRoute,
+  MfaSetupRoute: MfaSetupRoute,
+  MfaIndexRoute: MfaIndexRoute,
   ApiCronMetaSyncRoute: ApiCronMetaSyncRoute,
   ApiTelegramWebhookRoute: ApiTelegramWebhookRouteWithChildren,
 }

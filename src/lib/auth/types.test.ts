@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activeMemberships, displayRoleFor, hasPermission, homePathForUser, isAdminRole, resolveActiveClientId } from './types'
+import { activeMemberships, displayRoleFor, hasPermission, homePathForUser, isAdminRole, resolveActiveClientId, securityGatePath } from './types'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import type { SessionMembership, SessionUser } from './types'
 
@@ -29,6 +29,8 @@ function user(over: Partial<SessionUser> = {}): SessionUser {
     organizationName: 'Acme Agency',
     isPlatformAdmin: false,
     organizationSubscriptionStatus: 'active',
+    mfaEnrolled: false,
+    mfaVerified: false,
     ...over,
   }
 }
@@ -157,5 +159,25 @@ describe('displayRoleFor', () => {
     )
     expect(displayRoleFor({ role: 'ADMIN', isPlatformAdmin: false })).toBe('ADMIN')
     expect(displayRoleFor({ role: 'CLIENT', isPlatformAdmin: false })).toBe('CLIENT')
+  })
+})
+
+describe('securityGatePath', () => {
+  const base = { mfaEnrolled: false, mfaVerified: false, isPlatformAdmin: false }
+  it('no 2FA, not a platform admin: nothing to do', () => {
+    expect(securityGatePath(base)).toBeNull()
+  })
+  it('2FA set up but not entered this session: enter the code', () => {
+    expect(securityGatePath({ ...base, mfaEnrolled: true })).toBe('/mfa')
+  })
+  it('2FA set up and entered: done', () => {
+    expect(securityGatePath({ ...base, mfaEnrolled: true, mfaVerified: true })).toBeNull()
+  })
+  it('platform admin without 2FA must set it up', () => {
+    expect(securityGatePath({ ...base, isPlatformAdmin: true })).toBe('/mfa/setup')
+  })
+  it('platform admin with 2FA still has to enter the code', () => {
+    expect(securityGatePath({ ...base, isPlatformAdmin: true, mfaEnrolled: true })).toBe('/mfa')
+    expect(securityGatePath({ isPlatformAdmin: true, mfaEnrolled: true, mfaVerified: true })).toBeNull()
   })
 })

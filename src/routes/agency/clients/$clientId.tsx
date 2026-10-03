@@ -39,6 +39,7 @@ import { ClientFormDialog } from '@/components/admin/client/client-form-dialog'
 import { AssignAccountDialog } from '@/components/admin/client/assign-account-dialog'
 import { AddLoginDialog } from '@/components/admin/client/add-login-dialog'
 import { EditLoginDialog } from '@/components/admin/client/edit-login-dialog'
+import { ResetMfaDialog } from '@/components/security/reset-mfa-dialog'
 import { CreateAdjustmentDialog } from '@/components/admin/adjustment/create-adjustment-dialog'
 import { ReverseDialog } from '@/components/admin/adjustment/reverse-dialog'
 import { RequestPaymentDialog } from '@/components/admin/payment/request-payment-dialog'
@@ -127,6 +128,7 @@ function ClientDetailPage() {
   const [editLoginTarget, setEditLoginTarget] = useState<ClientUserRow | null>(
     null,
   )
+  const [mfaResetFor, setMfaResetFor] = useState<{ user_id: string; name: string } | null>(null)
   const [reverseEntry, setReverseEntry] = useState<LedgerEntryWithBalance | null>(
     null,
   )
@@ -578,6 +580,13 @@ function ClientDetailPage() {
                           <DropdownMenuItem onSelect={() => setEditLoginTarget(u)}>
                             Edit profile
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              setMfaResetFor({ user_id: u.user_id, name: u.full_name || u.email })
+                            }
+                          >
+                            Reset two-factor sign-in…
+                          </DropdownMenuItem>
                           {u.membership_status === 'ACTIVE' ? (
                             <DropdownMenuItem
                               onSelect={() =>
@@ -628,6 +637,7 @@ function ClientDetailPage() {
         onOpenChange={setLoginOpen}
         clientId={clientId}
       />
+      <ResetMfaDialog target={mfaResetFor} onOpenChange={(o) => !o && setMfaResetFor(null)} />
       <EditLoginDialog
         open={editLoginTarget !== null}
         onOpenChange={(o) => !o && setEditLoginTarget(null)}

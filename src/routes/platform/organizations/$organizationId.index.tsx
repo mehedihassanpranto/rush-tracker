@@ -27,6 +27,7 @@ import { AddOrganizationAdminDialog } from '@/components/platform/organizations/
 import { DeleteOrganizationAdminDialog } from '@/components/platform/organizations/delete-organization-admin-dialog'
 import { DeleteOrganizationDialog } from '@/components/platform/organizations/delete-organization-dialog'
 import { SubscriptionCard } from '@/components/platform/subscription/subscription-card'
+import { ResetMfaDialog } from '@/components/security/reset-mfa-dialog'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -84,6 +85,7 @@ function OrganizationProfilePage() {
   const [editOpen, setEditOpen] = useState(false)
   const [addAdminOpen, setAddAdminOpen] = useState(false)
   const [deleteOrgOpen, setDeleteOrgOpen] = useState(false)
+  const [mfaResetFor, setMfaResetFor] = useState<{ user_id: string; name: string } | null>(null)
   const [adminToDelete, setAdminToDelete] =
     useState<OrganizationProfile['admins'][number] | null>(null)
 
@@ -319,6 +321,11 @@ function OrganizationProfilePage() {
                               {a.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
                             </DropdownMenuItem>
                             <DropdownMenuItem
+                              onClick={() => setMfaResetFor({ user_id: a.user_id, name: a.full_name })}
+                            >
+                              Reset two-factor sign-in…
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
                               variant="destructive"
                               onClick={() => setAdminToDelete(a)}
                             >
@@ -360,6 +367,7 @@ function OrganizationProfilePage() {
         open={deleteOrgOpen}
         onOpenChange={setDeleteOrgOpen}
       />
+      <ResetMfaDialog target={mfaResetFor} onOpenChange={(o) => !o && setMfaResetFor(null)} />
       <DeleteOrganizationAdminDialog
         admin={adminToDelete}
         organizationId={org.id}

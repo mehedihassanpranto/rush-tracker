@@ -59,6 +59,37 @@ export interface SessionUser {
    * the agency/client route guards, both of which gate on this). A
    * platform admin bypasses this entirely regardless of its value. */
   organizationSubscriptionStatus: 'active' | 'suspended' | 'cancelled'
+  /** Has a verified two-factor (TOTP) authenticator — Supabase's nextLevel
+   * is aal2. */
+  mfaEnrolled: boolean
+  /** This session completed the two-factor step (Supabase's currentLevel is
+   * aal2). An enrolled user without this is only half signed in. */
+  mfaVerified: boolean
+}
+
+/**
+ * Platform admins can read every agency's books (see the support-view
+ * notes), so their account must have two-factor sign-in. Agency staff and
+ * clients may turn it on themselves; it's not forced on them.
+ */
+export const MFA_REQUIRED_FOR_PLATFORM_ADMINS = true
+
+/**
+ * Where a signed-in user must go before anything else, or null when their
+ * sign-in is complete:
+ * - '/mfa'       — has 2FA but hasn't entered this session's code yet
+ * - '/mfa/setup' — a platform admin who hasn't set 2FA up (mandatory)
+ * The server guards enforce the same rule (guards.server.ts); route
+ * redirects are only the UX for it.
+ */
+export function securityGatePath(
+  user: Pick<SessionUser, 'mfaEnrolled' | 'mfaVerified' | 'isPlatformAdmin'>,
+): '/mfa' | '/mfa/setup' | null {
+  if (user.mfaEnrolled && !user.mfaVerified) return '/mfa'
+  if (MFA_REQUIRED_FOR_PLATFORM_ADMINS && user.isPlatformAdmin && !user.mfaEnrolled) {
+    return '/mfa/setup'
+  }
+  return null
 }
 
 /**

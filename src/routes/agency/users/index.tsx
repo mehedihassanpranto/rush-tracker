@@ -29,6 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { ResetMfaDialog } from '@/components/security/reset-mfa-dialog'
 import {
   Table,
   TableBody,
@@ -73,6 +74,7 @@ function UsersPage() {
 
   const [createOpen, setCreateOpen] = useState(false)
   const [permsFor, setPermsFor] = useState<StaffUser | null>(null)
+  const [mfaResetFor, setMfaResetFor] = useState<{ user_id: string; name: string } | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['staff-users'],
@@ -228,6 +230,15 @@ function UsersPage() {
                           )}
 
                           <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              setMfaResetFor({ user_id: u.user_id, name: u.full_name || u.email })
+                            }
+                          >
+                            Reset two-factor sign-in…
+                          </DropdownMenuItem>
+
+                          <DropdownMenuSeparator />
                           <DropdownMenuLabel>Status</DropdownMenuLabel>
                           {(['ACTIVE', 'INACTIVE', 'SUSPENDED'] as const).map(
                             (s) => (
@@ -265,6 +276,7 @@ function UsersPage() {
           if (!o) setPermsFor(null)
         }}
       />
+      <ResetMfaDialog target={mfaResetFor} onOpenChange={(o) => !o && setMfaResetFor(null)} />
     </div>
   )
 }

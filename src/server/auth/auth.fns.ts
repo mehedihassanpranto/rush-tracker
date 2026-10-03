@@ -1,9 +1,21 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getCookies, getRequestUrl } from '@tanstack/react-start/server'
+import {
+  getCookies,
+  getRequestHeader,
+  getRequestIP,
+  getRequestUrl,
+} from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { getSupabaseServerClient } from '@/lib/supabase/server'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
+import { clientIpFrom } from '@/lib/auth/rate-limit'
 import {
+  checkRateLimit,
+  rateLimitMessage,
+  recordAttempt,
+} from '@/server/auth/rate-limit.service'
+import {
+  securityGatePath,
   ACTIVE_CLIENT_COOKIE,
   activeMemberships,
   homePathForUser,
@@ -169,6 +181,14 @@ async function loadSessionUser(
     | { name: string; subscription_status: 'active' | 'suspended' | 'cancelled' }
     | null
   const organizationSubscriptionStatus = orgRow?.subscription_status ?? 'suspended'
+
+  // Two-factor state, from the session itself: currentLevel is what THIS
+  // session proved (aal2 = code entered), nextLevel is what the account can
+  // reach (aal2 = has a verified authenticator). Local — decodes the JWT and
+  // reads the user's factors, no extra network call.
+  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+  const mfaEnrolled = aal?.nextLevel === 'aal2'
+  const mfaVerified = aal?.currentLevel === 'aal2'
   const organizationName = orgRow?.name ?? ''
 
   return {
@@ -184,7 +204,15 @@ async function loadSessionUser(
     organizationName,
     isPlatformAdmin: profile.is_platform_admin,
     organizationSubscriptionStatus,
+    mfaEnrolled,
+    mfaVerified,
   }
+}
+
+/** The client's IP: the last X-Forwarded-For hop (added by the hosting proxy
+ * — earlier hops can be forged by the client), else the socket address. */
+function requestIp(): string | null {
+  return clientIpFrom(getRequestHeader('x-forwarded-for'), getRequestIP() ?? null)
 }
 
 // ----------------------------------------------------------------------------
@@ -204,11 +232,21 @@ export const loginFn = createServerFn({ method: 'POST' })
   .validator(loginSchema)
   .handler(async ({ data }): Promise<LoginResult> => {
     const supabase = getSupabaseServerClient()
+    const admin = getSupabaseAdminClient()
+    const ip = requestIp()
+
+    // Checked BEFORE trying the password, so a locked account can't keep
+    // being guessed. The message is the same whether or not the email exists.
+    const limit = await checkRateLimit(admin, 'login', data.email, ip)
+    if (!limit.allowed) {
+      return { ok: false, error: rateLimitMessage(limit.retryAfterMinutes) }
+    }
 
     const { error } = await supabase.auth.signInWithPassword({
       email: data.email,
       password: data.password,
     })
+    await recordAttempt(admin, 'login', data.email, ip, !error)
     if (error) {
       return { ok: false, error: 'Invalid email or password.' }
     }
@@ -222,7 +260,12 @@ export const loginFn = createServerFn({ method: 'POST' })
       }
     }
 
-    return { ok: true, redirectTo: homePathForUser(sessionUser) }
+    // An account with two-factor sign-in isn't done yet: send it to the code
+    // page (and a platform admin without 2FA to set it up).
+    return {
+      ok: true,
+      redirectTo: securityGatePath(sessionUser) ?? homePathForUser(sessionUser),
+    }
   })
 
 export const logoutFn = createServerFn({ method: 'POST' }).handler(
@@ -237,11 +280,21 @@ export const forgotPasswordFn = createServerFn({ method: 'POST' })
   .validator(forgotPasswordSchema)
   .handler(async ({ data }) => {
     const supabase = getSupabaseServerClient()
+    const admin = getSupabaseAdminClient()
     const origin = getRequestUrl().origin
+    const ip = requestIp()
 
-    await supabase.auth.resetPasswordForEmail(data.email, {
-      redirectTo: `${origin}/reset-password`,
-    })
+    // Reset emails are limited per address and per IP (every request counts,
+    // not just failures): stops someone mail-bombing an inbox, and keeps the
+    // project inside its email-sending quota. Over the limit, nothing is sent
+    // but the response is identical — it must not reveal anything.
+    const limit = await checkRateLimit(admin, 'reset', data.email, ip)
+    if (limit.allowed) {
+      await recordAttempt(admin, 'reset', data.email, ip, true)
+      await supabase.auth.resetPasswordForEmail(data.email, {
+        redirectTo: `${origin}/reset-password`,
+      })
+    }
 
     // Always report success — do not leak whether the email exists.
     return { ok: true as const }

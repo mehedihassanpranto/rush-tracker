@@ -30,6 +30,14 @@ bug fixes, and anything else that isn't a whole new named feature.
 - **Production runs on Hostinger** (`panel.xrush.online`, pulls `main`; Vercel
   retired 2026-10-03). A migration the new code depends on must be applied to production
   BEFORE merging, since the merge is the deploy.
+- **Sign-in security** (migration 000055): every guard enforces the 2FA gate
+  (`securityGatePath()` in `src/lib/auth/types.ts`); only fns that must work
+  mid-sign-in (`src/server/auth/mfa.fns.ts` setup/verify) may use
+  `requireSignedIn()`. 2FA is mandatory for platform admins. Any NEW page that
+  takes a password or code must render its `<form method="post">` (a native
+  pre-JS submit must never put credentials in the URL — e2e checks /login and
+  /forgot-password). Public signup is disabled in Supabase on purpose; create
+  accounts with the admin API.
 - **Monitoring** (migration 000054): any new scheduled job should record itself
   with `startCronRun`/`finishCronRun` (`src/server/monitoring/monitoring.service.ts`)
   so it appears on Platform → System health; server-fn errors are captured

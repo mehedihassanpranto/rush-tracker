@@ -8,6 +8,47 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-03
 
+**Account security (upgrade plan step 6, migration `20260723000055`).**
+*Supabase Auth configuration (production + staging, via the Management API):*
+public **signup was open** — anyone holding the public key could create an
+account (it would land in xRush's organization as a CLIENT with no data
+access); now disabled (all accounts are admin-created, which still works).
+Checked first: all 15 production accounts are legitimate. The site URL was
+`http://localhost:3000` with no allowed redirects, so **password-reset links
+could never have worked** — now `https://panel.xrush.online`. Minimum password
+length 6 → 8 (every form already required 8). *Incident:* the first production
+signup probe ran before the setting had propagated and created one throwaway
+account; it was deleted at once (no profile or audit rows left, back to 15
+accounts) and re-checking used an existing email so nothing more could be
+created. **Still open: no SMTP provider is configured** — Supabase's built-in
+mailer only reaches the project's own team, so reset emails don't reach agency
+staff or clients until one is set up.
+*Two-factor sign-in (TOTP, Supabase MFA):* `SessionUser` gained `mfaEnrolled` /
+`mfaVerified`; one rule (`securityGatePath()`) sends a half-signed-in account to
+`/mfa` and a platform admin without 2FA to `/mfa/setup`, and **every server
+guard enforces the same rule** (`AuthError('MFA_REQUIRED')`), so skipping the
+page doesn't help. Only the setup/verify fns use the new `requireSignedIn()`.
+**Mandatory for platform admins** (`MFA_REQUIRED_FOR_PLATFORM_ADMINS`), optional
+for everyone else via the new **Security** page (user menu → Security: add or
+remove authenticators, change password). Lost-phone recovery: "Reset two-factor
+sign-in" on the agency Users page (needs `users.manage`), a client's Logins tab
+(`clients.manage`) and the platform agency profile — never on yourself, audited
+as `MFA_RESET` into the user's own organization.
+*Rate limiting* (`auth_attempts`): sign-in and 2FA codes 5 failures per account
+/ 30 per IP per 15 min; reset emails 3 per address / 10 per IP per hour (same
+reply either way, nothing leaked). Needed because sign-in runs on the server,
+so Supabase saw one IP for everyone. Client IP = last `X-Forwarded-For` hop.
+Pruned to 7 days by the cron.
+*Change password* checks the current password first on a throwaway session.
+*Bug found by the new e2e test:* clicking Sign in before the page's JS loaded
+made the browser submit the form natively as a GET — **email and password in
+the URL** (history, server logs). Every credential page form now has
+`method="post"`, with a regression test on the server-rendered HTML.
+Tests: 13 new unit (gate rule, rate limits, IP parsing); 8 new e2e driving the
+real UI (mandatory setup, turn on 2FA, code required and enforced, wrong code,
+admin reset, lockout after 5 failures, change password). `npm test` 234/234,
+e2e 37/37.
+
 **Daily Meta sync was not running — fixed (no code change).** System health's
 first day showed "No successful run recorded yet". Hostinger had **no cron
 entries at all**: the job had only been running because the old Vercel

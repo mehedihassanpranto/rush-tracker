@@ -1,7 +1,7 @@
 ﻿import { useState } from 'react'
-import { useRouter } from '@tanstack/react-router'
+import { Link, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { LogOut, Menu, Search } from 'lucide-react'
+import { ShieldCheck, LogOut, Menu, Search } from 'lucide-react'
 
 import { logoutFn } from '@/server/auth/auth.fns'
 import { displayRoleFor, isAdminRole } from '@/lib/auth/types'
@@ -155,6 +155,12 @@ export function Header({
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link to="/security">
+                <ShieldCheck className="size-4" />
+                Security
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={(e) => {
                 e.preventDefault()
