@@ -8,6 +8,15 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-03
 
+**CLAUDE.md trimmed from 3,714 lines (258 KB, ~65k tokens loaded into every
+agent session) to ~235 lines (15 KB).** The feature-by-feature "Status" log and
+the per-phase convention notes moved word for word to `docs/HISTORY.md`
+(frozen; nothing deleted). CLAUDE.md now holds only what an agent needs every
+time: working agreements, architecture (areas, tenancy, platform pool, scope
+helper), the lasting domain rules and naming traps distilled from the log, the
+framework gotchas, security rules and commands. Every file and function it
+names was checked to still exist.
+
 **Expected sign-in refusals no longer count as server errors.** Found right
 after the email-change deploy: a used confirmation link was logged in
 `app_errors` (and would have counted in the daily error digest) — and so were
