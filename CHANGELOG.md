@@ -8,6 +8,15 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-03
 
+**Expected sign-in refusals no longer count as server errors.** Found right
+after the email-change deploy: a used confirmation link was logged in
+`app_errors` (and would have counted in the daily error digest) — and so were
+wrong passwords, wrong 2FA codes and rate-limit messages since step 6. New
+`UserError` (`src/lib/errors/user-error.ts`) for refusals the user caused and
+can fix; `isExpectedError()` skips it. Used only for those refusals — Supabase
+failures and "not found" stay real errors. The one production row created by
+my own bad-link check was deleted.
+
 **Self-service email change.** Security page gained a "Sign-in email" card:
 new address + current password (checked like a password change, counts
 toward the sign-in limit). Refused before anything is sent if the address is

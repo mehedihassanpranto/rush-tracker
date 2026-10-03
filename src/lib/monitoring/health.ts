@@ -64,6 +64,7 @@ const EXPECTED_ERROR_NAMES = new Set([
   'PlanLimitError',
   'ZodError',
   'MetaNotConfiguredError',
+  'UserError',
 ])
 
 export function isExpectedError(err: unknown): boolean {
