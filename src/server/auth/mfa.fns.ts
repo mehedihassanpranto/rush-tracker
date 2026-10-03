@@ -27,6 +27,7 @@ import {
   mfaResetSchema,
   mfaVerifySchema,
 } from '@/schemas/security'
+import { UserError } from '@/lib/errors/user-error'
 
 /**
  * Two-factor sign-in (TOTP authenticator apps) and password changes.
@@ -103,12 +104,12 @@ async function verifyCode(
   const admin = getSupabaseAdminClient()
   const ip = requestIp()
   const limit = await checkRateLimit(admin, 'mfa', userId, ip)
-  if (!limit.allowed) throw new Error(rateLimitMessage(limit.retryAfterMinutes))
+  if (!limit.allowed) throw new UserError(rateLimitMessage(limit.retryAfterMinutes))
   const supabase = getSupabaseServerClient()
   // On success the server client writes the upgraded (aal2) session cookies.
   const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code })
   await recordAttempt(admin, 'mfa', userId, ip, !error)
-  if (error) throw new Error('That code is not correct. Check your authenticator app and try again.')
+  if (error) throw new UserError('That code is not correct. Check your authenticator app and try again.')
 }
 
 /** Finish setup: the first correct code both verifies the authenticator and
@@ -154,7 +155,7 @@ export const removeMfaFactorFn = createServerFn({ method: 'POST' })
     const verified = factors?.totp ?? []
     if (!verified.some((f) => f.id === data.factor_id)) throw new Error('Authenticator not found')
     if (MFA_REQUIRED_FOR_PLATFORM_ADMINS && user.isPlatformAdmin && verified.length <= 1) {
-      throw new Error('Two-factor sign-in is required for platform admins. Add another authenticator before removing this one.')
+      throw new UserError('Two-factor sign-in is required for platform admins. Add another authenticator before removing this one.')
     }
     const { error } = await supabase.auth.mfa.unenroll({ factorId: data.factor_id })
     if (error) throw new Error(error.message)
@@ -182,7 +183,7 @@ export const resetUserMfaFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<{ removed: number }> => {
     const actor = await requireSignedIn()
     if (data.user_id === actor.id) {
-      throw new Error("You can't reset your own two-factor sign-in. Ask another admin.")
+      throw new UserError("You can't reset your own two-factor sign-in. Ask another admin.")
     }
     const admin = getSupabaseAdminClient()
     const { data: target } = await admin

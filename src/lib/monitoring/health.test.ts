@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { cronFreshness, isExpectedError, tokenState, unixToIso } from './health'
+import { UserError } from '@/lib/errors/user-error'
 
 const now = new Date('2026-10-02T12:00:00Z')
 
@@ -37,6 +38,9 @@ describe('isExpectedError', () => {
     for (const n of ['AuthError', 'PlanLimitError', 'ZodError', 'MetaNotConfiguredError']) {
       expect(isExpectedError(named(n))).toBe(true)
     }
+  })
+  it('a UserError (wrong password, expired link, …) is expected', () => {
+    expect(isExpectedError(new UserError('Your current password is not correct.'))).toBe(true)
   })
   it('router control flow is expected', () => {
     expect(isExpectedError({ isRedirect: true })).toBe(true)

@@ -13,6 +13,7 @@ import {
 } from '@/server/auth/rate-limit.service'
 import { assertCurrentPassword, requestIp } from '@/server/auth/password-check.service'
 import { changeEmailSchema, confirmEmailChangeSchema } from '@/schemas/security'
+import { UserError } from '@/lib/errors/user-error'
 
 /**
  * Change your own sign-in email.
@@ -47,21 +48,21 @@ export const requestEmailChangeFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<{ pending_email: string }> => {
     const user = await requireUser()
     if (data.new_email === user.email.toLowerCase()) {
-      throw new Error('That is already your sign-in email.')
+      throw new UserError('That is already your sign-in email.')
     }
     await assertCurrentPassword(user.email, data.current_password)
 
     const admin = getSupabaseAdminClient()
     const { data: taken } = await admin.rpc('find_auth_user_by_email', { p_email: data.new_email })
     if ((taken as Array<unknown> | null)?.length) {
-      throw new Error('That email address is already used by another account.')
+      throw new UserError('That email address is already used by another account.')
     }
 
     // Each request emails the new address, so limit it per address: a
     // signed-in user must not be able to flood someone else's inbox.
     const ip = requestIp()
     const limit = await checkRateLimit(admin, 'reset', data.new_email, ip)
-    if (!limit.allowed) throw new Error(rateLimitMessage(limit.retryAfterMinutes))
+    if (!limit.allowed) throw new UserError(rateLimitMessage(limit.retryAfterMinutes))
     await recordAttempt(admin, 'reset', data.new_email, ip, true)
 
     const supabase = getSupabaseServerClient()
@@ -71,10 +72,10 @@ export const requestEmailChangeFn = createServerFn({ method: 'POST' })
     )
     if (error) {
       if (error.code === 'email_exists') {
-        throw new Error('That email address is already used by another account.')
+        throw new UserError('That email address is already used by another account.')
       }
       if (error.code === 'over_email_send_rate_limit') {
-        throw new Error('Too many emails sent. Please try again in an hour.')
+        throw new UserError('Too many emails sent. Please try again in an hour.')
       }
       console.error('[email-change] updateUser failed', error.code, error.message)
       throw new Error('Could not send the confirmation emails. Please try again later.')
@@ -114,7 +115,7 @@ export const confirmEmailChangeFn = createServerFn({ method: 'POST' })
       token_hash: data.token_hash,
       type: 'email_change',
     })
-    if (error) throw new Error('This link is invalid, has expired, or was already used.')
+    if (error) throw new UserError('This link is invalid, has expired, or was already used.')
     // First of the two links: accepted, the other address still has to confirm.
     if (!result.session || !result.user) return { status: 'partial' }
 

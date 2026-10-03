@@ -45,7 +45,9 @@ bug fixes, and anything else that isn't a whole new named feature.
   so it appears on Platform → System health; server-fn errors are captured
   automatically by the global middleware in `src/start.ts` — add an error's
   `name` to `isExpectedError()` (`src/lib/monitoring/health.ts`) only if it is
-  genuinely part of normal operation.
+  genuinely part of normal operation. A refusal the user caused and can fix (wrong
+  password, expired link) should throw `UserError` (`src/lib/errors/user-error.ts`),
+  which is already expected.
 - **New database functions are service_role-only by default** (migrations
   000050–52 changed Supabase's default grants). Never rely on `revoke ... from
   public` alone — it does not remove the `anon`/`authenticated` grants. A

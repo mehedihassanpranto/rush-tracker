@@ -8,6 +8,7 @@ import {
   recordAttempt,
 } from '@/server/auth/rate-limit.service'
 import { clientIpFrom } from '@/lib/auth/rate-limit'
+import { UserError } from '@/lib/errors/user-error'
 
 /**
  * Server-only helpers shared by the account-security fns (mfa.fns.ts,
@@ -30,7 +31,7 @@ export async function assertCurrentPassword(email: string, password: string): Pr
   const admin = getSupabaseAdminClient()
   const ip = requestIp()
   const limit = await checkRateLimit(admin, 'login', email, ip)
-  if (!limit.allowed) throw new Error(rateLimitMessage(limit.retryAfterMinutes))
+  if (!limit.allowed) throw new UserError(rateLimitMessage(limit.retryAfterMinutes))
 
   const env = getServerEnv()
   const probe = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
@@ -38,7 +39,7 @@ export async function assertCurrentPassword(email: string, password: string): Pr
   })
   const { error } = await probe.auth.signInWithPassword({ email, password })
   await recordAttempt(admin, 'login', email, ip, !error)
-  if (error) throw new Error('Your current password is not correct.')
+  if (error) throw new UserError('Your current password is not correct.')
   // End only that throwaway session, not the user's other sessions.
   await probe.auth.signOut({ scope: 'local' })
 }
