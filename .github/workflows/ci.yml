@@ -45,6 +45,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: check
+    # One e2e run on staging at a time, across ALL branches: runs share
+    # staging-wide state (e.g. the platform Meta-token health row), so a PR run
+    # overlapping the main run after a merge made "alerts once" fail (PR #15).
+    # Queues instead of cancelling a run in progress. (GitHub keeps one waiting
+    # run per group, so a third run arriving cancels the waiting one; re-run it.)
+    concurrency:
+      group: staging-e2e
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

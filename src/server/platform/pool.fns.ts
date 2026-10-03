@@ -26,6 +26,7 @@ import {
 } from '@/server/meta/meta.server'
 import type { MetaAdAccountSummary } from '@/server/meta/meta.server'
 import { syncAndPersistAdAccountSpendCap } from '@/server/meta/spend-cap-sync.server'
+import { syncAdAccountName } from '@/server/meta/meta-sync.server'
 import { dec } from '@/lib/money/money'
 import { PLATFORM_CREDENTIALS } from '@/lib/meta/credential-scope'
 import { DEPLOYMENT_ORGANIZATION_ID } from '@/lib/organizations/deployment-org'
@@ -602,6 +603,39 @@ export const renamePoolAccountFn = createServerFn({ method: 'POST' })
       newValues: { name: data.name },
     })
     return account as AdAccount
+  })
+
+/**
+ * Apply the account's live Meta name if it changed — what the page's "Fetch"
+ * button does, so a rename in Meta shows up without waiting for the daily
+ * sync. Platform counterpart of syncAdAccountNameFn, except the name is read
+ * from Meta here on the server rather than taken from the browser. The audit
+ * row goes to the agency holding the grant (like the cron's), falling back to
+ * the platform's own organization while the account is ungranted.
+ */
+export const syncPoolAccountNameFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ id: z.uuid() }))
+  .handler(async ({ data }): Promise<{ renamed: boolean; name: string }> => {
+    const actor = await requirePlatformAdmin()
+    const admin = getSupabaseAdminClient()
+    const account = await loadPoolAccount(admin, data.id)
+    if (!account.external_account_id) return { renamed: false, name: account.name }
+
+    const meta = await fetchMetaAdAccount(account.external_account_id, PLATFORM_CREDENTIALS)
+    const operatingOrg = await operatingOrganizationId(admin, account as unknown as {
+      id: string
+      is_platform: boolean
+      organization_id: string | null
+    })
+    const result = await syncAdAccountName(
+      account.id,
+      account.name,
+      meta.name,
+      actor.id,
+      'META_MANUAL_SYNC',
+      operatingOrg ?? actor.organizationId,
+    )
+    return { renamed: result.renamed, name: result.newName ?? account.name }
   })
 
 /** Platform counterpart of updateAdAccountFn. */
