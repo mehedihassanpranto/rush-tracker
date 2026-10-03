@@ -8,6 +8,29 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-03
 
+**Daily Meta sync was not running — fixed (no code change).** System health's
+first day showed "No successful run recorded yet". Hostinger had **no cron
+entries at all**: the job had only been running because the old Vercel
+project's cron kept calling it, and it stopped when that did (last sign:
+2026-10-02 03:38 UTC). Created the Hostinger cron (`0 3 * * *`, uid
+`T9jasSyGe0`, `curl` with `CRON_SECRET` to `https://panel.xrush.online/api/cron/meta-sync`)
+and ran the missed sync by hand: success, 36 pool accounts, platform token
+valid, 0 errors — recorded as the first `cron_runs` row.
+
+**Vercel retired.** `vercel.json` removed; README, `docs/DEPLOYMENT.md`,
+`docs/DEPLOYMENT-HOSTINGER.md` and CLAUDE.md now name Hostinger as production
+(the spec's original Vercel wording in `docs/PROJECT_SPEC.md` is left as the
+owner's document). The Vercel project itself is deleted from the Vercel
+dashboard by the owner. Note: `rush-tracker.vercel.app` is an unrelated Next.js
+app, not this project.
+
+**Leaked credentials rotated.** The Supabase access token pasted during setup
+was revoked (verified 401) and replaced in `.env`. Staging moved to the new
+publishable/secret API keys (`.env.test` + GitHub secrets, full suite and CI
+green with them) and its legacy JWT `anon`/`service_role` keys were disabled —
+the leaked ones now return 401 ("Legacy API keys are disabled"). Production
+keys untouched.
+
 **Monitoring (upgrade plan step 5, migration `20260723000054`).** Prompted by
 the move from Vercel to Hostinger: the daily Meta sync used to be scheduled by
 Vercel Cron, and the only evidence it still runs was an indirect digest

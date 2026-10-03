@@ -1,10 +1,12 @@
 # Rush Tracker — Deployment (Phase 8)
 
-> **Deploying to Hostinger instead?** See
-> [`DEPLOYMENT-HOSTINGER.md`](./DEPLOYMENT-HOSTINGER.md). Both targets build from
-> the same branch with no config switch — Nitro emits the `vercel` preset only
-> when Vercel's own `VERCEL` env var is set at build time, and a plain
-> `node-server` everywhere else. This document remains valid for Vercel.
+> **Production is on Hostinger, not Vercel** (since 2026-09; Vercel project
+> retired 2026-10-03, `vercel.json` removed). The live guide is
+> [`DEPLOYMENT-HOSTINGER.md`](./DEPLOYMENT-HOSTINGER.md). This document is kept
+> for its environment-variable notes and §6 verification checklist, which still
+> apply; its Vercel-specific parts (the `vercel` preset, Vercel Cron) do not.
+> Deploying to Vercel again would need the daily cron re-created there, since
+> `vercel.json` no longer exists.
 
 Target: **Vercel serverless** via Nitro v3 (spec deployment target). Nitro
 auto-selects its `vercel` preset when the `VERCEL` environment variable is
