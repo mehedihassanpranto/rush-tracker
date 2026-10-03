@@ -22,6 +22,7 @@ import {
   listPoolAccountUsageFn,
   retryPoolAccountSpendCapSyncFn,
   setPoolAccountStatusFn,
+  syncPoolAccountNameFn,
 } from '@/server/platform/pool.fns'
 import { listOrganizationsFn } from '@/server/organizations/organization.fns'
 import { dec, formatCurrencyAmount, formatUsd } from '@/lib/money/money'
@@ -95,6 +96,7 @@ function PoolAccountDetailPage() {
   const fetchMetaAccount = useServerFn(fetchPoolAccountMetaFn)
   const retrySpendCapSync = useServerFn(retryPoolAccountSpendCapSyncFn)
   const grant = useServerFn(grantPoolAccountFn)
+  const syncName = useServerFn(syncPoolAccountNameFn)
 
   const [renameOpen, setRenameOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -160,13 +162,39 @@ function PoolAccountDetailPage() {
   const fetchingAll =
     accountFetching || historyFetching || usageFetching || metaFetching
 
+  // Also applies a rename made in Meta, so it shows here at once instead of
+  // after the daily sync (same as the agency page's Fetch).
   async function handleFetchAll() {
-    await Promise.all([
+    const [accountResult, , , metaResult] = await Promise.all([
       refetchAccount(),
       refetchHistory(),
       refetchUsage(),
       externalAccountId ? refetchMetaLive() : Promise.resolve(null),
     ])
+    if (metaResult && metaResult.isError) {
+      toast.warning('Fetched, but live Meta data failed to load', {
+        description: metaResult.error instanceof Error ? metaResult.error.message : undefined,
+      })
+      return
+    }
+    const liveName = metaResult?.data?.name
+    const storedName = accountResult.data?.account.name
+    if (liveName && storedName && liveName !== storedName) {
+      try {
+        const result = await syncName({ data: { id: accountId } })
+        if (result.renamed) {
+          await refetchAccount()
+          void queryClient.invalidateQueries({ queryKey: ['platform-pool-accounts'] })
+          toast.success(`Fetched latest data — renamed to "${result.name}" to match Meta`)
+          return
+        }
+      } catch (err) {
+        toast.warning('Fetched latest data, but renaming to match Meta failed', {
+          description: err instanceof Error ? err.message : undefined,
+        })
+        return
+      }
+    }
     toast.success('Fetched latest data')
   }
 

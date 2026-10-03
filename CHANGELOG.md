@@ -8,6 +8,18 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-03
 
+**Fixed: "Fetch" on a platform pool account didn't pick up a rename made in
+Meta.** Reported by the owner for ADA-0033 (lent to Arrow Solutions; Meta now
+calls it "xRush Agency - Gopal Da 02", the panel still said "EkMatrik 001" — the
+only mismatch of the 34 linked accounts). The agency's Fetch/Refresh apply
+Meta's name, but the platform's pool account page only reloaded data, so for an
+account another agency holds nothing renamed it until the daily 03:00 UTC sync.
+New `syncPoolAccountNameFn` (`requirePlatformAdmin`): reads the live name from
+Meta on the server (not from the browser) and applies it through the same
+`syncAdAccountName()` the cron uses, audited as `AD_ACCOUNT_RENAMED` /
+`META_MANUAL_SYNC` in the holding agency's log. Called by the page's Fetch only
+when the names differ.
+
 **CLAUDE.md trimmed from 3,714 lines (258 KB, ~65k tokens loaded into every
 agent session) to ~235 lines (15 KB).** The feature-by-feature "Status" log and
 the per-phase convention notes moved word for word to `docs/HISTORY.md`
