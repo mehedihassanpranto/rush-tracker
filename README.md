@@ -10,8 +10,8 @@ agency. Full specification: [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md)
 - **Supabase** — PostgreSQL, Auth, Storage (all business operations go through
   the TanStack Start server layer)
 - **Tailwind CSS v4 + shadcn/ui + Lucide**
-- **Deployment** — Vercel serverless via Nitro v3 (preset auto-detected on
-  Vercel builds)
+- **Deployment** — Hostinger Node.js hosting (Nitro v3 `node-server` build),
+  pulling `main` from GitHub
 
 ## Setup
 
@@ -47,12 +47,13 @@ agency. Full specification: [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md)
    npm run build
    ```
 
-## Deploying to Vercel
+## Deploying
 
-Import the repo in Vercel and set the three environment variables
-(`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`).
-Nitro detects Vercel automatically and emits serverless functions — no extra
-configuration required.
+Production runs on Hostinger (`panel.xrush.online`), which pulls `main` and
+runs `npm run build` / `npm start`. Full setup, environment variables and the
+required daily cron job: [`docs/DEPLOYMENT-HOSTINGER.md`](docs/DEPLOYMENT-HOSTINGER.md).
+Database migrations are applied separately with `supabase db push` — before
+merging any code that depends on them, since the merge is the deploy.
 
 ## Project status
 

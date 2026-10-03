@@ -1,9 +1,10 @@
 # Rush Tracker — Deploying to Hostinger
 
-Companion to `docs/DEPLOYMENT.md` (Vercel), which stays valid: **both targets
-work from the same codebase and the same branch, with no build flags to
-switch.** Nothing in the repo is Hostinger-specific or Vercel-specific at build
-time — see "Why no config switch is needed" at the bottom.
+**This is the production deployment** (`panel.xrush.online`, Hostinger account
+`u835379012`). `docs/DEPLOYMENT.md` is the older Vercel guide, kept for its
+environment-variable notes and verification checklist. Nothing in the repo is
+Hostinger-specific at build time — see "Why no config switch is needed" at the
+bottom.
 
 Everything below was verified against a real production build of this repo, not
 inferred from documentation.
@@ -152,9 +153,9 @@ No database migration is needed. The schema is already live.
 
 ## 5. The daily cron job — the one thing that does not carry over
 
-`vercel.json` schedules `/api/cron/meta-sync` daily at 03:00 UTC. **That file is
-Vercel-only. Hostinger ignores it entirely**, and nothing fails loudly — the job
-simply never runs, and these stop happening:
+The daily job is **not** part of the deploy — it has to exist as a cron entry in
+the hosting panel. Without it nothing fails loudly; the job simply never runs,
+and these stop happening:
 
 - Meta ad-account name syncs
 - "account disabled" and low-balance alerts
@@ -167,9 +168,16 @@ Recreate it in Hostinger's cron panel:
 ```
 
 `-f` makes curl exit non-zero on an HTTP error, so a failure shows up in the
-cron log instead of passing silently. The schedule is UTC in `vercel.json`;
-confirm what timezone Hostinger's cron uses and adjust if you want 03:00 to stay
-03:00.
+cron log instead of passing silently. Confirm what timezone Hostinger's cron
+uses (System health's "Last success" time shows it after the first run) and
+adjust if you want a specific hour.
+
+**Production's entry (created 2026-10-03, uid `T9jasSyGe0`):**
+`0 3 * * *  curl -sS -m 300 -o /dev/null -w "meta-sync HTTP %{http_code}" -H "Authorization: Bearer <CRON_SECRET>" https://panel.xrush.online/api/cron/meta-sync`
+— listed under hPanel → Advanced → Cron Jobs (or via the Hostinger API's
+`hosting_cron-jobs_list`). Before this date the job only ran because the old
+Vercel project's cron was still calling it; it stopped when that did, and
+System health caught it on its first day.
 
 Verify by hand after deploying:
 
@@ -188,8 +196,7 @@ page shows the last successful run and turns red ("Stale") when there hasn't
 been one for 26 hours — the signal that the cron entry is missing or broken.
 A run that fails (fully or partly) is also sent to platform admins in-app and on
 the platform Telegram bot. If the page says recent runs came from more than one
-host, two schedulers are calling the job — usually a leftover Vercel project
-whose cron still fires; delete or disconnect it.
+host, two schedulers are calling the job — remove the extra one.
 
 ---
 
@@ -218,12 +225,11 @@ Run `docs/DEPLOYMENT.md` §6's full checklist. The Hostinger-specific additions:
 
 The build auto-selects its output format:
 
-- Nitro emits the **`vercel`** preset when the `VERCEL` environment variable is
-  present at build time (Vercel sets this itself).
-- Everywhere else — including Hostinger — it emits **`node-server`**: a plain
-  Node HTTP server at `.output/server/index.mjs`, listening on `PORT`.
+- On Hostinger (and any host without the `VERCEL` env var) Nitro emits
+  **`node-server`**: a plain Node HTTP server at `.output/server/index.mjs`,
+  listening on `PORT`. (It would emit the `vercel` preset only if `VERCEL` were
+  set at build time.)
 
-So the same commit deploys to both, and `vercel.json` can stay in the repo
-without affecting Hostinger, which never reads it. Confirmed on a real build
+Confirmed on a real build
 here: preset `node-server`, no `.vercel` directory and no serverless functions
 emitted, `npm start` serving `/login` with a 200 and auth redirects intact.
