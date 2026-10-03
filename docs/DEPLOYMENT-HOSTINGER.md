@@ -149,6 +149,31 @@ the old domain. If you run both deploys in parallel, list **both** origins.
 
 No database migration is needed. The schema is already live.
 
+### Auth emails — SMTP, sender domain, templates
+
+Password-reset and email-change emails are sent by Supabase through the
+Hostinger mailbox `no-reply@panel.xrush.online` (set 2026-10-03). Supabase's
+built-in mailer only reaches the project's own team, so without this, emails
+never reach agency staff or clients.
+
+- **SMTP** (Authentication → Emails → SMTP settings): host `smtp.hostinger.com`,
+  port `465`, user and sender `no-reply@panel.xrush.online`, sender name
+  "Rush Tracker". Email rate limit: 30/hour. Staging uses the same mailbox
+  with sender name "Rush Tracker (staging)".
+- **DNS** — `panel.xrush.online` is its **own DNS zone** at Hostinger, so its
+  mail records must be in that zone, not in `xrush.online`'s (records named
+  `….panel` there are never served). It has MX, SPF and the three DKIM CNAMEs
+  `hostingermail-{a,b,c}._domainkey` → `hostingermail-{a,b,c}.dkim.mail.hostinger.com`.
+  DMARC falls back to `_dmarc.xrush.online` (`p=none`).
+- **"Change email address" template** — must link to the app, not to
+  `{{ .ConfirmationURL }}` (that URL signs in whoever clicks it):
+  `{{ .SiteURL }}/confirm-email?token_hash={{ .TokenHash }}`. "Secure email
+  change" stays ON (both the old and the new address must confirm), and the
+  "Email address changed" notice to the old address is ON. Custom templates
+  need custom SMTP on the free plan.
+- **Site URL** must be `https://panel.xrush.online` — the template builds links
+  from it.
+
 ---
 
 ## 5. The daily cron job — the one thing that does not carry over

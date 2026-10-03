@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteRouteImport } from './routes/_auth/route'
 import { Route as AgencyRouteRouteImport } from './routes/agency/route'
 import { Route as ClientRouteRouteImport } from './routes/client/route'
+import { Route as ConfirmEmailRouteImport } from './routes/confirm-email'
 import { Route as PlatformRouteRouteImport } from './routes/platform/route'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SecurityRouteImport } from './routes/security'
@@ -83,6 +84,11 @@ const AgencyRouteRoute = AgencyRouteRouteImport.update({
 const ClientRouteRoute = ClientRouteRouteImport.update({
   id: '/client',
   path: '/client',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConfirmEmailRoute = ConfirmEmailRouteImport.update({
+  id: '/confirm-email',
+  path: '/confirm-email',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlatformRouteRoute = PlatformRouteRouteImport.update({
@@ -367,6 +373,7 @@ export interface FileRoutesByFullPath {
   '/agency': typeof AgencyRouteRouteWithChildren
   '/client': typeof ClientRouteRouteWithChildren
   '/platform': typeof PlatformRouteRouteWithChildren
+  '/confirm-email': typeof ConfirmEmailRoute
   '/reset-password': typeof ResetPasswordRoute
   '/security': typeof SecurityRoute
   '/subscription-suspended': typeof SubscriptionSuspendedRoute
@@ -421,6 +428,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/confirm-email': typeof ConfirmEmailRoute
   '/reset-password': typeof ResetPasswordRoute
   '/security': typeof SecurityRoute
   '/subscription-suspended': typeof SubscriptionSuspendedRoute
@@ -480,6 +488,7 @@ export interface FileRoutesById {
   '/agency': typeof AgencyRouteRouteWithChildren
   '/client': typeof ClientRouteRouteWithChildren
   '/platform': typeof PlatformRouteRouteWithChildren
+  '/confirm-email': typeof ConfirmEmailRoute
   '/reset-password': typeof ResetPasswordRoute
   '/security': typeof SecurityRoute
   '/subscription-suspended': typeof SubscriptionSuspendedRoute
@@ -539,6 +548,7 @@ export interface FileRouteTypes {
     | '/agency'
     | '/client'
     | '/platform'
+    | '/confirm-email'
     | '/reset-password'
     | '/security'
     | '/subscription-suspended'
@@ -593,6 +603,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/confirm-email'
     | '/reset-password'
     | '/security'
     | '/subscription-suspended'
@@ -651,6 +662,7 @@ export interface FileRouteTypes {
     | '/agency'
     | '/client'
     | '/platform'
+    | '/confirm-email'
     | '/reset-password'
     | '/security'
     | '/subscription-suspended'
@@ -710,6 +722,7 @@ export interface RootRouteChildren {
   AgencyRouteRoute: typeof AgencyRouteRouteWithChildren
   ClientRouteRoute: typeof ClientRouteRouteWithChildren
   PlatformRouteRoute: typeof PlatformRouteRouteWithChildren
+  ConfirmEmailRoute: typeof ConfirmEmailRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SecurityRoute: typeof SecurityRoute
   SubscriptionSuspendedRoute: typeof SubscriptionSuspendedRoute
@@ -747,6 +760,13 @@ declare module '@tanstack/react-router' {
       path: '/client'
       fullPath: '/client'
       preLoaderRoute: typeof ClientRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/confirm-email': {
+      id: '/confirm-email'
+      path: '/confirm-email'
+      fullPath: '/confirm-email'
+      preLoaderRoute: typeof ConfirmEmailRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/platform': {
@@ -1261,6 +1281,7 @@ const rootRouteChildren: RootRouteChildren = {
   AgencyRouteRoute: AgencyRouteRouteWithChildren,
   ClientRouteRoute: ClientRouteRouteWithChildren,
   PlatformRouteRoute: PlatformRouteRouteWithChildren,
+  ConfirmEmailRoute: ConfirmEmailRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SecurityRoute: SecurityRoute,
   SubscriptionSuspendedRoute: SubscriptionSuspendedRoute,

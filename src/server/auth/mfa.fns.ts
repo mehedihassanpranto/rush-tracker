@@ -1,9 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getRequestHeader, getRequestIP } from '@tanstack/react-start/server'
-import { createClient } from '@supabase/supabase-js'
 import { getSupabaseServerClient } from '@/lib/supabase/server'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
-import { getServerEnv } from '@/lib/env/env.server'
 import {
   AuthError,
   requirePlatformAdmin,
@@ -16,7 +13,7 @@ import {
   rateLimitMessage,
   recordAttempt,
 } from '@/server/auth/rate-limit.service'
-import { clientIpFrom } from '@/lib/auth/rate-limit'
+import { assertCurrentPassword, requestIp } from '@/server/auth/password-check.service'
 import {
   MFA_REQUIRED_FOR_PLATFORM_ADMINS,
   hasPermission,
@@ -42,10 +39,6 @@ import {
  * Code checks are rate-limited per account (auth_attempts), because Supabase
  * only limits per IP and every request here comes from the server's IP.
  */
-
-function requestIp(): string | null {
-  return clientIpFrom(getRequestHeader('x-forwarded-for'), getRequestIP() ?? null)
-}
 
 export interface MfaStatus {
   enrolled: boolean
@@ -243,31 +236,13 @@ export const resetUserMfaFn = createServerFn({ method: 'POST' })
 
 /**
  * Change your own password. The current password is checked first (a stolen,
- * still-open session must not be enough to lock the owner out), on a
- * throwaway client so this session's cookies are untouched; that check counts
- * toward the sign-in rate limit.
+ * still-open session must not be enough to lock the owner out).
  */
 export const changePasswordFn = createServerFn({ method: 'POST' })
   .validator(changePasswordSchema)
   .handler(async ({ data }): Promise<{ ok: true }> => {
     const user = await requireUser()
-    const admin = getSupabaseAdminClient()
-    const ip = requestIp()
-    const limit = await checkRateLimit(admin, 'login', user.email, ip)
-    if (!limit.allowed) throw new Error(rateLimitMessage(limit.retryAfterMinutes))
-
-    const env = getServerEnv()
-    const probe = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    })
-    const { error: checkErr } = await probe.auth.signInWithPassword({
-      email: user.email,
-      password: data.current_password,
-    })
-    await recordAttempt(admin, 'login', user.email, ip, !checkErr)
-    if (checkErr) throw new Error('Your current password is not correct.')
-    // End only that throwaway session, not the user's other sessions.
-    await probe.auth.signOut({ scope: 'local' })
+    await assertCurrentPassword(user.email, data.current_password)
 
     const supabase = getSupabaseServerClient()
     const { error } = await supabase.auth.updateUser({ password: data.new_password })

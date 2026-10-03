@@ -8,6 +8,37 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-03
 
+**Self-service email change.** Security page gained a "Sign-in email" card:
+new address + current password (checked like a password change, counts
+toward the sign-in limit). Refused before anything is sent if the address is
+the current one or already used by another account; sending is rate-limited
+per target address (the reset limit, 3/hour) so nobody can flood someone
+else's inbox. Supabase's **secure email change** sends a link to BOTH the old
+and the new address; the email changes only after both are confirmed. Links
+land on the new public `/confirm-email` page, which confirms only on a button
+press (mail scanners open links and would otherwise use up the single-use
+token) and verifies on a throwaway client whose session is ended at once, so
+**confirming never signs anyone in** — the default link would have. Audited as
+`EMAIL_CHANGE_REQUESTED` / `EMAIL_CHANGED`. The shared current-password check
+moved to `password-check.service.ts`. New e2e spec `email-change.spec.ts`
+(refusals, both-links rule, scanner-safe page, no session handed out, single
+use, new address signs in and old doesn't). Also verified with a REAL email on
+staging, read back over IMAP from the mailbox. Note: Supabase's admin
+`generateLink` returns a wrong token for the new address (built from the old
+one) — the e2e helper computes the real token instead, documented in
+`e2e/support/seed.ts`.
+
+**Auth emails now actually reach people (closes the SMTP item below).**
+Production and staging Supabase send through the Hostinger mailbox
+`no-reply@panel.xrush.online` (sender "Rush Tracker" / "Rush Tracker
+(staging)", 30 emails/hour). Test reset email delivered. DKIM: the three
+records had been added to the `xrush.online` zone as `….panel`, but
+`panel.xrush.online` is its own DNS zone, so they were never served — added to
+the right zone (append only, nothing else changed). The "Change email address"
+template now links to `/confirm-email?token_hash=…` and the "email changed"
+notice to the old address is on. Full setup in `docs/DEPLOYMENT-HOSTINGER.md`
+§4.
+
 **Account security (upgrade plan step 6, migration `20260723000055`).**
 *Supabase Auth configuration (production + staging, via the Management API):*
 public **signup was open** — anyone holding the public key could create an
