@@ -20,6 +20,13 @@ Meta on the server (not from the browser) and applies it through the same
 `META_MANUAL_SYNC` in the holding agency's log. Called by the page's Fetch only
 when the names differ.
 
+**CI: staging e2e runs no longer overlap.** PR #15's first CI run failed
+"a broken token alerts once": the `main` run triggered by merging PR #14 ran its
+e2e on staging at the same time, and the two share staging-wide state (the
+platform Meta-token health row), so one run's alert suppressed the other's. The
+e2e job is now in a global `staging-e2e` concurrency group — runs queue instead
+of overlapping.
+
 **CLAUDE.md trimmed from 3,714 lines (258 KB, ~65k tokens loaded into every
 agent session) to ~235 lines (15 KB).** The feature-by-feature "Status" log and
 the per-phase convention notes moved word for word to `docs/HISTORY.md`
