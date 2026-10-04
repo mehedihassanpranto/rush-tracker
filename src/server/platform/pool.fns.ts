@@ -114,6 +114,66 @@ export const listPoolAccountsFn = createServerFn({ method: 'GET' }).handler(
   },
 )
 
+export interface PoolAccountMetaLive {
+  /** Our ad_accounts.id. */
+  id: string
+  name: string
+  currency: string | null
+  amount_spent: string | null
+  spend_cap: string | null
+  meta_balance: string | null
+}
+
+/**
+ * Live Meta figures for every linked pool account — the pool list's
+ * Remaining / Meta Due columns and its Refresh button. Always a fresh read
+ * from Meta (nothing is cached server-side). One portfolio listing covers the
+ * normal case; a linked account the listing doesn't return (e.g. removed from
+ * the portfolio) is fetched on its own, and one that fails is just left out.
+ * Read-only: renames are applied separately by syncPoolAccountNameFn.
+ */
+export const listPoolAccountsMetaFn = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<Array<PoolAccountMetaLive>> => {
+    await requirePlatformAdmin()
+    const admin = getSupabaseAdminClient()
+
+    const { data, error } = await admin
+      .from('ad_accounts')
+      .select('id, external_account_id')
+      .eq('is_platform', true)
+      .not('external_account_id', 'is', null)
+    if (error) throw new Error(error.message)
+    const linked = (data ?? []) as Array<{ id: string; external_account_id: string }>
+    if (linked.length === 0) return []
+
+    const portfolio = await listMetaBusinessAdAccounts(PLATFORM_CREDENTIALS)
+    const byExternalId = new Map(portfolio.map((m) => [m.external_account_id, m]))
+
+    const missing = linked.filter((a) => !byExternalId.has(a.external_account_id))
+    const fetched = await Promise.allSettled(
+      missing.map((a) => fetchMetaAdAccount(a.external_account_id, PLATFORM_CREDENTIALS)),
+    )
+    fetched.forEach((r, i) => {
+      if (r.status === 'fulfilled') byExternalId.set(missing[i].external_account_id, r.value)
+    })
+
+    return linked.flatMap((a) => {
+      const m = byExternalId.get(a.external_account_id)
+      if (!m) return []
+      return [
+        {
+          id: a.id,
+          name: m.name,
+          currency: m.currency,
+          amount_spent: m.amount_spent,
+          spend_cap: m.spend_cap,
+          meta_balance: m.meta_balance,
+        },
+      ]
+    })
+  },
+)
+
 /** One pool account, with who currently holds it — the detail-page
  * counterpart of listPoolAccountsFn above. */
 export const getPoolAccountFn = createServerFn({ method: 'GET' })
