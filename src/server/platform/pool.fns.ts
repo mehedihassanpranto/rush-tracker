@@ -21,6 +21,7 @@ import {
 } from '@/schemas/meta'
 import {
   fetchMetaAdAccount,
+  fetchMetaAdAccounts,
   listMetaBusinessAdAccounts,
   updateMetaAdAccountSpendCap,
 } from '@/server/meta/meta.server'
@@ -126,14 +127,14 @@ export interface PoolAccountMetaLive {
 
 /**
  * Live Meta figures for every linked pool account — the pool list's
- * Remaining / Meta Due columns and its Refresh button. Always a fresh read
- * from Meta (nothing is cached server-side). One portfolio listing covers the
- * normal case; a linked account the listing doesn't return (e.g. removed from
- * the portfolio) is fetched on its own, and one that fails is just left out.
- * Read-only: renames are applied separately by syncPoolAccountNameFn.
+ * Remaining / Meta Due columns and its Refresh button. Each account is read
+ * directly from Meta (fetchMetaAdAccounts), never from the portfolio listing,
+ * whose amount_spent/balance lag behind. An account Meta fails to return is
+ * left out and counted in `failed`. Read-only: renames are applied separately
+ * by syncPoolAccountNameFn.
  */
 export const listPoolAccountsMetaFn = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<Array<PoolAccountMetaLive>> => {
+  async (): Promise<{ accounts: Array<PoolAccountMetaLive>; failed: number }> => {
     await requirePlatformAdmin()
     const admin = getSupabaseAdminClient()
 
@@ -144,21 +145,14 @@ export const listPoolAccountsMetaFn = createServerFn({ method: 'GET' }).handler(
       .not('external_account_id', 'is', null)
     if (error) throw new Error(error.message)
     const linked = (data ?? []) as Array<{ id: string; external_account_id: string }>
-    if (linked.length === 0) return []
+    if (linked.length === 0) return { accounts: [], failed: 0 }
 
-    const portfolio = await listMetaBusinessAdAccounts(PLATFORM_CREDENTIALS)
-    const byExternalId = new Map(portfolio.map((m) => [m.external_account_id, m]))
-
-    const missing = linked.filter((a) => !byExternalId.has(a.external_account_id))
-    const fetched = await Promise.allSettled(
-      missing.map((a) => fetchMetaAdAccount(a.external_account_id, PLATFORM_CREDENTIALS)),
+    const live = await fetchMetaAdAccounts(
+      linked.map((a) => a.external_account_id),
+      PLATFORM_CREDENTIALS,
     )
-    fetched.forEach((r, i) => {
-      if (r.status === 'fulfilled') byExternalId.set(missing[i].external_account_id, r.value)
-    })
-
-    return linked.flatMap((a) => {
-      const m = byExternalId.get(a.external_account_id)
+    const accounts = linked.flatMap((a, i) => {
+      const m = live[i]
       if (!m) return []
       return [
         {
@@ -171,6 +165,7 @@ export const listPoolAccountsMetaFn = createServerFn({ method: 'GET' }).handler(
         },
       ]
     })
+    return { accounts, failed: linked.length - accounts.length }
   },
 )
 

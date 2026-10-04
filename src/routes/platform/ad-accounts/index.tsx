@@ -114,7 +114,13 @@ function PoolPage() {
     const storedName = new Map(
       (poolResult.data ?? []).map((r) => [r.account.id, r.account.name]),
     )
-    const mismatches = (metaResult.data ?? []).filter(
+    const failedFetch = metaResult.data?.failed ?? 0
+    if (failedFetch > 0) {
+      toast.warning(
+        `Meta didn't return live data for ${failedFetch} account${failedFetch === 1 ? '' : 's'} — shown as —`,
+      )
+    }
+    const mismatches = (metaResult.data?.accounts ?? []).filter(
       (m) => m.name && storedName.has(m.id) && storedName.get(m.id) !== m.name,
     )
     if (mismatches.length === 0) {
@@ -141,7 +147,7 @@ function PoolPage() {
   // Alert thresholds are flat USD numbers with no FX, so only USD accounts
   // are flagged — same gate as the agency list.
   const liveById = new Map(
-    (metaLive ?? []).map((m) => {
+    (metaLive?.accounts ?? []).map((m) => {
       const isUsd = m.currency === 'USD'
       const remaining =
         m.spend_cap != null ? dec(m.spend_cap).minus(dec(m.amount_spent ?? 0)) : null
