@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { receivableView } from '@/lib/money/net-due'
 import { formatBdt, formatUsd } from '@/lib/money/money'
 
 /**
@@ -93,13 +94,15 @@ function AgencyDataPage() {
               <TableHead className="pl-6">Code</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="pr-6">Current due</TableHead>
+              <TableHead className="text-right">Gross receivable</TableHead>
+              <TableHead className="text-right">Unused ad balance</TableHead>
+              <TableHead className="pr-6 text-right">Net receivable</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {clients.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                   No clients.
                 </TableCell>
               </TableRow>
@@ -111,7 +114,17 @@ function AgencyDataPage() {
                 <TableCell>
                   <StatusBadge status={c.status} />
                 </TableCell>
-                <TableCell className="num pr-6">{formatBdt(c.current_due)}</TableCell>
+                <TableCell className="num text-right">{formatBdt(c.current_due)}</TableCell>
+                <TableCell className="num text-right text-muted-foreground">
+                  {c.net ? formatBdt(c.net.adCreditBdt) : '—'}
+                </TableCell>
+                <TableCell className="num pr-6 text-right font-medium">
+                  {(() => {
+                    if (!c.net) return '—'
+                    const v = receivableView(c.net.netBdt)
+                    return v.kind === 'credit' ? `Credit ${formatBdt(v.amount)}` : formatBdt(v.amount)
+                  })()}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

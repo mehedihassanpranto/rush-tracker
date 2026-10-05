@@ -8,6 +8,38 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-05
 
+**Net Receivable (agency/platform) and Amount Payable (client).** Built from
+the owner's spec (`rush-tracker-net-receivable-payable-spec.md`):
+`net = gross outstanding due − unused ad account balance`, where the unused
+balance is Σ max(0, spend_cap − amount_spent) over the client's ACTIVE USD ad
+accounts. Display only — the ledger due stays the only financial figure.
+- Logic: `src/lib/money/net-due.ts` (+ tests, incl. the owner's worked
+  example $1,263.62 − $927.94 = $335.68); server: `net-due.service.ts` /
+  `net-due.fns.ts` (`myNetPayableFn`, `clientNetReceivableFn`,
+  `agencyNetReceivableFn`). Meta figures are read live per account (snapshot
+  saved; saved snapshot used as fallback). BDT conversion uses the existing
+  rule (account rate, else client rate) via new `resolveAccountUsdRate()`.
+- Client portal (Dashboard + Statement): **Amount Payable** (highlighted),
+  **Outstanding** (was "Current Due (USD, approx.)"), **Available Ad Credit**
+  (was "Total Remaining").
+- Agency: Dashboard leads with **Net Receivable (USD)**, **Gross Receivable
+  (USD)** (was "Total Outstanding Due"; BDT shown under it) and **Client
+  Credit / Unused Ad Balance (USD)**; client detail page gets the same row;
+  Clients list gets Gross receivable / Unused ad balance / Net receivable
+  columns; the Client Due Report gets Gross Due, Unused Ad Balance, Net
+  Receivable (BDT) and Net Receivable (USD), all in the CSV.
+- Platform support view of an agency: same three columns, from saved
+  snapshots only (that view never calls Meta).
+- Negative net (owner decision): client sees Amount Payable $0 plus "Credit
+  balance $X"; agency/platform see "Net Credit $X" / "Credit $X".
+- Finance tab untouched (it shows billing/collections over time, no
+  outstanding balance); Ledger / Payment Requests are per-transaction, out of
+  scope as the spec suggested.
+
+**Meta Due removed from the client portal** (owner request): the dashboard
+card is gone and `listMyAccountsMetaRemainingFn` no longer sends Meta's
+balance to client logins at all. Agency and platform still show Meta Due.
+
 **Refresh now updates both portals: Meta figures are saved per account.**
 Owner asked for the pool list's Refresh to bring current Remaining, limit and
 due, and to update the platform AND agency portals. Migration 000056 adds a

@@ -38,6 +38,16 @@ export async function adAccountUsdRate(
   return clientUsdRate(clientId)
 }
 
+/** adAccountUsdRate()'s rule for rates already loaded: the account's own rate
+ * when set (> 0), else the client's. */
+export function resolveAccountUsdRate(
+  accountRate: string | number | null,
+  clientRate: string | number | null,
+): string {
+  const account = String(accountRate ?? '0')
+  return dec(account).gt(0) ? account : String(clientRate ?? '0')
+}
+
 /**
  * Convert a BDT amount to USD at the given rate. This is an approximation for
  * display — the authoritative due is BDT, billed at historical rates. Returns

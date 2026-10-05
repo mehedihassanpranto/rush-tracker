@@ -139,6 +139,10 @@ short; detail belongs in the changelog.
   `SECURITY DEFINER` RPCs (`approve_limit_request`, `approve_payment`,
   `submit_payment`, assign/release/transfer). Errors raised as `CODE: message`
   are unwrapped by `friendlyRpcError()`.
+- **Net Receivable / Amount Payable** = ledger due − unused ad balance
+  (Σ max(0, spend_cap − spent), active USD accounts) — display only, never
+  stored (`src/lib/money/net-due.ts`, `net-due.fns.ts`). Client sees ≥ $0 plus
+  a credit balance; agency sees "Net Credit". Clients never see Meta Due.
 - **USD rate**: `adAccountUsdRate()` (`src/server/exchange-rates/rate.service.ts`)
   — the account's `usd_rate` wins; `0` means inherit the client's rate. The
   `exchange_rates` table is history only.
