@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
@@ -8,9 +8,8 @@ import { toast } from 'sonner'
 import {
   grantPoolAccountFn,
   listPoolAccountsFn,
-  listPoolAccountsMetaFn,
+  refreshPoolAccountsMetaFn,
   retryPoolAccountSpendCapSyncFn,
-  syncPoolAccountNameFn,
 } from '@/server/platform/pool.fns'
 import { listOrganizationsFn } from '@/server/organizations/organization.fns'
 import { RevokeGrantDialog } from '@/components/platform/organizations/revoke-grant-dialog'
@@ -40,8 +39,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { dec, formatCurrencyAmount, formatUsd } from '@/lib/money/money'
-import { LOW_BALANCE_THRESHOLD, META_DUE_THRESHOLD } from '@/lib/meta/thresholds'
+import { formatCurrencyAmount, formatUsd } from '@/lib/money/money'
+import {
+  formatRefreshedAgo,
+  isMetaSnapshotStale,
+  latestMetaRefresh,
+  metaSnapshotView,
+} from '@/lib/meta/snapshot'
 
 /**
  * The platform's central ad account pool. Access is enforced by the /platform
@@ -58,8 +62,7 @@ export const Route = createFileRoute('/platform/ad-accounts/')({
 function PoolPage() {
   const queryClient = useQueryClient()
   const listPool = useServerFn(listPoolAccountsFn)
-  const listPoolMeta = useServerFn(listPoolAccountsMetaFn)
-  const syncName = useServerFn(syncPoolAccountNameFn)
+  const refreshMeta = useServerFn(refreshPoolAccountsMetaFn)
   const listOrganizations = useServerFn(listOrganizationsFn)
   const grant = useServerFn(grantPoolAccountFn)
   const [search, setSearch] = useState('')
@@ -77,93 +80,53 @@ function PoolPage() {
     agencyName: string
   } | null>(null)
 
-  const {
-    data: rows,
-    isLoading,
-    refetch: refetchPool,
-    isFetching: poolFetching,
-  } = useQuery({
+  const { data: rows, isLoading } = useQuery({
     queryKey: ['platform-pool-accounts'],
     queryFn: () => listPool(),
   })
-  const {
-    data: metaLive,
-    isError: metaError,
-    refetch: refetchMeta,
-    isFetching: metaFetching,
-  } = useQuery({
-    queryKey: ['platform-pool-meta-live'],
-    queryFn: () => listPoolMeta(),
-    staleTime: 2 * 60 * 1000,
-    retry: false,
+
+  // Reads every pool account straight from Meta and saves the snapshot the
+  // Remaining / Spend cap / Meta Due columns show — the holding agency's list
+  // shows the same snapshot, so this updates both portals. Also applies a
+  // rename made in Meta. Never changes Current limit.
+  const refreshMutation = useMutation({
+    mutationFn: (_silent: boolean) => refreshMeta(),
+    onSuccess: (result, silent) => {
+      void queryClient.invalidateQueries({ queryKey: ['platform-pool-accounts'] })
+      if (silent) return
+      if (result.refreshed === 0 && result.failed > 0) {
+        toast.error("Couldn't read live data from Meta — check System Health")
+        return
+      }
+      const parts = [`${result.refreshed} account${result.refreshed === 1 ? '' : 's'} updated`]
+      if (result.renamed > 0)
+        parts.push(`${result.renamed} renamed to match Meta`)
+      if (result.failed > 0) {
+        toast.warning(`Refreshed from Meta — ${parts.join(', ')}`, {
+          description: `Meta didn't return ${result.failed} account${result.failed === 1 ? '' : 's'}; those keep their previous figures.`,
+        })
+      } else {
+        toast.success(`Refreshed from Meta — ${parts.join(', ')}`)
+      }
+    },
+    onError: (err, silent) => {
+      if (!silent) toast.error(err instanceof Error ? err.message : 'Refresh failed')
+    },
   })
-  const refreshing = poolFetching || metaFetching
+  const refreshing = refreshMutation.isPending
 
-  // Forces a fresh read from Meta (refetch ignores staleTime), then applies
-  // any rename made in Meta — same as the agency list's Refresh and the pool
-  // account page's Fetch. Spend caps and limits are never touched.
-  async function handleRefresh() {
-    const [poolResult, metaResult] = await Promise.all([refetchPool(), refetchMeta()])
-    if (metaResult.isError) {
-      toast.warning('Refreshed, but live Meta data failed to load', {
-        description:
-          metaResult.error instanceof Error ? metaResult.error.message : undefined,
-      })
-      return
+  // Opening the page refreshes once, quietly, when the snapshot is missing or
+  // older than 10 minutes — so nobody reads day-old figures by default.
+  const autoRefreshed = useRef(false)
+  useEffect(() => {
+    if (!rows || autoRefreshed.current) return
+    autoRefreshed.current = true
+    if (isMetaSnapshotStale(rows.map((r) => r.account), 10 * 60 * 1000)) {
+      refreshMutation.mutate(true)
     }
-    const storedName = new Map(
-      (poolResult.data ?? []).map((r) => [r.account.id, r.account.name]),
-    )
-    const failedFetch = metaResult.data?.failed ?? 0
-    if (failedFetch > 0) {
-      toast.warning(
-        `Meta didn't return live data for ${failedFetch} account${failedFetch === 1 ? '' : 's'} — shown as —`,
-      )
-    }
-    const mismatches = (metaResult.data?.accounts ?? []).filter(
-      (m) => m.name && storedName.has(m.id) && storedName.get(m.id) !== m.name,
-    )
-    if (mismatches.length === 0) {
-      toast.success('Refreshed from Meta')
-      return
-    }
-    const results = await Promise.allSettled(
-      mismatches.map((m) => syncName({ data: { id: m.id } })),
-    )
-    const renamed = results.filter((r) => r.status === 'fulfilled' && r.value.renamed).length
-    const failed = results.filter((r) => r.status === 'rejected').length
-    if (renamed > 0) await refetchPool()
-    if (failed > 0) {
-      toast.warning(
-        `Refreshed from Meta, but ${failed} account name${failed === 1 ? '' : 's'} couldn't be updated to match Meta`,
-      )
-    } else {
-      toast.success(
-        `Refreshed from Meta — ${renamed} account name${renamed === 1 ? '' : 's'} updated to match Meta`,
-      )
-    }
-  }
+  }, [rows, refreshMutation])
+  const lastRefreshed = latestMetaRefresh((rows ?? []).map((r) => r.account))
 
-  // Alert thresholds are flat USD numbers with no FX, so only USD accounts
-  // are flagged — same gate as the agency list.
-  const liveById = new Map(
-    (metaLive?.accounts ?? []).map((m) => {
-      const isUsd = m.currency === 'USD'
-      const remaining =
-        m.spend_cap != null ? dec(m.spend_cap).minus(dec(m.amount_spent ?? 0)) : null
-      return [
-        m.id,
-        {
-          currency: m.currency ?? '',
-          remaining: remaining ? remaining.toFixed(2) : null,
-          low: isUsd && remaining ? remaining.lte(LOW_BALANCE_THRESHOLD) : false,
-          metaDue: m.meta_balance,
-          metaDueHigh:
-            isUsd && m.meta_balance != null && dec(m.meta_balance).gte(META_DUE_THRESHOLD),
-        },
-      ]
-    }),
-  )
   const { data: organizations } = useQuery({
     queryKey: ['organizations'],
     queryFn: () => listOrganizations(),
@@ -217,7 +180,7 @@ function PoolPage() {
         title="Ad Account Pool"
         description="Accounts the platform owns centrally and grants to agencies."
       >
-        <Button variant="outline" onClick={() => void handleRefresh()} disabled={refreshing}>
+        <Button variant="outline" onClick={() => refreshMutation.mutate(false)} disabled={refreshing}>
           <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
@@ -236,12 +199,19 @@ function PoolPage() {
         />
       </div>
 
-      <Input
-        placeholder="Search by account, code, or agency..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="mb-4 sm:max-w-xs"
-      />
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <Input
+          placeholder="Search by account, code, or agency..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="sm:max-w-xs"
+        />
+        <p className="text-xs text-muted-foreground">
+          {refreshing
+            ? 'Reading live figures from Meta…'
+            : `Meta figures updated ${formatRefreshedAgo(lastRefreshed)}`}
+        </p>
+      </div>
 
       {isLoading && <Skeleton className="h-64 w-full" />}
 
@@ -253,6 +223,7 @@ function PoolPage() {
                 <TableHead className="pl-6">Code</TableHead>
                 <TableHead>Account</TableHead>
                 <TableHead>Current limit</TableHead>
+                <TableHead className="text-right">Spend cap</TableHead>
                 <TableHead className="text-right">Remaining</TableHead>
                 <TableHead className="text-right">Meta Due</TableHead>
                 <TableHead>Status</TableHead>
@@ -263,7 +234,7 @@ function PoolPage() {
             <TableBody>
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8}>
+                  <TableCell colSpan={9}>
                     <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
                       <Megaphone className="size-7 opacity-40" />
                       {rows?.length === 0
@@ -274,7 +245,7 @@ function PoolPage() {
                 </TableRow>
               )}
               {filtered.map((row) => {
-                const live = liveById.get(row.account.id)
+                const live = metaSnapshotView(row.account)
                 return (
                 <TableRow key={row.account.id}>
                   <TableCell className="pl-6 font-mono text-xs">
@@ -299,6 +270,9 @@ function PoolPage() {
                         />
                       )}
                     </div>
+                  </TableCell>
+                  <TableCell className="num text-right text-muted-foreground">
+                    {live ? formatCurrencyAmount(live.spendCap, live.currency) : '—'}
                   </TableCell>
                   <TableCell
                     className={`num text-right ${live?.low ? 'font-medium text-danger' : 'text-muted-foreground'}`}
@@ -418,11 +392,6 @@ function PoolPage() {
         onOpenChange={(o) => !o && setToRevoke(null)}
       />
 
-      {metaError && (
-        <p className="mt-4 text-xs text-muted-foreground">
-          Live Meta data (Remaining, Meta Due) couldn't be loaded — try Refresh.
-        </p>
-      )}
 
       <p className="mt-4 text-xs text-muted-foreground">
         One agency at a time per account. Granting is push-only — agencies

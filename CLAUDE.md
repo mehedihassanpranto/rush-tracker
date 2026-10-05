@@ -163,6 +163,10 @@ short; detail belongs in the changelog.
   - Units: `amount_spent`/`spend_cap`/`balance` READ in minor units (normalised
     in `toSummary()`, with `ZERO_DECIMAL_CURRENCIES`), but `spend_cap` WRITES in
     major units (verified live). Don't "fix" the asymmetry.
+  - Meta's portfolio edges (`listMetaBusinessAdAccounts`) return STALE
+    `amount_spent`/`balance` — for figures shown to users read each account's
+    own node (`fetchMetaAdAccounts`). Shown figures live in the `meta_*`
+    snapshot columns (`refreshMetaSnapshots()`), display only, never a limit.
   - Money comparisons are USD-only, no FX; threshold alerts check
     `currency === 'USD'` (`LOW_BALANCE_THRESHOLD` ≤ 60, `META_DUE_THRESHOLD`
     100, `src/lib/meta/thresholds.ts`). Format Meta money with

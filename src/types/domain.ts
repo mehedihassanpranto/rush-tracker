@@ -72,6 +72,15 @@ export interface AdAccount {
   /** True once a Telegram low-balance alert has been sent for the account's
    * current below-threshold period; resets once it recovers. */
   meta_low_balance_alerted: boolean
+  /** Last-read Meta figures (major units in meta_currency), written by the
+   * Refresh buttons and the agency's live Meta reads — see
+   * meta-snapshot.server.ts. Display only; null until first refreshed.
+   * Numerics arrive as JS numbers at runtime despite the string type. */
+  meta_amount_spent: string | null
+  meta_spend_cap: string | null
+  meta_balance: string | null
+  meta_currency: string | null
+  meta_refreshed_at: string | null
   created_at: string
   updated_at: string
 }

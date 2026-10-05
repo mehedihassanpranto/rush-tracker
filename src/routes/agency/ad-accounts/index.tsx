@@ -1,14 +1,20 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { Bell, Download, Megaphone, Plus, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { listAdAccountsFn } from '@/server/ad-accounts/ad-account.fns'
-import { listUsableMetaAdAccountsFn, syncAdAccountNameFn } from '@/server/meta/meta.fns'
-import { dec, formatBdt, formatCurrencyAmount, formatUsd } from '@/lib/money/money'
-import { LOW_BALANCE_THRESHOLD, META_DUE_THRESHOLD } from '@/lib/meta/thresholds'
+import { refreshAdAccountsMetaFn } from '@/server/meta/meta.fns'
+import { formatBdt, formatCurrencyAmount, formatUsd } from '@/lib/money/money'
+import {
+  formatRefreshedAgo,
+  isMetaSnapshotStale,
+  latestMetaRefresh,
+  metaSnapshotView,
+  type MetaSnapshotView,
+} from '@/lib/meta/snapshot'
 import { hasPermission } from '@/lib/auth/types'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { PageHeader } from '@/components/shared/page-header'
@@ -39,125 +45,55 @@ function AdAccountsPage() {
   const canManage = hasPermission(user, PERMISSIONS.AD_ACCOUNTS_MANAGE)
   const canManageMeta = canManage
   const listAccounts = useServerFn(listAdAccountsFn)
-  const listMetaAccounts = useServerFn(listUsableMetaAdAccountsFn)
-  const syncAdAccountName = useServerFn(syncAdAccountNameFn)
+  const refreshMeta = useServerFn(refreshAdAccountsMetaFn)
+  const queryClient = useQueryClient()
   const [importOpen, setImportOpen] = useState(false)
   const [requestOpen, setRequestOpen] = useState(false)
 
-  const {
-    data: accounts,
-    isLoading,
-    refetch: refetchAccounts,
-    isFetching: accountsFetching,
-  } = useQuery({
+  const { data: accounts, isLoading } = useQuery({
     queryKey: ['ad-accounts'],
     queryFn: () => listAccounts(),
   })
 
-  // Reuses the same bulk Meta fetch that powers "Import from Meta" (two
-  // Graph API calls total, not one per row) — errors (e.g. Meta not
-  // configured) just mean no bells show, never break the list. Gated on
-  // ad_accounts.manage client-side too, matching the server guard — a
-  // view-only admin would otherwise get a silent FORBIDDEN that looks like
-  // a Meta outage instead of just not seeing Meta-only data.
-  const {
-    data: metaAccounts,
-    refetch: refetchMeta,
-    isFetching: metaFetching,
-  } = useQuery({
-    queryKey: ['meta-usable-ad-accounts'],
-    queryFn: () => listMetaAccounts(),
-    enabled: canManageMeta,
-    staleTime: 2 * 60 * 1000,
-    retry: false,
-    throwOnError: false,
+  // Remaining / Meta Due come from each account's saved Meta snapshot, which
+  // this Refresh and the platform pool's Refresh both write — so the two
+  // portals always show the same figures. Refresh reads every account
+  // straight from Meta and applies renames made there. Never changes limits.
+  const refreshMutation = useMutation({
+    mutationFn: (_silent: boolean) => refreshMeta(),
+    onSuccess: (result, silent) => {
+      void queryClient.invalidateQueries({ queryKey: ['ad-accounts'] })
+      if (silent) return
+      if (result.refreshed === 0 && result.failed > 0) {
+        toast.error("Couldn't read live data from Meta")
+        return
+      }
+      const parts = [`${result.refreshed} account${result.refreshed === 1 ? '' : 's'} updated`]
+      if (result.renamed > 0) parts.push(`${result.renamed} renamed to match Meta`)
+      if (result.failed > 0) {
+        toast.warning(`Refreshed from Meta — ${parts.join(', ')}`, {
+          description: `Meta didn't return ${result.failed} account${result.failed === 1 ? '' : 's'}; those keep their previous figures.`,
+        })
+      } else {
+        toast.success(`Refreshed from Meta — ${parts.join(', ')}`)
+      }
+    },
+    onError: (err, silent) => {
+      if (!silent) toast.error(err instanceof Error ? err.message : 'Refresh failed')
+    },
   })
+  const refreshing = refreshMutation.isPending
 
-  const refreshing = accountsFetching || metaFetching
-
-  // If Meta's live name differs from our stored name for any linked
-  // account, apply it — same safe, non-financial auto-rename the daily
-  // background sync already does, just immediate instead of once a day.
-  async function syncRenamedAccounts(
-    accounts: Array<{ id: string; name: string }>,
-    metaAccounts: Array<{ linked_account_id: string | null; name: string }>,
-  ): Promise<number> {
-    const nameByAccountId = new Map(accounts.map((a) => [a.id, a.name]))
-    const mismatches = metaAccounts.filter(
-      (m) =>
-        m.linked_account_id &&
-        m.name &&
-        nameByAccountId.get(m.linked_account_id) !== m.name,
-    )
-    if (mismatches.length === 0) return 0
-
-    const results = await Promise.allSettled(
-      mismatches.map((m) =>
-        syncAdAccountName({
-          data: { id: m.linked_account_id!, meta_name: m.name },
-        }),
-      ),
-    )
-    return results.filter(
-      (r) => r.status === 'fulfilled' && r.value.renamed,
-    ).length
-  }
-
-  async function handleRefresh() {
-    const [accountsResult, metaResult] = await Promise.all([
-      refetchAccounts(),
-      refetchMeta(),
-    ])
-    if (metaResult.isError) {
-      toast.warning('Refreshed, but live Meta data failed to load', {
-        description:
-          metaResult.error instanceof Error ? metaResult.error.message : undefined,
-      })
-      return
-    }
-
-    const renamedCount = await syncRenamedAccounts(
-      accountsResult.data ?? [],
-      metaResult.data ?? [],
-    )
-    if (renamedCount > 0) {
-      await refetchAccounts()
-      toast.success(
-        `Refreshed from Meta — ${renamedCount} account name${renamedCount === 1 ? '' : 's'} updated to match Meta`,
-      )
-    } else {
-      toast.success('Refreshed from Meta')
-    }
-  }
-
-  const balanceByAccountId = new Map<
-    string,
-    {
-      remaining: string | null
-      low: boolean
-      metaDue: string | null
-      metaDueHigh: boolean
-      currency: string
-    }
-  >()
-  for (const m of metaAccounts ?? []) {
-    if (!m.linked_account_id) continue
-    // Alert thresholds are flat USD-scale numbers (60, 100) with no FX
-    // conversion — same gate as every other Meta-money code path in this
-    // integration. Non-USD accounts still show their real figures, they
-    // just never trip an alert that would be meaningless at their scale.
-    const isUsd = m.currency === 'USD'
-    const remaining =
-      m.spend_cap != null ? dec(m.spend_cap).minus(dec(m.amount_spent ?? 0)) : null
-    balanceByAccountId.set(m.linked_account_id, {
-      remaining: remaining ? remaining.toFixed(2) : null,
-      low: isUsd && remaining ? remaining.lte(LOW_BALANCE_THRESHOLD) : false,
-      metaDue: m.meta_balance,
-      metaDueHigh:
-        isUsd && m.meta_balance != null && dec(m.meta_balance).gte(META_DUE_THRESHOLD),
-      currency: m.currency ?? '',
-    })
-  }
+  // Opening the page refreshes once, quietly, when the snapshot is missing or
+  // older than 10 minutes. Refresh needs ad_accounts.manage (server-checked);
+  // a view-only admin just sees the last saved figures.
+  const autoRefreshed = useRef(false)
+  useEffect(() => {
+    if (!accounts || autoRefreshed.current || !canManageMeta) return
+    autoRefreshed.current = true
+    if (isMetaSnapshotStale(accounts, 10 * 60 * 1000)) refreshMutation.mutate(true)
+  }, [accounts, canManageMeta, refreshMutation])
+  const lastRefreshed = latestMetaRefresh(accounts ?? [])
 
   // Mirrors adAccountUsdRate() (rate.service.ts): the account's own rate
   // wins when set (>0); a zero/unset account rate means "inherit" and falls
@@ -173,7 +109,7 @@ function AdAccountsPage() {
   }
 
   function accountHealth(
-    balance: ReturnType<typeof balanceByAccountId.get>,
+    balance: MetaSnapshotView | null,
   ): RailHealth | null {
     if (!balance || balance.currency !== 'USD') return null
     if (balance.metaDueHigh || (balance.remaining != null && Number(balance.remaining) <= 0))
@@ -190,7 +126,7 @@ function AdAccountsPage() {
       >
         {canManageMeta && (
           <>
-            <Button variant="outline" onClick={handleRefresh} disabled={refreshing}>
+            <Button variant="outline" onClick={() => refreshMutation.mutate(false)} disabled={refreshing}>
               <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
@@ -209,6 +145,12 @@ function AdAccountsPage() {
       </PageHeader>
 
       <AccountRequestsCard canManage={canManage} />
+
+      <p className="mb-2 text-right text-xs text-muted-foreground">
+        {refreshing
+          ? 'Reading live figures from Meta…'
+          : `Meta figures updated ${formatRefreshedAgo(lastRefreshed)}`}
+      </p>
 
       <Card className="p-0">
         <Table>
@@ -249,7 +191,7 @@ function AdAccountsPage() {
             )}
 
             {accounts?.map((account) => {
-              const balance = balanceByAccountId.get(account.id)
+              const balance = metaSnapshotView(account)
               return (
               <TableRow
                 key={account.id}
