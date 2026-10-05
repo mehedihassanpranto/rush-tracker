@@ -567,17 +567,16 @@ export const retryMetaSpendCapSyncFn = createServerFn({ method: 'POST' })
 export interface MyAccountRemaining {
   ad_account_id: string
   remaining: string | null
-  meta_balance: string | null
   currency: string | null
 }
 
 /**
- * Remaining Meta spend headroom (spend_cap − amount_spent) and Meta Due
- * (balance owed to Meta) for the signed-in client's own actively-assigned
- * accounts — never anything beyond them. All other Meta fns in this file
- * are requireAdmin-gated and would leak the whole Business Portfolio if
- * reused directly; this reuses the same underlying bulk Graph API fetch
- * (still 2 calls total, not one per account) but the response never leaves
+ * Remaining Meta spend headroom (spend_cap − amount_spent) for the signed-in
+ * client's own actively-assigned accounts — never anything beyond them, and
+ * never Meta Due (balance owed to Meta), which the owner removed from the
+ * client portal on 2026-10-05. All other Meta fns in this file are
+ * requireAdmin-gated and would leak the whole Business Portfolio if reused
+ * directly; this reads each account directly, but the response never leaves
  * the server until it's been filtered down to only this client's own
  * external_account_ids.
  *
@@ -632,7 +631,6 @@ export const listMyAccountsMetaRemainingFn = createServerFn({
       return {
         ad_account_id: r.ad_account_id,
         remaining: null,
-        meta_balance: null,
         currency: null,
       }
     }
@@ -643,7 +641,6 @@ export const listMyAccountsMetaRemainingFn = createServerFn({
     return {
       ad_account_id: r.ad_account_id,
       remaining,
-      meta_balance: m.meta_balance,
       currency: m.currency,
     }
   })

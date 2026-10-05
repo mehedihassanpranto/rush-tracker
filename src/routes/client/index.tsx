@@ -9,12 +9,13 @@ import {
   clientDashboardStatsFn,
 } from '@/server/dashboard/dashboard.fns'
 import type { ClientDashboardStats } from '@/server/dashboard/dashboard.fns'
-import { listMyAccountsMetaRemainingFn } from '@/server/meta/meta.fns'
+import { myNetPayableFn } from '@/server/finance/net-due.fns'
 import { setActiveClientFn } from '@/server/auth/portal-session.fns'
-import { dec, formatBdt, formatUsd } from '@/lib/money/money'
+import { formatBdt, formatUsd } from '@/lib/money/money'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { StatCard } from '@/components/shared/stat-card'
+import { NetDueCards } from '@/components/shared/net-due-cards'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, SectionCard } from '@/components/dashboard/section'
 
@@ -37,12 +38,7 @@ const SUMMARY_CARDS: Array<{
   { label: 'Total Billed (BDT)', stat: 'totalBilledBdt', money: 'bdt' },
   { label: 'Total Paid (BDT)', stat: 'totalPaidBdt', money: 'bdt' },
   { label: 'Current Due (BDT)', stat: 'currentDueBdt', money: 'bdt', dueStyle: true },
-  {
-    label: 'Current Due (USD, approx.)',
-    stat: 'currentDueUsd',
-    money: 'usd',
-    dueStyle: true,
-  },
+  // The USD due is now "Outstanding" in the Amount Payable row above.
 ]
 
 function ClientDashboard() {
@@ -50,7 +46,7 @@ function ClientDashboard() {
   const memberships = activeMemberships(user)
   const getStats = useServerFn(clientDashboardStatsFn)
   const getSections = useServerFn(clientDashboardSectionsFn)
-  const listRemaining = useServerFn(listMyAccountsMetaRemainingFn)
+  const getNetPayable = useServerFn(myNetPayableFn)
   const switchClient = useServerFn(setActiveClientFn)
 
   // A hard navigation, not router.invalidate() — every query on every
@@ -75,37 +71,13 @@ function ClientDashboard() {
     queryKey: ['client-dashboard-sections'],
     queryFn: () => getSections(),
   })
-  // Same query the ad-accounts page uses for its per-row "Remaining" column
-  // (best-effort — '—' rather than breaking the page if Meta is
-  // unreachable/unconfigured), summed here across all this client's own
-  // USD-linked accounts for one total-headroom figure.
-  const { data: remaining } = useQuery({
-    queryKey: ['my-accounts-meta-remaining'],
-    queryFn: () => listRemaining(),
+  // Amount Payable = Outstanding − Available Ad Credit, computed on the
+  // server (net-due.fns.ts) from the ledger due and live Meta figures.
+  const { data: netPayable, isLoading: netLoading } = useQuery({
+    queryKey: ['my-net-payable'],
+    queryFn: () => getNetPayable(),
     retry: false,
-    throwOnError: false,
   })
-  const totalRemainingUsd =
-    remaining !== undefined
-      ? remaining
-          .reduce((sum, r) => {
-            if (r.remaining == null || r.currency !== 'USD') return sum
-            return sum.plus(dec(r.remaining))
-          }, dec(0))
-          .toFixed(2)
-      : null
-  // Sum of Meta Due (balance owed to Meta) across this client's own
-  // USD-currency linked accounts — same no-FX, currency-native gate as
-  // Total Remaining above.
-  const totalMetaDueUsd =
-    remaining !== undefined
-      ? remaining
-          .reduce((sum, r) => {
-            if (r.meta_balance == null || r.currency !== 'USD') return sum
-            return sum.plus(dec(r.meta_balance))
-          }, dec(0))
-          .toFixed(2)
-      : null
 
   return (
     <div className="space-y-6">
@@ -152,9 +124,9 @@ function ClientDashboard() {
         )}
       </div>
 
-      {/* 3 columns, not 4: with 7-9 tiles (the two Meta ones are
-          conditional) a 4-up grid consistently left one card stranded
-          alone on the last row. */}
+      <NetDueCards audience="client" figures={netPayable} loading={netLoading} />
+
+      {/* 3 columns: 6 ledger tiles fill two full rows. */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {SUMMARY_CARDS.map((card) => {
           const raw = stats?.[card.stat]
@@ -182,20 +154,6 @@ function ClientDashboard() {
             />
           )
         })}
-        {totalRemainingUsd !== null && (
-          <StatCard
-            label="Total Remaining"
-            hint="Meta spend headroom across your ad accounts"
-            value={formatUsd(totalRemainingUsd)}
-          />
-        )}
-        {totalMetaDueUsd !== null && (
-          <StatCard
-            label="Meta Due"
-            hint="Balance owed to Meta across your ad accounts"
-            value={formatUsd(totalMetaDueUsd)}
-          />
-        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

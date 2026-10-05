@@ -22,6 +22,7 @@ export function StatCard({
   hint,
   valueClassName,
   loading = false,
+  highlight = false,
 }: {
   label: string
   value: React.ReactNode
@@ -29,9 +30,11 @@ export function StatCard({
   hint?: string
   valueClassName?: string
   loading?: boolean
+  /** The headline figure of its row (e.g. Amount Payable) — a primary ring. */
+  highlight?: boolean
 }) {
   return (
-    <Card className="gap-0 py-0">
+    <Card className={cn('gap-0 py-0', highlight && 'ring-2 ring-primary/60')}>
       <div className="flex h-full flex-col p-4">
         <p className="text-sm leading-snug text-muted-foreground">{label}</p>
         {hint && (

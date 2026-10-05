@@ -13,6 +13,8 @@ import {
   paymentCollectionReportFn,
   usdRateUsageReportFn,
 } from '@/server/reports/report.fns'
+import { agencyNetReceivableFn } from '@/server/finance/net-due.fns'
+import { receivableView } from '@/lib/money/net-due'
 import { dec, formatBdt, formatUsd } from '@/lib/money/money'
 import { downloadCsv } from '@/lib/csv/csv'
 import type { CsvColumn } from '@/lib/csv/csv'
@@ -66,7 +68,7 @@ const REPORTS: Array<ReportMeta> = [
   {
     key: 'client-due',
     label: 'Client Due Report',
-    description: 'Every client with total billed, paid and outstanding due.',
+    description: 'Every client with billed, paid, gross due, unused ad balance and net receivable.',
     date: false,
     client: false,
   },
@@ -355,6 +357,20 @@ function ClientDueReport() {
     queryKey: ['reports', 'client-due'],
     queryFn: () => fn(),
   })
+  // Unused ad balance and net per client (net-due.fns.ts) — a report is
+  // exported and shared, so it carries gross, unused and net side by side.
+  const getNetReceivable = useServerFn(agencyNetReceivableFn)
+  const { data: net } = useQuery({
+    queryKey: ['agency-net-receivable', 'reports'],
+    queryFn: () => getNetReceivable({ data: { view: 'reports' } }),
+    retry: false,
+  })
+  const netOf = (clientId: string) => net?.byClient[clientId]
+  const netCell = (amount: string | undefined) => {
+    if (amount === undefined) return '—'
+    const v = receivableView(amount)
+    return v.kind === 'credit' ? `Credit ${formatBdt(v.amount)}` : formatBdt(v.amount)
+  }
 
   const totals = (data ?? []).reduce(
     (acc, r) => ({
@@ -400,12 +416,38 @@ function ClientDueReport() {
           csv: (r) => r.total_paid,
         },
         {
-          header: 'Current Due',
+          header: 'Gross Due',
+          align: 'right',
+          cell: (r) => formatBdt(r.current_due),
+          csv: (r) => r.current_due,
+        },
+        {
+          header: 'Unused Ad Balance',
+          align: 'right',
+          cell: (r) => {
+            const f = netOf(r.client_id)
+            return f ? formatBdt(f.adCreditBdt) : '—'
+          },
+          csv: (r) => netOf(r.client_id)?.adCreditBdt ?? '',
+        },
+        {
+          header: 'Net Receivable',
           align: 'right',
           cell: (r) => (
-            <span className="font-medium">{formatBdt(r.current_due)}</span>
+            <span className="font-medium">{netCell(netOf(r.client_id)?.netBdt)}</span>
           ),
-          csv: (r) => r.current_due,
+          csv: (r) => netOf(r.client_id)?.netBdt ?? '',
+        },
+        {
+          header: 'Net Receivable (USD)',
+          align: 'right',
+          cell: (r) => {
+            const f = netOf(r.client_id)
+            if (!f) return '—'
+            const v = receivableView(f.netUsd)
+            return v.kind === 'credit' ? `Credit ${formatUsd(v.amount)}` : formatUsd(v.amount)
+          },
+          csv: (r) => netOf(r.client_id)?.netUsd ?? '',
         },
         ]}
       />

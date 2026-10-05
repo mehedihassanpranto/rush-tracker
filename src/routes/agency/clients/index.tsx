@@ -7,6 +7,8 @@ import { MoreHorizontal, Plus, Trash2, Users } from 'lucide-react'
 import { listClientsFn } from '@/server/clients/client.fns'
 import { listAdAccountsFn } from '@/server/ad-accounts/ad-account.fns'
 import { listUsableMetaAdAccountsFn } from '@/server/meta/meta.fns'
+import { agencyNetReceivableFn } from '@/server/finance/net-due.fns'
+import { receivableView } from '@/lib/money/net-due'
 import { dec, formatBdt, formatUsd } from '@/lib/money/money'
 import { hasPermission } from '@/lib/auth/types'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
@@ -51,6 +53,13 @@ function ClientsPage() {
     name: string
   } | null>(null)
 
+  // Gross receivable, unused ad balance and net per client (net-due.fns.ts).
+  const getNetReceivable = useServerFn(agencyNetReceivableFn)
+  const { data: net, isLoading: netLoading } = useQuery({
+    queryKey: ['agency-net-receivable', 'clients'],
+    queryFn: () => getNetReceivable({ data: { view: 'clients' } }),
+    retry: false,
+  })
   const { data: clients, isLoading } = useQuery({
     queryKey: ['clients'],
     queryFn: () => listClients(),
@@ -129,9 +138,10 @@ function ClientsPage() {
               <TableHead>Name</TableHead>
               <TableHead>Company</TableHead>
               <TableHead className="text-center">Active accounts</TableHead>
-              <TableHead className="text-right">Current due (BDT)</TableHead>
-              <TableHead className="text-right">Current due (USD)</TableHead>
-              <TableHead className="text-right">Remaining</TableHead>
+              <TableHead className="text-right">Gross receivable (BDT)</TableHead>
+              <TableHead className="text-right">Gross receivable (USD)</TableHead>
+              <TableHead className="text-right">Unused ad balance</TableHead>
+              <TableHead className="text-right">Net receivable (USD)</TableHead>
               <TableHead>Status</TableHead>
               {canManage && <TableHead className="w-10" />}
             </TableRow>
@@ -140,7 +150,7 @@ function ClientsPage() {
             {isLoading &&
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={canManage ? 9 : 8}>
+                  <TableCell colSpan={canManage ? 10 : 9}>
                     <Skeleton className="h-6 w-full" />
                   </TableCell>
                 </TableRow>
@@ -148,7 +158,7 @@ function ClientsPage() {
 
             {!isLoading && (clients?.length ?? 0) === 0 && (
               <TableRow>
-                <TableCell colSpan={canManage ? 9 : 8}>
+                <TableCell colSpan={canManage ? 10 : 9}>
                   <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
                     <Users className="size-8 opacity-40" />
                     No clients yet. Create your first one.
@@ -187,9 +197,23 @@ function ClientsPage() {
                   {formatUsd(client.current_due_usd)}
                 </TableCell>
                 <TableCell className="num text-right text-muted-foreground">
-                  {remainingByClientId.has(client.id)
-                    ? formatUsd(remainingByClientId.get(client.id)!)
+                  {net?.byClient[client.id]
+                    ? formatUsd(net.byClient[client.id].adCreditUsd)
                     : '—'}
+                </TableCell>
+                <TableCell className="num text-right font-medium">
+                  {(() => {
+                    const f = net?.byClient[client.id]
+                    if (!f) return netLoading ? '…' : '—'
+                    const v = receivableView(f.netUsd)
+                    return v.kind === 'credit' ? (
+                      <span className="text-emerald-600 dark:text-emerald-400">
+                        Credit {formatUsd(v.amount)}
+                      </span>
+                    ) : (
+                      formatUsd(v.amount)
+                    )
+                  })()}
                 </TableCell>
                 <TableCell>
                   <StatusBadge status={client.status} />

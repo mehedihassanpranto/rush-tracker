@@ -27,6 +27,7 @@ import {
 import { listAdjustmentsFn } from '@/server/adjustments/adjustment.fns'
 import { listClientLimitRequestsFn } from '@/server/limit-requests/limit-request.fns'
 import { listUsableMetaAdAccountsFn } from '@/server/meta/meta.fns'
+import { clientNetReceivableFn } from '@/server/finance/net-due.fns'
 import { dec, formatBdt, formatCurrencyAmount, formatUsd } from '@/lib/money/money'
 import { LOW_BALANCE_THRESHOLD, META_DUE_THRESHOLD } from '@/lib/meta/thresholds'
 import { hasPermission } from '@/lib/auth/types'
@@ -113,6 +114,7 @@ function ClientDetailPage() {
   const getClient = useServerFn(getClientFn)
   const listAccounts = useServerFn(listClientAccountsFn)
   const listMetaAccounts = useServerFn(listUsableMetaAdAccountsFn)
+  const getNetReceivable = useServerFn(clientNetReceivableFn)
   const listUsers = useServerFn(listClientUsersFn)
   const getFinancials = useServerFn(clientFinancialsFn)
   const listLedger = useServerFn(listClientLedgerFn)
@@ -175,24 +177,15 @@ function ClientDetailPage() {
       currency: m.currency ?? '',
     })
   }
-  // Sum of Meta spend headroom across this client's own linked accounts,
-  // USD only (no FX path, same gate as the Remaining column/bell). `null`
-  // while Meta data hasn't loaded (or isn't permitted) so the summary card
-  // hides instead of showing a misleading "$0.00".
-  const totalRemainingUsd =
-    canManageMeta && metaAccounts !== undefined
-      ? (accounts ?? [])
-          .reduce((sum, a) => {
-            const balance = balanceByAccountId.get(a.id)
-            if (!balance || balance.remaining == null || balance.currency !== 'USD') {
-              return sum
-            }
-            return sum.plus(dec(balance.remaining))
-          }, dec(0))
-          .toFixed(2)
-      : null
+  // Net Receivable for this client (net-due.fns.ts): gross due minus the
+  // unused balance on its active ad accounts, computed on the server.
+  const { data: netReceivable, isLoading: netLoading } = useQuery({
+    queryKey: ['client-net-receivable', clientId],
+    queryFn: () => getNetReceivable({ data: { client_id: clientId } }),
+    retry: false,
+  })
   // Sum of Meta Due across this client's own linked accounts, same USD-only
-  // gate as totalRemainingUsd above.
+  // gate as the unused ad balance.
   const totalMetaDueUsd =
     canManageMeta && metaAccounts !== undefined
       ? (accounts ?? [])
@@ -275,8 +268,8 @@ function ClientDetailPage() {
         <div className="mb-6">
           <FinancialSummary
             financials={financials}
-            totalRemainingUsd={totalRemainingUsd}
             totalMetaDueUsd={totalMetaDueUsd}
+            net={{ audience: 'agency', figures: netReceivable, loading: netLoading }}
           />
         </div>
       )}

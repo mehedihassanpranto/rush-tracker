@@ -1,4 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
+import { netDueForClients, organizationClientDues } from '@/server/finance/net-due.service'
+import type { NetDueFigures } from '@/lib/money/net-due'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { requirePlatformAdmin } from '@/server/auth/guards.server'
 import { writeAudit } from '@/server/audit/audit.service'
@@ -784,6 +786,9 @@ export interface AgencySupportData {
     name: string
     status: string
     current_due: string
+    /** Gross due minus unused ad credit, from saved Meta snapshots only —
+     * this view never calls Meta (net-due.service.ts). */
+    net: NetDueFigures | null
   }>
   adAccounts: Array<{
     id: string
@@ -885,12 +890,18 @@ export const getAgencySupportDataFn = createServerFn({ method: 'GET' })
       status: string
     }>
     const nameByClient = new Map(clientRows.map((c) => [c.id, c.name]))
+    const netByClient = await netDueForClients(
+      admin,
+      await organizationClientDues(admin, data.id),
+      { live: false },
+    )
 
     return {
       organization,
       clients: clientRows.map((c) => ({
         ...c,
         current_due: dueByClient.get(c.id) ?? '0',
+        net: netByClient.get(c.id) ?? null,
       })),
       adAccounts: (accounts ?? []) as AgencySupportData['adAccounts'],
       ledger: (
