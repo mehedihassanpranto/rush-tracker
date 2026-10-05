@@ -267,6 +267,47 @@ export async function fetchMetaAdAccount(
   return toSummary(raw)
 }
 
+/**
+ * Fetch several ad accounts' live details, each read directly from its own
+ * node. Use this — not listMetaBusinessAdAccounts — when the figures must be
+ * current: the business edges return stale amount_spent/balance (verified
+ * 2026-10-04: 11 of 36 platform accounts lagged the direct read), and the
+ * `?ids=` multi-lookup is deprecated in v26+. Credentials are resolved once;
+ * at most FETCH_CONCURRENCY requests are in flight. One result per id, in
+ * order — a failed account is `null`, never a thrown error for the batch.
+ */
+const FETCH_CONCURRENCY = 8
+
+export async function fetchMetaAdAccounts(
+  externalAccountIds: Array<string>,
+  scope: MetaCredentialScope,
+): Promise<Array<MetaAdAccountSummary | null>> {
+  const config = await getMetaConfig(scope)
+  const results: Array<MetaAdAccountSummary | null> = new Array(externalAccountIds.length).fill(null)
+  let next = 0
+  async function worker() {
+    while (next < externalAccountIds.length) {
+      const i = next++
+      const id = externalAccountIds[i]
+      const actId = id.startsWith('act_') ? id : `act_${id}`
+      try {
+        const raw = await graphGet<Parameters<typeof toSummary>[0]>(
+          actId,
+          { fields: AD_ACCOUNT_FIELDS },
+          config,
+        )
+        results[i] = toSummary(raw)
+      } catch {
+        results[i] = null
+      }
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(FETCH_CONCURRENCY, externalAccountIds.length) }, worker),
+  )
+  return results
+}
+
 const MAX_PAGES = 10
 
 async function listEdge(

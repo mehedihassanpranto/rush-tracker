@@ -6,6 +6,29 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-10-04
+
+**Platform → Ad Account Pool: new "Refresh" button and live Meta columns.**
+The pool list showed only our stored data. It now has Remaining
+(`spend_cap − amount_spent`) and Meta Due (Meta's own `balance`) columns,
+loaded live from Meta for every linked pool account (USD accounts at or below
+the low-balance / at or above the Meta-due threshold are shown in red, same
+as the agency list). **Refresh** forces a fresh read from Meta (ignores the
+2-minute cache), reloads the pool, and applies any rename made in Meta through
+`syncPoolAccountNameFn` (audited in the holding agency's log). New read-only
+`listPoolAccountsMetaFn` (`requirePlatformAdmin`): one portfolio listing for
+all accounts, with a per-account fetch for any linked account the listing
+doesn't return. Spend caps and limits are never changed by Refresh.
+
+**Fixed (same day): pool list Meta Due didn't change on Refresh.** Reported by
+the owner. Meta's portfolio listing (`owned_ad_accounts`/`client_ad_accounts`)
+returns stale `amount_spent`/`balance`: checked live, 11 of the 36 platform
+accounts lagged the direct per-account read (e.g. "DF IT - Random 4" balance
+123.74 via the listing vs 121.75 direct). `listPoolAccountsMetaFn` now reads
+every account directly through the new `fetchMetaAdAccounts()` (credentials
+resolved once, 8 requests at a time; Meta's `?ids=` multi-lookup is deprecated
+in v26+). Accounts Meta fails to return show "—" and Refresh says how many.
+
 ## 2026-10-03
 
 **Fixed: "Fetch" on a platform pool account didn't pick up a rename made in

@@ -21,6 +21,7 @@ import {
 } from '@/schemas/meta'
 import {
   fetchMetaAdAccount,
+  fetchMetaAdAccounts,
   listMetaBusinessAdAccounts,
   updateMetaAdAccountSpendCap,
 } from '@/server/meta/meta.server'
@@ -111,6 +112,60 @@ export const listPoolAccountsFn = createServerFn({ method: 'GET' }).handler(
       account,
       granted_to: byAccount.get(account.id) ?? null,
     }))
+  },
+)
+
+export interface PoolAccountMetaLive {
+  /** Our ad_accounts.id. */
+  id: string
+  name: string
+  currency: string | null
+  amount_spent: string | null
+  spend_cap: string | null
+  meta_balance: string | null
+}
+
+/**
+ * Live Meta figures for every linked pool account — the pool list's
+ * Remaining / Meta Due columns and its Refresh button. Each account is read
+ * directly from Meta (fetchMetaAdAccounts), never from the portfolio listing,
+ * whose amount_spent/balance lag behind. An account Meta fails to return is
+ * left out and counted in `failed`. Read-only: renames are applied separately
+ * by syncPoolAccountNameFn.
+ */
+export const listPoolAccountsMetaFn = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<{ accounts: Array<PoolAccountMetaLive>; failed: number }> => {
+    await requirePlatformAdmin()
+    const admin = getSupabaseAdminClient()
+
+    const { data, error } = await admin
+      .from('ad_accounts')
+      .select('id, external_account_id')
+      .eq('is_platform', true)
+      .not('external_account_id', 'is', null)
+    if (error) throw new Error(error.message)
+    const linked = (data ?? []) as Array<{ id: string; external_account_id: string }>
+    if (linked.length === 0) return { accounts: [], failed: 0 }
+
+    const live = await fetchMetaAdAccounts(
+      linked.map((a) => a.external_account_id),
+      PLATFORM_CREDENTIALS,
+    )
+    const accounts = linked.flatMap((a, i) => {
+      const m = live[i]
+      if (!m) return []
+      return [
+        {
+          id: a.id,
+          name: m.name,
+          currency: m.currency,
+          amount_spent: m.amount_spent,
+          spend_cap: m.spend_cap,
+          meta_balance: m.meta_balance,
+        },
+      ]
+    })
+    return { accounts, failed: linked.length - accounts.length }
   },
 )
 
