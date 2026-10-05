@@ -6,6 +6,33 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-10-05
+
+**Refresh now updates both portals: Meta figures are saved per account.**
+Owner asked for the pool list's Refresh to bring current Remaining, limit and
+due, and to update the platform AND agency portals. Migration 000056 adds a
+display-only Meta snapshot to `ad_accounts` (`meta_amount_spent`,
+`meta_spend_cap`, `meta_balance`, `meta_currency`, `meta_refreshed_at`).
+`refreshMetaSnapshots()` (`src/server/meta/meta-snapshot.server.ts`) reads each
+account straight from its Graph node, saves the snapshot and applies renames.
+- Platform → Ad Account Pool: Refresh = `refreshPoolAccountsMetaFn` (replaces
+  yesterday's read-only `listPoolAccountsMetaFn`). New **Spend cap** column
+  next to Current limit, plus Remaining and Meta Due, all from the snapshot.
+- Agency → Ad Accounts: Refresh = new `refreshAdAccountsMetaFn`; Remaining /
+  Meta Due now read the same snapshot, so both portals always agree.
+- Both lists show "Meta figures updated X ago" and refresh themselves once on
+  open when the snapshot is missing or older than 10 minutes.
+- `listUsableMetaAdAccountsFn` (agency clients pages) and the client portal's
+  `listMyAccountsMetaRemainingFn` now read accounts directly too (the stale
+  portfolio listing is left only for import and the daily cron); the former
+  also saves the snapshot.
+- Current limit is NOT taken from Meta (owner chose the spend-cap column over
+  overwriting the limit): it still only changes through approved requests.
+- Shared display logic in `src/lib/meta/snapshot.ts` (+ unit tests). Verified
+  on staging with a throwaway granted pool account: both lists show identical
+  figures in both themes and at phone width; with Meta unreachable, Refresh
+  reports the failure and keeps the previous figures.
+
 ## 2026-10-04
 
 **Platform → Ad Account Pool: new "Refresh" button and live Meta columns.**

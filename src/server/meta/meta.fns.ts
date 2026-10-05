@@ -15,11 +15,14 @@ import {
 } from '@/schemas/meta'
 import {
   fetchMetaAdAccount,
+  fetchMetaAdAccounts,
   listMetaBusinessAdAccounts,
   updateMetaAdAccountSpendCap,
 } from '@/server/meta/meta.server'
 import { syncAndPersistAdAccountSpendCap } from '@/server/meta/spend-cap-sync.server'
 import { syncAdAccountName } from '@/server/meta/meta-sync.server'
+import { refreshMetaSnapshots } from '@/server/meta/meta-snapshot.server'
+import type { SnapshotRow } from '@/server/meta/meta-snapshot.server'
 import {
   adAccountScope,
   applyAdAccountScope,
@@ -85,27 +88,32 @@ export type MetaImportCandidate = MetaAdAccountSummary & {
 }
 
 /**
- * Fetches every distinct credential set once and merges the results by Meta
- * account id.
- *
- * An agency's accounts can span two Business Portfolios — the one it connected
- * itself and the platform's (for granted pool accounts) — and a pool account is
- * invisible to the agency's own token. Deduping by credential scope keeps this
- * at one bulk Graph call per portfolio (usually just one), never one per
- * account. A set that is unconfigured or unreachable contributes nothing rather
- * than failing the whole read: those rows simply report no live data.
+ * Live Meta data for the given accounts, merged by Meta account id. Each
+ * account is read directly from its own node (fetchMetaAdAccounts) — the
+ * portfolio listing returns stale amount_spent/balance — grouped per
+ * credential set: an agency's accounts can span its own portfolio and the
+ * platform's (granted pool accounts), and a pool account is invisible to the
+ * agency's own token. A set that is unconfigured or unreachable, or an account
+ * Meta fails to return, contributes nothing rather than failing the read.
  */
 async function fetchAcrossCredentialSets(
-  scopes: Array<MetaCredentialScope>,
+  accounts: Array<{ external_account_id: string; scope: MetaCredentialScope }>,
 ): Promise<Map<string, MetaAdAccountSummary>> {
-  const distinct = new Map<string, MetaCredentialScope>()
-  for (const scope of scopes) distinct.set(credentialScopeKey(scope), scope)
+  const groups = new Map<string, { scope: MetaCredentialScope; ids: Array<string> }>()
+  for (const a of accounts) {
+    const key = credentialScopeKey(a.scope)
+    const group = groups.get(key) ?? { scope: a.scope, ids: [] }
+    group.ids.push(a.external_account_id)
+    groups.set(key, group)
+  }
 
   const byExternalId = new Map<string, MetaAdAccountSummary>()
-  for (const scope of distinct.values()) {
+  for (const { scope, ids } of groups.values()) {
     try {
-      const fetched = await listMetaBusinessAdAccounts(scope)
-      for (const m of fetched) byExternalId.set(m.external_account_id, m)
+      const fetched = await fetchMetaAdAccounts(ids, scope)
+      fetched.forEach((m, i) => {
+        if (m) byExternalId.set(ids[i], m)
+      })
     } catch {
       // Meta not configured / unreachable for that set — graceful degradation.
     }
@@ -186,6 +194,36 @@ export const syncAdAccountNameFn = createServerFn({ method: 'POST' })
   })
 
 /**
+ * The ad accounts list's Refresh: reads every account this agency can operate
+ * (owned + granted pool accounts) directly from Meta, saves the Meta snapshot
+ * (which the platform's pool list shows too), and applies any rename made in
+ * Meta, audited in this agency's log. Never touches current_limit_usd.
+ */
+export const refreshAdAccountsMetaFn = createServerFn({ method: 'POST' }).handler(
+  async (): Promise<{ refreshed: number; failed: number; renamed: number }> => {
+    const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
+    const admin = getSupabaseAdminClient()
+
+    const scope = await adAccountScope(admin, actor.organizationId)
+    const { data, error } = await applyAdAccountScope(
+      admin
+        .from('ad_accounts')
+        .select('id, name, external_account_id, is_platform, organization_id'),
+      scope,
+    ).not('external_account_id', 'is', null)
+    if (error) throw new Error(error.message)
+    const rows = (data ?? []) as Array<SnapshotRow>
+    if (rows.length === 0) return { refreshed: 0, failed: 0, renamed: 0 }
+
+    const result = await refreshMetaSnapshots(rows, {
+      actorUserId: actor.id,
+      auditOrganizationId: async () => actor.organizationId,
+    })
+    return { refreshed: result.refreshed, failed: result.failed, renamed: result.renamed }
+  },
+)
+
+/**
  * Live Meta data for every ad account this agency can actually operate —
  * the ones it owns AND the platform-pool accounts granted to it.
  *
@@ -213,26 +251,21 @@ export const listUsableMetaAdAccountsFn = createServerFn({
   const { data: linked, error } = await applyAdAccountScope(
     admin
       .from('ad_accounts')
-      .select('id, account_code, external_account_id, is_platform, organization_id'),
+      .select('id, account_code, name, external_account_id, is_platform, organization_id'),
     scope,
   ).not('external_account_id', 'is', null)
   if (error) throw new Error(error.message)
 
-  const rows = (linked ?? []) as Array<{
-    id: string
-    account_code: string
-    external_account_id: string
-    is_platform: boolean
-    organization_id: string | null
-  }>
+  const rows = (linked ?? []) as Array<SnapshotRow & { account_code: string }>
   if (rows.length === 0) return []
 
-  const byExternalId = await fetchAcrossCredentialSets(
-    rows.map((r) => metaCredentialScopeFor(r)),
-  )
+  // Also saves each account's Meta snapshot, so the lists that show it (the
+  // agency's and the platform pool's) stay as current as this read. No
+  // renames here — that's the Refresh button's job.
+  const { byId } = await refreshMetaSnapshots(rows)
 
   return rows.flatMap((row) => {
-    const meta = byExternalId.get(row.external_account_id)
+    const meta = byId.get(row.id)
     if (!meta) return []
     return [
       {
@@ -584,7 +617,10 @@ export const listMyAccountsMetaRemainingFn = createServerFn({
   // the agency's own token. Usually only one set is in play, so this is one
   // bulk fetch in practice, never one call per account.
   const byExternalId = await fetchAcrossCredentialSets(
-    linkedRows.map((r) => metaCredentialScopeFor(r.account!)),
+    linkedRows.map((r) => ({
+      external_account_id: r.account!.external_account_id!,
+      scope: metaCredentialScopeFor(r.account!),
+    })),
   )
   if (byExternalId.size === 0) return []
   void user
