@@ -144,7 +144,8 @@ short; detail belongs in the changelog.
   stored (`src/lib/money/net-due.ts`, `net-due.fns.ts`). Client sees ≥ $0 plus
   a credit balance; agency sees "Net Credit". Clients never see Meta Due.
 - **USD rate**: `adAccountUsdRate()` (`src/server/exchange-rates/rate.service.ts`)
-  — the account's `usd_rate` wins; `0` means inherit the client's rate. The
+  — the account's `usd_rate` wins; `0` means inherit the client's rate.
+  Assign/transfer copy the client's rate onto the account (000057). The
   `exchange_rates` table is history only.
 - **Client segments**: `prepaid` (pays full cost up front), `partial` (pays
   part, rest becomes due), `postpaid` (all due). Segment is read server-side and

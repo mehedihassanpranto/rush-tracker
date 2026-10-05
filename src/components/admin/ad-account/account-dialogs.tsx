@@ -363,7 +363,7 @@ export function TransferDialog({
           <DialogDescription>
             Closes the current assignment and opens a new one. The carried-over
             limit ({account.current_limit_usd} USD) creates no due for the new
-            client.
+            client. The account&apos;s USD rate is set to the new client&apos;s rate.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">

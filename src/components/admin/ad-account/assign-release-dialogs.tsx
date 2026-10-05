@@ -93,7 +93,8 @@ export function AssignToClientDialog({
           <DialogTitle>Assign account</DialogTitle>
           <DialogDescription>
             Opening balance {formatUsd(account.current_limit_usd)} carries over
-            and creates no due.
+            and creates no due. The account&apos;s USD rate is set to the
+            client&apos;s rate.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
