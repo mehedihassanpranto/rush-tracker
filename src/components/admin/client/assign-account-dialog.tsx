@@ -79,7 +79,8 @@ export function AssignAccountDialog({
           <DialogTitle>Assign ad account</DialogTitle>
           <DialogDescription>
             The account&apos;s current limit becomes this client&apos;s opening
-            balance. This creates no due.
+            balance. This creates no due. The account&apos;s USD rate is set
+            to this client&apos;s rate.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">

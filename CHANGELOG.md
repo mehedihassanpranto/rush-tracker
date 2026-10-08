@@ -6,6 +6,21 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-10-06
+
+**Assigning or transferring an ad account now sets its USD rate to the
+client's.** Reported by the owner: after assigning an account, its dollar rate
+stayed as before. An account's own `usd_rate` wins over the client's
+(`adAccountUsdRate()`), so a rate left by a previous client or a bulk import
+kept billing the new client at the old rate. Migration 000057 redefines
+`assign_ad_account` and `transfer_ad_account` (same signatures) to copy the
+receiving client's `usd_rate` onto the account in the same locked step, and
+record the previous and new rate in the audit row. A client without a rate
+(0) leaves the account at 0 = inherit. Admins can still change an account's
+rate afterwards. Existing assignments are not changed. The assign/transfer
+dialogs now say the rate will be set. New live test `assign-rate.test.ts`
+(reproduced the bug first: rate stayed 130 instead of 122).
+
 ## 2026-10-05
 
 **Net Receivable (agency/platform) and Amount Payable (client).** Built from
