@@ -5,6 +5,7 @@ import { useServerFn } from '@tanstack/react-start'
 import {
   ArrowLeft,
   ArrowLeftRight,
+  Shuffle,
   MoreHorizontal,
   Pencil,
   Power,
@@ -22,6 +23,9 @@ import {
   setAdAccountStatusFn,
 } from '@/server/ad-accounts/ad-account.fns'
 import { listAdAccountUsageFn } from '@/server/limit-requests/limit-request.fns'
+import { listAccountCreditTransfersFn } from '@/server/credit-transfers/credit-transfer.fns'
+import { MoveCreditDialog } from '@/components/admin/ad-account/move-credit-dialog'
+import { CreditTransfersTable } from '@/components/shared/credit-transfers-table'
 import {
   fetchMetaAdAccountFn,
   retryMetaSpendCapSyncFn,
@@ -102,6 +106,7 @@ function AccountDetailPage() {
   const getAccount = useServerFn(getAdAccountFn)
   const listHistory = useServerFn(listAssignmentHistoryFn)
   const listUsage = useServerFn(listAdAccountUsageFn)
+  const listCreditMoves = useServerFn(listAccountCreditTransfersFn)
   const setStatus = useServerFn(setAdAccountStatusFn)
   const fetchMetaAccount = useServerFn(fetchMetaAdAccountFn)
   const retrySpendCapSync = useServerFn(retryMetaSpendCapSyncFn)
@@ -112,6 +117,7 @@ function AccountDetailPage() {
   const [assignOpen, setAssignOpen] = useState(false)
   const [releaseOpen, setReleaseOpen] = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
+  const [moveCreditOpen, setMoveCreditOpen] = useState(false)
   const [metaFetchOpen, setMetaFetchOpen] = useState(false)
   const [spendCapOpen, setSpendCapOpen] = useState(false)
 
@@ -141,6 +147,10 @@ function AccountDetailPage() {
   } = useQuery({
     queryKey: ['ad-account-usage', accountId],
     queryFn: () => listUsage({ data: { ad_account_id: accountId } }),
+  })
+  const { data: creditMoves } = useQuery({
+    queryKey: ['credit-transfers', accountId],
+    queryFn: () => listCreditMoves({ data: { ad_account_id: accountId } }),
   })
   const totalUsage = (usage ?? []).reduce(
     (sum, r) => sum.plus(dec(r.approved_amount_usd ?? 0)),
@@ -301,6 +311,12 @@ function AccountDetailPage() {
                 Fetch from Meta
               </DropdownMenuItem>
             )}
+            {canManageMeta && isAssigned && account.status === 'ACTIVE' && account.external_account_id && (
+              <DropdownMenuItem onSelect={() => setMoveCreditOpen(true)}>
+                <Shuffle className="size-4" />
+                Move credit
+              </DropdownMenuItem>
+            )}
             {isAssigned && account.status === 'ACTIVE' && (
               <DropdownMenuItem onSelect={() => statusMutation.mutate('INACTIVE')}>
                 <PowerOff className="size-4" />
@@ -369,12 +385,14 @@ function AccountDetailPage() {
       )}
 
       <Tabs defaultValue="overview">
-        <TabsList>
+        {/* Four tabs overflow a phone screen: scroll the bar, not the page. */}
+        <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="history">
             Assignment History ({history?.length ?? 0})
           </TabsTrigger>
           <TabsTrigger value="usage">Usage ({usage?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="credit">Credit moves ({creditMoves?.length ?? 0})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -602,8 +620,11 @@ function AccountDetailPage() {
                     <TableCell className="num text-right font-medium">
                       {row.closing_limit_usd
                         ? formatUsd(
+                            // Credit moved out/in by a transfer changed the
+                            // limit without spend, so it's added back.
                             dec(row.closing_limit_usd)
                               .minus(dec(row.opening_limit_usd))
+                              .plus(dec(row.transfer_net_out_usd ?? 0))
                               .toFixed(2),
                           )
                         : '—'}
@@ -682,6 +703,12 @@ function AccountDetailPage() {
             </Table>
           </Card>
         </TabsContent>
+
+        <TabsContent value="credit">
+          <Card className="overflow-x-auto p-0">
+            <CreditTransfersTable rows={creditMoves ?? []} />
+          </Card>
+        </TabsContent>
       </Tabs>
 
       <RenameDialog
@@ -702,6 +729,11 @@ function AccountDetailPage() {
       <ReleaseDialog
         open={releaseOpen}
         onOpenChange={setReleaseOpen}
+        account={account}
+      />
+      <MoveCreditDialog
+        open={moveCreditOpen}
+        onOpenChange={setMoveCreditOpen}
         account={account}
       />
       <TransferDialog

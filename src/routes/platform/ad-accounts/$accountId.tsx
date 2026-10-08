@@ -546,8 +546,11 @@ function PoolAccountDetailPage() {
                     <TableCell className="num text-right font-medium">
                       {h.closing_limit_usd
                         ? formatUsd(
+                            // Credit moved out/in by a transfer changed the
+                            // limit without spend, so it's added back.
                             dec(h.closing_limit_usd)
                               .minus(dec(h.opening_limit_usd))
+                              .plus(dec(h.transfer_net_out_usd ?? 0))
                               .toFixed(2),
                           )
                         : '—'}

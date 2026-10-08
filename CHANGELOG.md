@@ -6,6 +6,38 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-10-08
+
+**New: Move credit (credit transfers between a client's ad accounts).** Built
+from the owner's "Inter-Ad-Account Credit Transfer: Fixed Design", with the
+owner's v1 decisions: same client only (cross-client cut), pool accounts go
+through the platform, and Meta failures reuse the existing spend-cap sync.
+- Migration 000058: `credit_transfers` table (`CT-…`, one pending transfer
+  per account), RPCs `create_credit_transfer` / `apply_credit_transfer`
+  (row-locked; same client, enough limit, no pending limit request; a pool
+  account can only be executed by a platform admin — checked in the database
+  too), `reset_all_data()` updated. Moves `current_limit_usd` from source to
+  destination; never touches the ledger, `usd_sales` or rates.
+- Agency → ad account → ⋯ → **Move credit**: pick another account of the same
+  client, see live Meta remaining for both (re-read before writing; refuses
+  if spend moved on), amount, note. Agency-owned on both sides → done at once;
+  a pool account involved → sent to the platform. New **Credit moves** tab.
+- Platform → **Credit Moves**: review (fresh Meta check) → Approve and move,
+  or Reject with a reason. Agency and client are notified (in-app + Telegram:
+  `credit_transfer.sent_to_platform` / `.completed` / `.rejected`).
+- Meta: both spend caps set by `syncAndPersistAdAccountSpendCap` (exact
+  values, safe to retry), source first. While a source is out of sync, a
+  destination it gave credit to is deferred (never raised first) and goes out
+  automatically once the source syncs — this guard lives in the shared sync,
+  so the daily retry and the manual Retry respect it too.
+- Assignment history "Spent Amount" adds back credit moved out/in.
+- Not built (per the design's own notes / decisions): cross-client transfers,
+  ledger entries, automatic reversal transfers.
+- Doc vs code: the dollars/cents question (§2) was already settled — reads
+  are minor units, writes major (CLAUDE.md); "source" is `is_platform`.
+- Also: the agency ad account tabs now scroll inside the bar on phones
+  instead of widening the page. Live test `credit-transfer.test.ts` (5 cases).
+
 ## 2026-10-06
 
 **Assigning or transferring an ad account now sets its USD rate to the

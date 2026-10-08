@@ -147,6 +147,10 @@ short; detail belongs in the changelog.
   — the account's `usd_rate` wins; `0` means inherit the client's rate.
   Assign/transfer copy the client's rate onto the account (000057). The
   `exchange_rates` table is history only.
+- **Credit transfers** ("Move credit", 000058): same client only; move
+  `current_limit_usd` between accounts, never the ledger. A pool account →
+  platform executes. Meta: source first; `syncAndPersistAdAccountSpendCap`
+  defers a destination while its transfer source is out of sync.
 - **Client segments**: `prepaid` (pays full cost up front), `partial` (pays
   part, rest becomes due), `postpaid` (all due). Segment is read server-side and
   snapshotted on each request.

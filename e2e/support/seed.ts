@@ -167,7 +167,7 @@ export async function teardown(env: E2EEnv, f: Fixtures): Promise<void> {
     // cascade away with the agency, after the user delete already failed).
     'subscription_payments',
     'notifications', 'audit_logs', 'adjustments', 'ledger_entries', 'payments', 'payment_requests',
-    'limit_requests', 'platform_account_requests', 'ad_account_assignments', 'attachments',
+    'limit_requests', 'platform_account_requests', 'credit_transfers', 'ad_account_assignments', 'attachments',
   ]) {
     await admin.from(t).delete().in('organization_id', orgIds)
   }

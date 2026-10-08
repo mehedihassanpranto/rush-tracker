@@ -117,6 +117,9 @@ export interface AdAccountWithClient extends AdAccount {
 export interface AssignmentWithRefs extends Assignment {
   ad_account: Pick<AdAccount, 'id' | 'account_code' | 'name'> | null
   client: Pick<Client, 'id' | 'client_code' | 'name'> | null
+  /** Credit moved OUT minus moved IN during this assignment (credit
+   * transfers, 000058). Spent = closing − opening + this. */
+  transfer_net_out_usd?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -525,3 +528,29 @@ export interface Organization {
   created_at: string
 }
 
+
+/** A credit transfer (migration 000058) with the joins CREDIT_TRANSFER_SELECT
+ * reads. Numerics may arrive as JS numbers at runtime. */
+export interface CreditTransferRow {
+  id: string
+  transfer_number: string
+  organization_id: string
+  client_id: string
+  source_account_id: string
+  destination_account_id: string
+  amount_usd: string
+  note: string | null
+  status: 'PENDING_PLATFORM_REVIEW' | 'COMPLETED' | 'REJECTED'
+  source_limit_before: string | null
+  source_limit_after: string | null
+  destination_limit_before: string | null
+  destination_limit_after: string | null
+  requested_at: string
+  executed_at: string | null
+  rejected_at: string | null
+  rejection_reason: string | null
+  client: { id: string; client_code: string; name: string } | null
+  source: { id: string; account_code: string; name: string; is_platform: boolean } | null
+  destination: { id: string; account_code: string; name: string; is_platform: boolean } | null
+  organization: { id: string; name: string } | null
+}
