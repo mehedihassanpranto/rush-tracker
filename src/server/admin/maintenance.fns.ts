@@ -32,6 +32,7 @@ const WIPE_ORDER = [
   'payments',
   'payment_requests',
   'limit_requests',
+  'credit_transfers',
   'ad_account_assignments',
   'attachments',
   'ad_accounts',

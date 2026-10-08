@@ -55,6 +55,7 @@ import { Route as ClientTeamIndexRouteImport } from './routes/client/team/index'
 import { Route as PlatformAccountRequestsIndexRouteImport } from './routes/platform/account-requests/index'
 import { Route as PlatformAdAccountsIndexRouteImport } from './routes/platform/ad-accounts/index'
 import { Route as PlatformAdAccountsAccountIdRouteImport } from './routes/platform/ad-accounts/$accountId'
+import { Route as PlatformCreditTransfersIndexRouteImport } from './routes/platform/credit-transfers/index'
 import { Route as PlatformFinanceIndexRouteImport } from './routes/platform/finance/index'
 import { Route as PlatformHealthIndexRouteImport } from './routes/platform/health/index'
 import { Route as PlatformLimitRequestsIndexRouteImport } from './routes/platform/limit-requests/index'
@@ -305,6 +306,12 @@ const PlatformAdAccountsAccountIdRoute =
     path: '/ad-accounts/$accountId',
     getParentRoute: () => PlatformRouteRoute,
   } as any)
+const PlatformCreditTransfersIndexRoute =
+  PlatformCreditTransfersIndexRouteImport.update({
+    id: '/credit-transfers/',
+    path: '/credit-transfers/',
+    getParentRoute: () => PlatformRouteRoute,
+  } as any)
 const PlatformFinanceIndexRoute = PlatformFinanceIndexRouteImport.update({
   id: '/finance/',
   path: '/finance/',
@@ -415,6 +422,7 @@ export interface FileRoutesByFullPath {
   '/client/team/': typeof ClientTeamIndexRoute
   '/platform/account-requests/': typeof PlatformAccountRequestsIndexRoute
   '/platform/ad-accounts/': typeof PlatformAdAccountsIndexRoute
+  '/platform/credit-transfers/': typeof PlatformCreditTransfersIndexRoute
   '/platform/finance/': typeof PlatformFinanceIndexRoute
   '/platform/health/': typeof PlatformHealthIndexRoute
   '/platform/limit-requests/': typeof PlatformLimitRequestsIndexRoute
@@ -470,6 +478,7 @@ export interface FileRoutesByTo {
   '/client/team': typeof ClientTeamIndexRoute
   '/platform/account-requests': typeof PlatformAccountRequestsIndexRoute
   '/platform/ad-accounts': typeof PlatformAdAccountsIndexRoute
+  '/platform/credit-transfers': typeof PlatformCreditTransfersIndexRoute
   '/platform/finance': typeof PlatformFinanceIndexRoute
   '/platform/health': typeof PlatformHealthIndexRoute
   '/platform/limit-requests': typeof PlatformLimitRequestsIndexRoute
@@ -530,6 +539,7 @@ export interface FileRoutesById {
   '/client/team/': typeof ClientTeamIndexRoute
   '/platform/account-requests/': typeof PlatformAccountRequestsIndexRoute
   '/platform/ad-accounts/': typeof PlatformAdAccountsIndexRoute
+  '/platform/credit-transfers/': typeof PlatformCreditTransfersIndexRoute
   '/platform/finance/': typeof PlatformFinanceIndexRoute
   '/platform/health/': typeof PlatformHealthIndexRoute
   '/platform/limit-requests/': typeof PlatformLimitRequestsIndexRoute
@@ -590,6 +600,7 @@ export interface FileRouteTypes {
     | '/client/team/'
     | '/platform/account-requests/'
     | '/platform/ad-accounts/'
+    | '/platform/credit-transfers/'
     | '/platform/finance/'
     | '/platform/health/'
     | '/platform/limit-requests/'
@@ -645,6 +656,7 @@ export interface FileRouteTypes {
     | '/client/team'
     | '/platform/account-requests'
     | '/platform/ad-accounts'
+    | '/platform/credit-transfers'
     | '/platform/finance'
     | '/platform/health'
     | '/platform/limit-requests'
@@ -704,6 +716,7 @@ export interface FileRouteTypes {
     | '/client/team/'
     | '/platform/account-requests/'
     | '/platform/ad-accounts/'
+    | '/platform/credit-transfers/'
     | '/platform/finance/'
     | '/platform/health/'
     | '/platform/limit-requests/'
@@ -1056,6 +1069,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlatformAdAccountsAccountIdRouteImport
       parentRoute: typeof PlatformRouteRoute
     }
+    '/platform/credit-transfers/': {
+      id: '/platform/credit-transfers/'
+      path: '/credit-transfers'
+      fullPath: '/platform/credit-transfers/'
+      preLoaderRoute: typeof PlatformCreditTransfersIndexRouteImport
+      parentRoute: typeof PlatformRouteRoute
+    }
     '/platform/finance/': {
       id: '/platform/finance/'
       path: '/finance'
@@ -1230,6 +1250,7 @@ interface PlatformRouteRouteChildren {
   PlatformLimitRequestsRequestIdRoute: typeof PlatformLimitRequestsRequestIdRoute
   PlatformAccountRequestsIndexRoute: typeof PlatformAccountRequestsIndexRoute
   PlatformAdAccountsIndexRoute: typeof PlatformAdAccountsIndexRoute
+  PlatformCreditTransfersIndexRoute: typeof PlatformCreditTransfersIndexRoute
   PlatformFinanceIndexRoute: typeof PlatformFinanceIndexRoute
   PlatformHealthIndexRoute: typeof PlatformHealthIndexRoute
   PlatformLimitRequestsIndexRoute: typeof PlatformLimitRequestsIndexRoute
@@ -1247,6 +1268,7 @@ const PlatformRouteRouteChildren: PlatformRouteRouteChildren = {
   PlatformLimitRequestsRequestIdRoute: PlatformLimitRequestsRequestIdRoute,
   PlatformAccountRequestsIndexRoute: PlatformAccountRequestsIndexRoute,
   PlatformAdAccountsIndexRoute: PlatformAdAccountsIndexRoute,
+  PlatformCreditTransfersIndexRoute: PlatformCreditTransfersIndexRoute,
   PlatformFinanceIndexRoute: PlatformFinanceIndexRoute,
   PlatformHealthIndexRoute: PlatformHealthIndexRoute,
   PlatformLimitRequestsIndexRoute: PlatformLimitRequestsIndexRoute,

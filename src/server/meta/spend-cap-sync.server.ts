@@ -126,6 +126,23 @@ export async function syncAndPersistAdAccountSpendCap(
       return 'failed'
     }
 
+    // Credit transfers (000058) lower the source first: while a source this
+    // account received credit from is still out of sync, raising this one
+    // would hand the client more Meta headroom than it paid for. Defer —
+    // stays pending, no failure notification — until the source syncs.
+    const blockingSource = await pendingTransferSource(admin, adAccountId)
+    if (blockingSource) {
+      await admin
+        .from('ad_accounts')
+        .update({
+          meta_sync_pending: true,
+          meta_sync_error: `Waiting for ${blockingSource.account_code} to lower its spend cap first (credit transfer ${blockingSource.transfer_number})`,
+          meta_sync_attempted_at: new Date().toISOString(),
+        })
+        .eq('id', adAccountId)
+      return 'failed'
+    }
+
     const outcome = await syncAdAccountSpendCap(account)
     const now = new Date().toISOString()
     // Who this account belongs to operationally — a granted pool account's own
@@ -145,6 +162,9 @@ export async function syncAndPersistAdAccountSpendCap(
       // Only a real write is audit-worthy — an already-in-sync confirmation
       // isn't a state change and shouldn't produce a duplicate-looking
       // AD_ACCOUNT_UPDATED row every time a retry or duplicate trigger fires.
+      // A destination that was waiting on this account (credit transfer)
+      // can go out now.
+      await releaseWaitingDestinations(admin, adAccountId, opts)
       if (outcome.status === 'synced') {
         await writeAudit({
           actorUserId: opts.actorUserId,
@@ -194,6 +214,45 @@ export async function syncAndPersistAdAccountSpendCap(
   } catch (err) {
     console.error('[meta-spend-cap-sync] unexpected failure', adAccountId, err)
     return 'failed'
+  }
+}
+
+/** The source of a completed credit transfer into this account whose own
+ * spend cap is still out of sync, if any. */
+async function pendingTransferSource(
+  admin: ReturnType<typeof getSupabaseAdminClient>,
+  destinationId: string,
+): Promise<{ account_code: string; transfer_number: string } | null> {
+  const { data } = await admin
+    .from('credit_transfers')
+    .select('transfer_number, source:ad_accounts!credit_transfers_source_account_id_fkey(account_code, meta_sync_pending)')
+    .eq('destination_account_id', destinationId)
+    .eq('status', 'COMPLETED')
+  const rows = (data ?? []) as unknown as Array<{
+    transfer_number: string
+    source: { account_code: string; meta_sync_pending: boolean } | null
+  }>
+  const blocking = rows.find((r) => r.source?.meta_sync_pending)
+  return blocking ? { account_code: blocking.source!.account_code, transfer_number: blocking.transfer_number } : null
+}
+
+/** After a source syncs, push any credit-transfer destination that was
+ * deferred waiting for it. */
+async function releaseWaitingDestinations(
+  admin: ReturnType<typeof getSupabaseAdminClient>,
+  sourceId: string,
+  opts: { actorUserId: string | null; source: string },
+): Promise<void> {
+  const { data } = await admin
+    .from('credit_transfers')
+    .select('destination:ad_accounts!credit_transfers_destination_account_id_fkey(id, meta_sync_pending)')
+    .eq('source_account_id', sourceId)
+    .eq('status', 'COMPLETED')
+  const waiting = ((data ?? []) as unknown as Array<{
+    destination: { id: string; meta_sync_pending: boolean } | null
+  }>).flatMap((r) => (r.destination?.meta_sync_pending ? [r.destination.id] : []))
+  for (const id of new Set(waiting)) {
+    await syncAndPersistAdAccountSpendCap(id, opts)
   }
 }
 

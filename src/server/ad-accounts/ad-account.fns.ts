@@ -1,4 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
+import { transferNetOutByAssignment } from '@/server/credit-transfers/credit-transfer.service'
 import { z } from 'zod'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import {
@@ -140,9 +141,14 @@ export const listAssignmentHistoryFn = createServerFn({ method: 'GET' })
       .eq('organization_id', actor.organizationId)
       .order('assigned_at', { ascending: false })
     if (error) throw new Error(error.message)
+    const netOut = await transferNetOutByAssignment(
+      admin,
+      (rows ?? []).map((r) => (r as { id: string }).id),
+    )
     return (rows ?? []).map((r) => ({
       ...(r as unknown as AssignmentWithRefs),
       ad_account: null,
+      transfer_net_out_usd: netOut.get((r as { id: string }).id) ?? '0.00',
     }))
   })
 

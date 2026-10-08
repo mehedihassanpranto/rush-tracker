@@ -54,6 +54,21 @@ export const TELEGRAM_EVENT_TYPES: Array<TelegramEventType> = [
     recipientTypes: ['agency'],
   },
   {
+    id: 'credit_transfer.sent_to_platform',
+    label: 'Credit transfer sent for platform review',
+    recipientTypes: ['platform_admin'],
+  },
+  {
+    id: 'credit_transfer.completed',
+    label: 'Ad credit moved between accounts',
+    recipientTypes: ['agency', 'client'],
+  },
+  {
+    id: 'credit_transfer.rejected',
+    label: 'Platform rejected a credit transfer',
+    recipientTypes: ['agency'],
+  },
+  {
     id: 'account_request.created',
     label: 'Agency requested a new ad account',
     recipientTypes: ['platform_admin'],
