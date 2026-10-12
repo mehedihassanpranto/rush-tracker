@@ -6,6 +6,31 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-10-12
+
+**Fixed (dev only): random "socket hang up" / "read ECONNRESET" error overlay
+on localhost.** Reported by the owner with a screenshot. Vite forwards every
+request to the Nitro dev worker over a pooled local HTTP connection
+(env-runner → httpxy, keep-alive on), and the worker's Node HTTP server closes
+a connection idle ~5–6 s; a request sent at that instant died on the
+just-closed socket with nothing retrying it. Reproduced on demand on a
+throwaway staging dev server: 7 of 360 requests failed when fired ~6 s after
+the previous ones. New dev-only plugin `noStaleWorkerSockets()` in
+`vite.config.ts` (`apply: 'serve'`) stops the dev server process pooling
+loopback connections, so each request opens a fresh one: 720 of 720 passed
+across the same window. httpxy is already at its latest version (0.5.5), so
+there was no upstream fix to take. Production is unaffected either way — it
+has no worker proxy.
+
+**Data (production, owner-requested): CL-0001 "xRush Digital" history
+removed.** 3 ledger entries (৳52,000 billed, unpaid), 5 limit requests, 1
+released assignment and 6 notifications deleted in one all-or-nothing
+transaction after the owner confirmed the exact list; client record, its 2
+logins and the audit log kept, plus a `CLIENT_HISTORY_PURGED` audit row.
+Before/after snapshots: every other client's billed/paid/due and every ad
+account limit identical; agency total due ৳161,771 → ৳109,771. Full backup of
+the deleted rows kept outside the repo by the owner.
+
 ## 2026-10-08
 
 **New: Move credit (credit transfers between a client's ad accounts).** Built
