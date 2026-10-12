@@ -203,6 +203,9 @@ short; detail belongs in the changelog.
   bodies — never export a helper from a `.fns.ts` for another `.fns.ts` to
   import, and never type a param as `ReturnType<typeof getSupabaseAdminClient>`
   in a `.fns.ts` (use `SupabaseClient`). Both break the client build.
+- Dev only: `noStaleWorkerSockets()` in `vite.config.ts` stops Vite pooling
+  connections to the Nitro dev worker (the worker closes them after ~5 s idle
+  → random "socket hang up" overlay). Don't remove it.
 - `createServerFn().validator(schema)` (`.inputValidator()` is deprecated).
   Request helpers come from `@tanstack/react-start/server`.
 - HTTP endpoints (cron, webhooks) are files under `src/routes/api/**` with
