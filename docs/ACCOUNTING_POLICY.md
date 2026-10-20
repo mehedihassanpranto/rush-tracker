@@ -144,3 +144,31 @@ column is named `meta_billing_mode` so the two never get confused.
    Agency, whose admins read that log. It gets its own platform-only audit
    table.
 5. CSV exports filter columns by role and escape cells starting `= + - @`.
+
+## 8. Journal (Milestone 2, migration 000061)
+
+1. Double entry in **BDT**. USD is a memo on the lines that move dollars
+   (inventory, revenue, Meta), never added to taka.
+2. Every entry balances (Σ debit = Σ credit, ≥ 2 lines), checked by the
+   database at commit; an unbalanced posting rolls back whole. Entries and
+   lines are insert-only.
+3. Posting is done by database triggers on the source tables, so nothing can
+   record money without its entry. One entry per event, one mirror per
+   reversal.
+4. Posting map in force:
+
+   | Event | Debit | Credit |
+   | --- | --- | --- |
+   | USD purchase | 1200 USD inventory | 1010 Bank & cash (principal; bank fee as its own line) |
+   | Purchase from before v2 | 1200 | 3000 Opening balance equity |
+   | Meta bill paid | 5000 Service cost — Meta | 1200 (FIFO cost) |
+   | Opening adjustment (USD used before v2) | 3000 | 1200 |
+   | Other USD outflow | 5900 Other USD outflows | 1200 |
+   | Sale to an agency | 1300 Agency receivables | 4000 Revenue |
+   | …its BDT received (v1: recorded paid at sale) | 1010 | 1300 |
+   | Any reversal | the original's lines, sides swapped | |
+
+5. The trial balance is by **event date** (as of the end of a Dhaka business
+   day). The USD inventory account must equal the FIFO stock over everything
+   posted; the Journal tab shows that tie-out.
+
