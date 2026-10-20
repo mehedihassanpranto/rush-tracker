@@ -85,34 +85,20 @@ finance rows should survive an agency's deletion the way `usd_sales` does
 
 ## 4. Decisions needed before Milestone 1
 
-**Plan defaults 4–11:** confirm or change (table in the plan).
-`accounting-policy.ts` holds A4, A5 and A8. The tests pass under all three as
-written.
+**All decided by the owner on 2026-10-20** ("go with your suggestions"):
+defaults 4–11 accepted, with A11 (maker-checker) as a switch that stays off
+while there is one platform admin.
 
-**New questions from the mapping:**
-
-- **Q1. Who is "the client" in the platform's book?** I read it as the agency
-  (the platform sells USD/credit to agencies), so "client receivables" means
-  what agencies owe the platform. The other reading, end clients of pool
-  accounts, would duplicate the agency's own ledger. Then: is an agency
-  billed per `usd_sales` row only, or also per approved pool-account limit,
-  and at what rate?
-- **Q2. What is a `usd_sales` row?** (a) USD actually handed over to the
-  agency, so inventory leaves at sale (FIFO cost then), or (b) credit loaded
-  onto platform Meta accounts, so inventory leaves only at Meta funding or
-  settlement. The posting map differs.
-- **Q3. Postpaid Meta cost timing.** The plan books cost at spend against a USD
-  payable, but the BDT cost isn't known until settlement draws FIFO. With no
-  FX revaluation (A10), that settlement entry can't balance in BDT.
-  Recommended: cost = the settlement's FIFO cost; unsettled spend is a USD
-  memo payable. Alternative: estimate at spend, book the difference at
-  settlement to the FX difference account (which then gets used). The golden
-  dataset assumes the recommendation.
-- **Q4.** Which pool accounts are prepaid and which postpaid? Today they all
-  behave as postpaid: Meta bills and "Balance owed to Meta" is `meta_balance`.
-- **Q5.** OK to turn `meta_amount_spent` deltas into accounting spend (trap 4),
-  or should spend be entered/imported?
-- **Q6.** Who is the second approver for maker-checker (trap 2)?
+- **Q1** two books: platform → agency, agency → client (see above).
+- **Q2** a `usd_sales` row is credit sold to an agency: revenue. Dollars
+  leave stock when Meta's bill is paid. An approved pool-account limit also
+  bills the agency, at a per-agency rate (Milestone 4).
+- **Q3** postpaid cost = the settlement's FIFO cost; unsettled spend is a
+  USD-only payable.
+- **Q4** every pool account is Meta-postpaid; mark exceptions later.
+- **Q5** spend = day-over-day change in synced `meta_amount_spent`, manual
+  correction allowed, a negative change flagged instead of booked.
+- **Q6** no second approver for now (A11 off).
 
 **Open items from the plan, answered from the code:**
 
@@ -120,7 +106,7 @@ written.
   by `client_financials()`). Platform→agency receivables don't exist yet.
 - *How does Meta spend arrive?* API sync: `refreshMetaSnapshots()` reads each
   account's own node into `meta_amount_spent` (cumulative), plus the cron.
-  There's no manual entry or CSV import. See Q5.
+  There's no manual entry or CSV import. Decided in Q5.
 
 **Still the owner's to answer:** the real Payoneer example (agreed / landed /
 BDT paid); suppliers paid before USD arrives (needs a supplier-advance

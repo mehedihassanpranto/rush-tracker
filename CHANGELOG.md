@@ -8,6 +8,34 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-20
 
+**Platform finance v2: Milestone 1 — FIFO inventory with transfer fees
+(migration 000059, applied to staging/production: NOT YET).** Owner accepted
+every Milestone 0 suggestion ("go with your suggestions"); recorded in
+`docs/ACCOUNTING_POLICY.md` and the Milestone 0 doc. Key model decision:
+dollars leave the platform's stock when Meta's bill is paid, not when a sale
+to an agency is recorded (that is revenue). Migration 000059 (additive): every
+`usd_purchases` row is now a FIFO batch (gross/net USD, fee snapshot,
+capitalized fees, supplier and effective rate, posting order, reversal
+status; existing rows backfilled as fee-less opening batches, no existing
+value changed); `bdt_amount` now includes the fees you bear, so the
+weighted-average USD Stock tab stays coherent and ignores reversed purchases.
+New `fee_rules` (seeded DBBL→DBBL 0, NPSB 10, Binance 0.01), `usd_outflows`,
+insert-only `inventory_allocations` and `platform_finance_audit`, views
+`usd_batch_balances` / `usd_fifo_summary`, RPCs `post_usd_purchase`,
+`post_usd_outflow`, `reverse_usd_outflow`, `reverse_usd_purchase` (one
+advisory lock serializes all inventory writes; idempotent by transfer
+reference / key; backdating and used-batch reversal refused). Suppliers gain a
+receiving bank. UI on `/platform/finance`: the purchase dialog previews fees
+from the rules (manual entry where no rule applies — Payoneer always — and
+reasoned overrides), net USD, batch cost and effective rate, with the 124–131
+soft warning; new **Inventory (FIFO)** tab (stock at cost, batches, USD paid
+out with the batches it drew from, reversals, a one-time "Set opening stock"
+cut-over) and **Fee Rules** tab; Source Summary shows each supplier's bank.
+Live-DB suite added to `usd-ledger.test.ts` (golden figures through the RPCs,
+duplicates, concurrency, refusals, immutability, exposure). Unit tests,
+typecheck and build pass; the live suite and browser check wait on the
+migration reaching staging.
+
 **Platform finance v2: Milestone 0 (mapping + engine, no migration).**
 Owner supplied "Financial Dashboard Full Plan v2" (FIFO batches, transfer
 fees, double entry, Meta prepaid/postpaid, maker-checker). Per the plan's own

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { organizationId } from '@/schemas/organization'
+import { bankCode } from '@/schemas/usd-inventory'
 
 /**
  * Platform USD/BDT stock ledger (spec §6.1). Amounts are entered, rates never
@@ -56,6 +57,8 @@ const usdPaymentMethod = z.enum(USD_PAYMENT_METHODS, {
 export const usdSourceCreateSchema = z.object({
   name: sourceName,
   payment_method: usdPaymentMethod,
+  /** Bank the supplier is paid into — decides the bank fee (000059). */
+  receiving_institution: bankCode.optional(),
 })
 export type UsdSourceCreateInput = z.infer<typeof usdSourceCreateSchema>
 
@@ -63,6 +66,7 @@ export const usdSourceUpdateSchema = z.object({
   id: z.uuid(),
   name: sourceName,
   payment_method: usdPaymentMethod,
+  receiving_institution: bankCode.optional(),
 })
 export type UsdSourceUpdateInput = z.infer<typeof usdSourceUpdateSchema>
 
@@ -70,16 +74,6 @@ export const usdSourceStatusSchema = z.object({
   id: z.uuid(),
   is_active: z.boolean(),
 })
-
-export const usdPurchaseCreateSchema = z.object({
-  source_id: z.uuid('Choose a source'),
-  usd_amount: usdAmount,
-  bdt_amount: bdtAmount,
-  method: optionalText(100),
-  purchased_at: isoDateTime.optional(),
-  notes: optionalText(1000),
-})
-export type UsdPurchaseCreateInput = z.infer<typeof usdPurchaseCreateSchema>
 
 export const usdPurchaseListSchema = z.object({
   source_id: z.uuid().optional(),

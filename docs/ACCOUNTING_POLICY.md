@@ -10,9 +10,18 @@ for Meta accounts and agencies. It does **not** change an agency's client
 ledger (`ledger_entries`, `client_financials()`), which `PROJECT_SPEC.md`
 governs, or an agency's own `/agency/finance` margin page.
 
-Status legend: **[owner]** stated by the owner · **[default]** the plan's
-assumption, not yet confirmed · **[open]** blocked on a decision
-(`docs/FINANCE_V2_MILESTONE0.md` §4).
+Status legend: **[owner]** stated by the owner · **[confirmed]** the plan's
+default, accepted by the owner on 2026-10-20 · **[open]** still waiting on a
+real-world example.
+
+Owner decisions of 2026-10-20 (Milestone 0 suggestions, all accepted):
+two books — platform → agency, and agency → client; dollars leave the
+platform's stock when **Meta's bill is paid**, not when a sale to an agency is
+recorded (a sale / approved pool limit is revenue); postpaid cost is the
+FIFO cost at settlement; every pool account is Meta-postpaid unless marked
+otherwise; Meta spend = day-over-day change in the synced `amount_spent`,
+with a manual correction and negative changes flagged; maker-checker is a
+switch, OFF while there is one platform admin.
 
 ## 1. Fees
 
@@ -38,8 +47,8 @@ assumption, not yet confirmed · **[open]** blocked on a decision
 
 ## 2. Batch cost
 
-1. **[default, A4]** The supplier prices on **net USD received**.
-2. **[default, A5]** Your share of every fee is added to that batch's
+1. **[confirmed, A4]** The supplier prices on **net USD received**.
+2. **[confirmed, A5]** Your share of every fee is added to that batch's
    acquisition cost, and appears nowhere else (no second expense line).
 3. Net USD = gross USD − the total of every USD fee deducted in transit
    (whoever bears it). **[open]** confirm with a real Payoneer example that the
@@ -62,7 +71,7 @@ assumption, not yet confirmed · **[open]** blocked on a decision
 4. Rounding: a partial take costs round(take × BDT left ÷ USD left, 2); the
    take that empties a batch costs exactly its BDT left. So every batch's
    allocations sum to its cost to the paisa.
-5. **[default, A8]** A purchase dated before an already-consumed batch is
+5. **[confirmed, A8]** A purchase dated before an already-consumed batch is
    refused.
 6. Reversing a purchase is refused while any of its USD has been consumed.
    Reverse the downstream allocations first.
@@ -73,15 +82,16 @@ assumption, not yet confirmed · **[open]** blocked on a decision
 the client payment segment (`clients.segment`: prepaid/partial/postpaid). The
 column is named `meta_billing_mode` so the two never get confused.
 
-1. **[default, A7]** Prepaid: funding moves USD from inventory to a Meta prepaid
+1. **[confirmed, A7]** Prepaid: funding moves USD from inventory to a Meta prepaid
    asset and creates that account's own funded lots, at FIFO cost. Actual
    spend consumes the account's lots FIFO and becomes cost. Cost is recognized
    at spend, never at funding as well.
 2. Spend above the funded balance is an **exception for review**. The asset
    never goes negative silently.
-3. Postpaid: spend creates a USD payable to Meta; settlement consumes inventory
-   FIFO and clears it. **[open]** when the BDT cost is recognized (§4 Q3 of the
-   Milestone 0 doc).
+3. Postpaid (the default for every pool account): spend creates a USD payable
+   to Meta; settlement — paying Meta's bill — consumes inventory FIFO and
+   clears it. **[confirmed]** The BDT cost is the settlement's FIFO cost;
+   spend not yet settled is a USD-only payable.
 4. Funded, spent, remaining and outstanding payable are four separate figures
    everywhere. A spend cap is never shown as a balance.
 5. Unspent credit leaves an account only through refund to client, return to
@@ -89,7 +99,7 @@ column is named `meta_billing_mode` so the two never get confused.
 
 ## 5. Revenue and receivables
 
-1. **[default, A6]** Revenue is recognized when credit is allocated, at the
+1. **[confirmed, A6]** Revenue is recognized when credit is allocated, at the
    selling rate on that date (snapshotted). No deferred revenue in v1.
 2. A payment reduces receivables only. Any overpayment is an advance, not
    revenue.
@@ -107,15 +117,17 @@ column is named `meta_billing_mode` so the two never get confused.
    replacement.
 4. Reports use the event date (receipt, payment, allocation, spend,
    settlement), never `created_at`.
-5. **[default, A10]** No FX revaluation of USD payables in v1. One FX
+5. **[confirmed, A10]** No FX revaluation of USD payables in v1. One FX
    difference account exists, unused.
-6. **[default, A9]** Binance and Payoneer balances are the same USD as
+6. **[confirmed, A9]** Binance and Payoneer balances are the same USD as
    inventory, reconciled against each wallet's statement.
 
 ## 7. Controls
 
-1. **[default, A11]** Maker-checker: the person who creates a posting, reversal
-   or period reopening cannot approve it.
+1. **[confirmed, A11 as a switch]** Maker-checker: the person who creates a
+   posting, reversal or period reopening cannot approve it. OFF until a second
+   platform admin exists (with one admin nothing could ever be approved);
+   everything is audited meanwhile.
 2. Periods are closed by an authorized role. A posting into a closed period is
    refused; corrections post into the next open period with a reference to
    the original. Reopening is logged with who and why.

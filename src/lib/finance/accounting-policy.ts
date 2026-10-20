@@ -1,8 +1,9 @@
 /**
  * Finance v2 accounting policy, as code — the single place the plan's
  * defaults live (docs/ACCOUNTING_POLICY.md is the prose version; keep the two
- * in step). Every value marked DEFAULT is the plan's assumption and is NOT yet
- * confirmed by the owner (plan v2, Assumptions 4–11). Changing one here is
+ * in step). Values marked DEFAULT are the plan's assumptions (plan v2,
+ * Assumptions 4–11), all accepted by the owner on 2026-10-20. Changing one
+ * here (and the matching SQL in post_usd_purchase(), migration 000059) is
  * meant to be the whole change.
  *
  * Pure constants, no imports, so both the fee/FIFO libraries and their tests

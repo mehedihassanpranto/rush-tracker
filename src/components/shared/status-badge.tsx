@@ -23,6 +23,9 @@ const STATUS_STYLES: Record<string, string> = {
   ADD_DUE: 'border-transparent bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300',
   REDUCE_DUE: 'border-transparent bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300',
   REVERSAL: 'border-transparent bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300',
+  // Platform finance v2 (batches, outflows)
+  POSTED: 'border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+  REVERSED: 'border-transparent bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300',
 }
 
 function label(status: string): string {

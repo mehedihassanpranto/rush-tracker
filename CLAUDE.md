@@ -154,6 +154,9 @@ short; detail belongs in the changelog.
 - **Platform finance v2** follows `docs/ACCOUNTING_POLICY.md` (defaults in
   `src/lib/finance/accounting-policy.ts`). Meta's prepaid/postpaid billing is
   `meta_billing_mode`, never the client `segment`.
+  FIFO stock leaves on `usd_outflows` (Meta bill paid), never on `usd_sales`
+  (revenue). Inventory writes go through the 000059 RPCs only;
+  `inventory_allocations` / `platform_finance_audit` are insert-only.
 - **Client segments**: `prepaid` (pays full cost up front), `partial` (pays
   part, rest becomes due), `postpaid` (all due). Segment is read server-side and
   snapshotted on each request.
