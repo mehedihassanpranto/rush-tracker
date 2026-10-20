@@ -9,7 +9,7 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 ## 2026-10-21
 
 **Platform finance v2: Milestone 4 — agency billing, payments, advances,
-periods (migration 000064; staging: applied; production: NOT YET).** Owner
+periods (migration 000064; staging: applied; production: applied 2026-10-21 via `supabase db push`).** Owner
 decisions: bill each approval; bill xRush Agency too (internal rate); start
 at go-live with one opening balance per agency. Facts that drove it
 (production, read-only): 157 approved pool limits so far — xRush 155 ($21,380),
@@ -33,7 +33,10 @@ history table. Shared `PageHeader` actions now wrap on a phone (the longer
 header button pushed the page 176px sideways — caught by the e2e phone check).
 `npm test` 318/318 (new live suite: pending rate → priced, own account never
 billed, payment → advance → applied, reversal guards, rate change, opening
-balance, summary = journal, closed month), finance e2e passes, build clean.
+balance, summary = journal, closed month), finance e2e passes, build clean. Production before/after
+(read-only): 2 purchases ৳110,010, 0 payouts, 2 journal entries, 157 approved
+limits, 274 ledger rows net ৳122,121 — unchanged; 0 agency charges (billing
+starts at go-live, as decided).
 
 ---
 
