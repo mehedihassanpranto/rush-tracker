@@ -101,7 +101,9 @@ function PlatformFinancePage() {
       </PageHeader>
 
       <Tabs defaultValue="stock">
-        <TabsList>
+        {/* Five tabs don't fit a phone: the bar scrolls inside itself instead
+            of pushing the page sideways (same as the ad account page). */}
+        <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="stock">USD Stock</TabsTrigger>
           <TabsTrigger value="inventory">Inventory (FIFO)</TabsTrigger>
           <TabsTrigger value="sources">Source Summary</TabsTrigger>

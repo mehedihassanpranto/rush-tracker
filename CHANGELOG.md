@@ -9,7 +9,7 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 ## 2026-10-20
 
 **Platform finance v2: Milestone 1 — FIFO inventory with transfer fees
-(migration 000059, applied to staging/production: NOT YET).** Owner accepted
+(migration 000059 — staging: applied 2026-10-20; production: awaiting owner OK).** Owner accepted
 every Milestone 0 suggestion ("go with your suggestions"); recorded in
 `docs/ACCOUNTING_POLICY.md` and the Milestone 0 doc. Key model decision:
 dollars leave the platform's stock when Meta's bill is paid, not when a sale
@@ -31,10 +31,14 @@ reasoned overrides), net USD, batch cost and effective rate, with the 124–131
 soft warning; new **Inventory (FIFO)** tab (stock at cost, batches, USD paid
 out with the batches it drew from, reversals, a one-time "Set opening stock"
 cut-over) and **Fee Rules** tab; Source Summary shows each supplier's bank.
-Live-DB suite added to `usd-ledger.test.ts` (golden figures through the RPCs,
-duplicates, concurrency, refusals, immutability, exposure). Unit tests,
-typecheck and build pass; the live suite and browser check wait on the
-migration reaching staging.
+Live-DB suite added to `usd-ledger.test.ts` (golden figures through the RPCs
+to the paisa, duplicates, concurrency, refusals, immutability, exposure) and
+e2e `platform-finance.spec.ts` (supplier with bank → fee preview → purchase →
+FIFO payout → reversals, light/dark/phone, zero console errors). Browser check
+caught the five-tab bar pushing the page 176px sideways at 390px; it now
+scrolls inside itself like the ad-account page's. Staging: applied via the
+Management API (CLI stays linked to production); `npm test` 297/297, e2e
+40/40, typecheck and build clean.
 
 **Platform finance v2: Milestone 0 (mapping + engine, no migration).**
 Owner supplied "Financial Dashboard Full Plan v2" (FIFO batches, transfer
