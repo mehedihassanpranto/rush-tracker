@@ -132,6 +132,21 @@ test('fee-aware purchase, FIFO payout and reversals', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 })
   await setTheme(page, 'light')
 
+  // Meta Accounts (000063): the pool table and the daily reading run by hand.
+  // e2e's Meta token is inert, so accounts can't be read — the job must still
+  // finish and say so rather than fail.
+  await page.getByRole('tab', { name: 'Meta Accounts' }).click()
+  await expect(page.getByRole('heading', { name: 'Pool accounts' })).toBeVisible()
+  await page.getByRole('button', { name: 'Read spend now' }).click()
+  await expect(page.getByText(/^Read \d+ accounts? from Meta/)).toBeVisible()
+  await setTheme(page, 'dark')
+  await page.screenshot({ path: 'test-results/finance-meta-dark.png', fullPage: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  const metaOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+  expect(metaOverflow, 'meta accounts: horizontal page scroll at 390px').toBeLessThanOrEqual(0)
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await setTheme(page, 'light')
+
   // Fee rules: the owner's three seeded rules.
   await page.getByRole('tab', { name: 'Fee Rules' }).click()
   for (const code of ['dbbl-internal', 'npsb-flat', 'binance-transfer']) {

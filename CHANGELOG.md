@@ -8,6 +8,34 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-20
 
+**Platform finance v2: Milestone 3 — Meta accounts (migration 000063;
+staging: applied; production: applied 2026-10-21 via `supabase db push`).** Each platform pool account has a
+Meta billing mode (`ad_accounts.meta_billing_mode`, postpaid by default — not
+the client `segment`). The meta-sync cron gains a fourth job, `readPoolSpend()`
+(`meta-spend.service.ts`): refresh every pool account from its own Meta node,
+then `record_meta_spend_readings()` posts the change in `amount_spent` since
+the last reading as a spend event (first reading = baseline; today's readings
+are seeded as baselines, so no historical spend is booked). A drop is flagged
+(`meta_spend_exceptions`) and re-baselined, never booked negative; non-USD
+accounts are flagged. Postpaid spend is a USD "owed to Meta" (spend − bills
+paid), cost at the bill payment's FIFO cost. Prepaid: new outflow kind
+`META_PREPAID_FUNDING` loads FIFO-costed dollars into the account's own
+`meta_prepaid_lots`; spend consumes them oldest-first (Dr 5000 / Cr 1400);
+overspend is flagged and never drives the asset negative. Guards: prepaid →
+postpaid refused while credit is left; spent funding can't be reversed;
+spend reversals mirror lot allocations. New **Meta Accounts** tab: per account
+spent / funded / prepaid left / paid to Meta / owed to Meta (four separate
+figures, no spend cap) beside Meta's own balance, billing-mode switch, Fund /
+Pay bill / Add spend, "Read spend now", spend list with reversal, review list
+for flagged spend. Live suite replays the golden dataset's Meta half through
+the RPCs (৳88,200.88 funding, ৳81,900.82 prepaid spend, ৳57,235.82 bill) plus
+overspend, a Meta drop, guards and the 1400/1200 tie-outs. Not built yet:
+returning or writing off unspent prepaid credit (Milestone 5). `npm test`
+310/310, e2e 40/40, build clean. Production before/after (read-only): 2 purchases
+৳110,010, 0 payouts, 2 journal entries, 274 ledger rows — unchanged; 34 pool
+accounts, all postpaid, each baselined from its current USD reading, 0 spend
+booked. The first spend posts at the next daily cron.
+
 **Platform finance v2: Milestone 2 — double-entry journal (migrations 000061,
 000062; staging: applied; production: applied 2026-10-20 with 000060 via `supabase db push`).** New `gl_accounts` (chart of
 accounts: Bank & cash, USD inventory, Agency receivables, Meta prepaid,

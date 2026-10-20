@@ -37,18 +37,23 @@ import { Textarea } from '@/components/ui/textarea'
  * an agency is revenue and does not move stock. Drawn oldest batch first; the
  * FIFO cost comes back from the database.
  */
+type OutflowKindChoice = 'META_BILL_PAYMENT' | 'META_PREPAID_FUNDING' | 'OTHER'
+
 export function OutflowDialog({
   open,
   onOpenChange,
+  preset,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Opened from one account's row (Meta Accounts tab): kind and account fixed. */
+  preset?: { kind: Exclude<OutflowKindChoice, 'OTHER'>; accountId: string } | null
 }) {
   const queryClient = useQueryClient()
   const listAccounts = useServerFn(listPlatformAdAccountsForBillsFn)
   const post = useServerFn(postUsdOutflowFn)
 
-  const [kind, setKind] = useState<'META_BILL_PAYMENT' | 'OTHER'>('META_BILL_PAYMENT')
+  const [kind, setKind] = useState<OutflowKindChoice>('META_BILL_PAYMENT')
   const [accountId, setAccountId] = useState('')
   const [usd, setUsd] = useState('')
   const [when, setWhen] = useState(nowLocalInput())
@@ -59,14 +64,14 @@ export function OutflowDialog({
 
   useEffect(() => {
     if (open) {
-      setKind('META_BILL_PAYMENT')
-      setAccountId('')
+      setKind(preset?.kind ?? 'META_BILL_PAYMENT')
+      setAccountId(preset?.accountId ?? '')
       setUsd('')
       setWhen(nowLocalInput())
       setNotes('')
       setKey(crypto.randomUUID())
     }
-  }, [open])
+  }, [open, preset?.kind, preset?.accountId])
 
   const accounts = useQuery({
     queryKey: ['platform-usd', 'bill-accounts'],
@@ -79,7 +84,7 @@ export function OutflowDialog({
     usd !== '' &&
     usdNum > 0 &&
     when !== '' &&
-    (kind === 'META_BILL_PAYMENT' ? accountId !== '' : notes.trim() !== '')
+    (kind === 'OTHER' ? notes.trim() !== '' : accountId !== '')
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -88,7 +93,7 @@ export function OutflowDialog({
           kind,
           usd_amount: usdNum,
           event_at: localInputToIso(when),
-          ad_account_id: kind === 'META_BILL_PAYMENT' ? accountId : undefined,
+          ad_account_id: kind === 'OTHER' ? undefined : accountId,
           notes: notes || undefined,
           idempotency_key: key,
         },
@@ -105,7 +110,9 @@ export function OutflowDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Record USD paid out</DialogTitle>
+          <DialogTitle>
+            {kind === 'META_PREPAID_FUNDING' ? 'Fund a prepaid Meta account' : 'Record USD paid out'}
+          </DialogTitle>
           <DialogDescription>
             Dollars that left your wallets. They are taken from the oldest
             batch first, and the BDT they cost is worked out from those batches.
@@ -114,20 +121,21 @@ export function OutflowDialog({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="outflow-kind">What was it</Label>
-            <Select value={kind} onValueChange={(v) => setKind(v as typeof kind)}>
+            <Select value={kind} onValueChange={(v) => setKind(v as typeof kind)} disabled={!!preset}>
               <SelectTrigger id="outflow-kind">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="META_BILL_PAYMENT">Meta bill paid</SelectItem>
+                <SelectItem value="META_PREPAID_FUNDING">Prepaid Meta funding</SelectItem>
                 <SelectItem value="OTHER">Something else</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          {kind === 'META_BILL_PAYMENT' && (
+          {kind !== 'OTHER' && (
             <div className="space-y-2">
               <Label htmlFor="outflow-account">Ad account</Label>
-              <Select value={accountId} onValueChange={setAccountId}>
+              <Select value={accountId} onValueChange={setAccountId} disabled={!!preset}>
                 <SelectTrigger id="outflow-account">
                   <SelectValue placeholder={accounts.isLoading ? 'Loading…' : 'Choose the pool account'} />
                 </SelectTrigger>
@@ -143,7 +151,9 @@ export function OutflowDialog({
           )}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="outflow-usd">USD paid</Label>
+              <Label htmlFor="outflow-usd">
+                {kind === 'META_PREPAID_FUNDING' ? 'USD loaded' : 'USD paid'}
+              </Label>
               <Input
                 id="outflow-usd"
                 type="number"

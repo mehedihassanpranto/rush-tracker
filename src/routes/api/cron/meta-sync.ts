@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { getServerEnv } from '@/lib/env/env.server'
 import { syncMetaAdAccounts } from '@/server/meta/meta-sync.server'
 import { retryPendingMetaSpendCapSyncs } from '@/server/meta/spend-cap-sync.server'
+import { readPoolSpend } from '@/server/platform/meta-spend.service'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import {
   finishCronRun,
@@ -54,10 +55,12 @@ export const Route = createFileRoute('/api/cron/meta-sync')({
 
         // The jobs run independently — a failure in one (e.g. Meta
         // unreachable) must not block the others.
-        const [syncResult, retryResult, tokenResult] = await Promise.allSettled([
+        const [syncResult, retryResult, tokenResult, spendResult] = await Promise.allSettled([
           syncMetaAdAccounts(),
           retryPendingMetaSpendCapSyncs(),
           runMetaTokenChecks(),
+          // The day's Meta spend for the platform's pool (Finance v2, 000063).
+          readPoolSpend(null),
         ])
 
         const failures: Array<string> = []
@@ -65,6 +68,7 @@ export const Route = createFileRoute('/api/cron/meta-sync')({
           ['sync', syncResult],
           ['spend cap retry', retryResult],
           ['token check', tokenResult],
+          ['pool spend', spendResult],
         ] as const
         for (const [label, r] of labelled) {
           if (r.status === 'rejected') {
@@ -112,6 +116,7 @@ export const Route = createFileRoute('/api/cron/meta-sync')({
           spend_cap_retry:
             retryResult.status === 'fulfilled' ? retryResult.value : { error: 'failed' },
           tokens: tokenResult.status === 'fulfilled' ? tokenResult.value : { error: 'failed' },
+          pool_spend: spendResult.status === 'fulfilled' ? spendResult.value : { error: 'failed' },
           errors_last_24h: digest.count,
         }
         await finishCronRun(

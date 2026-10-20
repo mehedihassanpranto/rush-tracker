@@ -86,17 +86,18 @@ export const usdPurchasePostSchema = usdPurchaseDraftSchema.extend({
 })
 export type UsdPurchasePostInput = z.infer<typeof usdPurchasePostSchema>
 
-export const OUTFLOW_KINDS = ['META_BILL_PAYMENT', 'OPENING_ADJUSTMENT', 'OTHER'] as const
+export const OUTFLOW_KINDS = ['META_BILL_PAYMENT', 'META_PREPAID_FUNDING', 'OPENING_ADJUSTMENT', 'OTHER'] as const
 export type OutflowKind = (typeof OUTFLOW_KINDS)[number]
 export const OUTFLOW_KIND_LABELS: Record<OutflowKind, string> = {
   META_BILL_PAYMENT: 'Meta bill paid',
+  META_PREPAID_FUNDING: 'Prepaid Meta funding',
   OPENING_ADJUSTMENT: 'Opening adjustment',
   OTHER: 'Other',
 }
 
 export const usdOutflowPostSchema = z
   .object({
-    kind: z.enum(['META_BILL_PAYMENT', 'OTHER']),
+    kind: z.enum(['META_BILL_PAYMENT', 'META_PREPAID_FUNDING', 'OTHER']),
     usd_amount: usd,
     event_at: isoDateTime,
     ad_account_id: z.uuid().optional(),
@@ -105,8 +106,8 @@ export const usdOutflowPostSchema = z
      * once. */
     idempotency_key: z.string().trim().min(8).max(100),
   })
-  .refine((v) => v.kind !== 'META_BILL_PAYMENT' || !!v.ad_account_id, {
-    message: 'Choose the ad account whose Meta bill was paid',
+  .refine((v) => v.kind === 'OTHER' || !!v.ad_account_id, {
+    message: 'Choose the ad account',
     path: ['ad_account_id'],
   })
   .refine((v) => v.kind !== 'OTHER' || !!v.notes, {
@@ -151,3 +152,28 @@ export const feeRuleCreateSchema = z
   })
 
 export const feeRuleEndSchema = z.object({ id: z.uuid(), effective_to: isoDate })
+
+// ------------------------------------------------- Meta accounts (000063) ---
+
+export const META_BILLING_MODES = ['META_POSTPAID', 'META_PREPAID'] as const
+export type MetaBillingMode = (typeof META_BILLING_MODES)[number]
+export const META_BILLING_LABELS: Record<MetaBillingMode, string> = {
+  META_POSTPAID: 'Postpaid',
+  META_PREPAID: 'Prepaid',
+}
+
+export const metaBillingModeSchema = z.object({
+  ad_account_id: z.uuid(),
+  mode: z.enum(META_BILLING_MODES),
+})
+
+export const manualMetaSpendSchema = z.object({
+  ad_account_id: z.uuid('Choose an ad account'),
+  usd_amount: usd,
+  event_at: isoDateTime,
+  notes: reason,
+  idempotency_key: z.string().trim().min(8).max(100),
+})
+
+export const resolveExceptionSchema = z.object({ id: z.uuid(), note: reason })
+

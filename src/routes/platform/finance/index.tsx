@@ -29,6 +29,7 @@ import { AddPurchaseDialog } from '@/components/platform/finance/purchase-dialog
 import { FeeRulesTab } from '@/components/platform/finance/fee-rules-tab'
 import { InventoryTab } from '@/components/platform/finance/inventory-tab'
 import { JournalTab } from '@/components/platform/finance/journal-tab'
+import { MetaAccountsTab } from '@/components/platform/finance/meta-accounts-tab'
 import { RecordSaleDialog } from '@/components/platform/finance/sale-dialog'
 import { SalesTable } from '@/components/platform/finance/sales-table'
 import { SourceDialog } from '@/components/platform/finance/source-dialog'
@@ -102,11 +103,12 @@ function PlatformFinancePage() {
       </PageHeader>
 
       <Tabs defaultValue="stock">
-        {/* Six tabs don't fit a phone: the bar scrolls inside itself instead
+        {/* Seven tabs don't fit a phone: the bar scrolls inside itself instead
             of pushing the page sideways (same as the ad account page). */}
         <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="stock">USD Stock</TabsTrigger>
           <TabsTrigger value="inventory">Inventory (FIFO)</TabsTrigger>
+          <TabsTrigger value="meta">Meta Accounts</TabsTrigger>
           <TabsTrigger value="sources">Source Summary</TabsTrigger>
           <TabsTrigger value="agencies">Agency Summary</TabsTrigger>
           <TabsTrigger value="journal">Journal</TabsTrigger>
@@ -118,6 +120,9 @@ function PlatformFinancePage() {
         </TabsContent>
         <TabsContent value="inventory" className="space-y-6">
           <InventoryTab />
+        </TabsContent>
+        <TabsContent value="meta" className="space-y-6">
+          <MetaAccountsTab />
         </TabsContent>
         <TabsContent value="sources" className="space-y-6">
           <SourcesTab />
