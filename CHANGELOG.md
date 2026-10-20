@@ -9,7 +9,7 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 ## 2026-10-20
 
 **Platform finance v2: Milestone 2 — double-entry journal (migrations 000061,
-000062; staging: applied; production: NOT YET).** New `gl_accounts` (chart of
+000062; staging: applied; production: applied 2026-10-20 with 000060 via `supabase db push`).** New `gl_accounts` (chart of
 accounts: Bank & cash, USD inventory, Agency receivables, Meta prepaid,
 payables, Opening equity, Revenue, Meta service cost, Other outflows, FX
 difference), `journal_entries`, `journal_lines`. BDT is the booking currency;
@@ -30,7 +30,12 @@ earlier deletions were corrected with reversal entries, nothing deleted.
 Bank & cash shows net movement since v2 until opening bank balances are
 entered (Milestone 5). `npm test` 301/301; finance e2e covers the Journal
 tab (light/dark/phone). Staging note: CI e2e and local live tests share one
-staging inventory — don't run both at once (a CI payout landed mid-run).
+staging inventory — don't run both at once (a CI payout landed mid-run). Production after the push
+(read-only): 4 sources, 2 purchases $858.48 / ৳110,010.00, 0 sales —
+unchanged; journal = 2 opening entries, Dr 1200 ৳110,010 ($858.48) / Cr 3000,
+tying to the FIFO stock. The client ledger moved 264 → 266 rows (net
+৳100,771 → ৳119,921) from normal activity before the push (TXN-000284 limit
+approval +৳19,800, TXN-000285 payment −৳650), not the migrations.
 
 **Fixed (Finance v2, before it went live): a purchase's cost counted a USD
 fee twice — migration 000060.** Found while designing the Milestone 2
