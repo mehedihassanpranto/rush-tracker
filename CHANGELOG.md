@@ -9,7 +9,7 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 ## 2026-10-20
 
 **Platform finance v2: Milestone 3 — Meta accounts (migration 000063;
-staging: applied; production: NOT YET).** Each platform pool account has a
+staging: applied; production: applied 2026-10-21 via `supabase db push`).** Each platform pool account has a
 Meta billing mode (`ad_accounts.meta_billing_mode`, postpaid by default — not
 the client `segment`). The meta-sync cron gains a fourth job, `readPoolSpend()`
 (`meta-spend.service.ts`): refresh every pool account from its own Meta node,
@@ -31,7 +31,10 @@ for flagged spend. Live suite replays the golden dataset's Meta half through
 the RPCs (৳88,200.88 funding, ৳81,900.82 prepaid spend, ৳57,235.82 bill) plus
 overspend, a Meta drop, guards and the 1400/1200 tie-outs. Not built yet:
 returning or writing off unspent prepaid credit (Milestone 5). `npm test`
-310/310, e2e 40/40, build clean.
+310/310, e2e 40/40, build clean. Production before/after (read-only): 2 purchases
+৳110,010, 0 payouts, 2 journal entries, 274 ledger rows — unchanged; 34 pool
+accounts, all postpaid, each baselined from its current USD reading, 0 spend
+booked. The first spend posts at the next daily cron.
 
 **Platform finance v2: Milestone 2 — double-entry journal (migrations 000061,
 000062; staging: applied; production: applied 2026-10-20 with 000060 via `supabase db push`).** New `gl_accounts` (chart of
