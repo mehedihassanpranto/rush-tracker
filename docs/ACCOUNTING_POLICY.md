@@ -164,6 +164,9 @@ column is named `meta_billing_mode` so the two never get confused.
    | Meta bill paid | 5000 Service cost — Meta | 1200 (FIFO cost) |
    | Opening adjustment (USD used before v2) | 3000 | 1200 |
    | Other USD outflow | 5900 Other USD outflows | 1200 |
+   | Prepaid Meta funding | 1400 Meta prepaid | 1200 (FIFO cost) |
+   | Prepaid Meta spend | 5000 Service cost — Meta | 1400 (the account's lot FIFO cost) |
+   | Postpaid Meta spend | — no entry: no taka moves; a USD payable is tracked | |
    | Sale to an agency | 1300 Agency receivables | 4000 Revenue |
    | …its BDT received (v1: recorded paid at sale) | 1010 | 1300 |
    | Any reversal | the original's lines, sides swapped | |
@@ -171,4 +174,27 @@ column is named `meta_billing_mode` so the two never get confused.
 5. The trial balance is by **event date** (as of the end of a Dhaka business
    day). The USD inventory account must equal the FIFO stock over everything
    posted; the Journal tab shows that tie-out.
+
+## 9. Meta accounts in practice (Milestone 3, migration 000063)
+
+1. Every platform pool account has a **Meta billing mode**:
+   `META_POSTPAID` (the default) or `META_PREPAID`. Agency-owned accounts
+   are not tracked in the platform's book.
+2. **Spend is read from Meta once a day** (the meta-sync cron, 09:00 Dhaka)
+   and on "Read spend now": the change in Meta's `amount_spent` since the last
+   reading. Spend from before tracking began is history, not booked. USD
+   accounts only (a non-USD account is flagged).
+3. **A drop in Meta's figure** is flagged for review, never booked as negative
+   spend; tracking restarts from the new figure. Missed spend is entered by
+   hand with a reason.
+4. **Postpaid:** spend is owed to Meta in USD (spend − bills paid). It costs
+   nothing in the books until the bill is paid ("Meta bill paid", FIFO cost).
+5. **Prepaid:** funding loads dollars from inventory into the account's own
+   lots at FIFO cost. Spend uses those lots oldest-first. Spend beyond the
+   lots is recorded, flagged, and costs nothing until it is dealt with: the
+   prepaid asset never goes negative.
+6. Prepaid → postpaid is refused while prepaid credit is left; a funding
+   whose credit was spent can't be reversed before that spend is.
+7. **Not yet built (Milestone 5):** returning unspent prepaid credit to
+   inventory, or writing it off.
 

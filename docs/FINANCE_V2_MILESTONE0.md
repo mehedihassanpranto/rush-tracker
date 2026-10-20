@@ -141,7 +141,7 @@ The plan's roadmap graphic didn't come through, so this order is proposed.
 | --- | --- | --- |
 | 1 ✅ | fee_rules, supplier institution, batch columns, `inventory_allocations`, `financial_transactions`, platform audit; `post_usd_purchase` / `post_usd_outgoing` RPCs (row-locked, idempotent); backfill opening batches | Purchase dialog gets gross/net/fees with rule preview and Payoneer share; **Source Summary → Suppliers** (institution, rule coverage); new **Batches** tab; USD Stock shows FIFO beside weighted-average |
 | 2 ✅ | chart of accounts, journal entries/lines (balanced, immutable), posting map — 000061/000062 | **Journal** tab; trial balance; inventory tie-out |
-| 3 | `meta_billing_mode`, funded lots, spend events, settlement, exceptions | **Meta Accounts** tab: funded / spent / remaining / payable, overspend exceptions |
+| 3 ✅ | `meta_billing_mode`, funded lots, spend events, settlement, exceptions — 000063 | **Meta Accounts** tab: funded / spent / remaining / payable, overspend exceptions |
 | 4 | agency receivables and payments, selling rates, maker-checker, periods, reversals | **Receivables** tab; approval queue; period close; Agency Summary gains owed/paid |
 | 5 | reconciliation (wallets, inventory), profitability, client-safe statement, CSV with formula escaping | **Profitability** (incl. allocated-unspent line) and **Reconciliation** tabs; go-live checklist |
 

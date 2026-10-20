@@ -403,7 +403,7 @@ export const postUsdOutflowFn = createServerFn({ method: 'POST' })
       p_kind: data.kind,
       p_usd: data.usd_amount,
       p_event_at: data.event_at,
-      p_ad_account_id: data.kind === 'META_BILL_PAYMENT' ? data.ad_account_id : null,
+      p_ad_account_id: data.kind === 'OTHER' ? null : data.ad_account_id,
       p_idempotency_key: data.idempotency_key,
       p_notes: data.notes ?? null,
     })

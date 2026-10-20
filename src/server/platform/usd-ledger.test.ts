@@ -733,3 +733,230 @@ describe.skipIf(!creds)('Finance v2 FIFO inventory (000059)', () => {
     expect((await anon.rpc('gl_trial_balance', { p_as_of: 'infinity' })).error).not.toBeNull()
   })
 })
+
+/**
+ * Finance v2 Meta accounts (migration 000063): the golden dataset's Meta half
+ * through the real RPCs — prepaid account P funded and spent from its own
+ * lot, postpaid account Q read from Meta's amount_spent and settled by a bill
+ * payment at FIFO cost — plus a drop in Meta's figure, prepaid overspend and
+ * the mode-change guard. Same isolation as the block above: drain, post the
+ * golden batches, reverse everything after.
+ */
+describe.skipIf(!creds)('Finance v2 Meta accounts (000063)', () => {
+  let admin: SupabaseClient
+  let sourceId = ''
+  let drainId: string | null = null
+  let P = ''
+  let Q = ''
+  const outflows: Array<string> = []
+  const batches: Array<string> = []
+  const base = Date.now() + 2 * 60 * 60_000 // after the block above's future dates
+  const at = (minutes: number) => new Date(base + minutes * 60_000).toISOString()
+  const tag = `meta-${SUFFIX}`
+
+  const rpc = async (fn: string, args: Record<string, unknown>) => {
+    const { data, error } = await admin.rpc(fn, args)
+    if (error) throw new Error(error.message)
+    return data as Record<string, unknown>
+  }
+  const outflow = (kind: string, usd: number, account: string | null, minutes: number) =>
+    rpc('post_usd_outflow', {
+      p_actor: null, p_kind: kind, p_usd: usd, p_event_at: at(minutes),
+      p_ad_account_id: account, p_idempotency_key: null, p_notes: tag,
+    })
+  // Simulate the daily refresh writing Meta's figure, then the reading job.
+  async function reading(spent: Record<string, number>, minutes: number) {
+    for (const [id, amount] of Object.entries(spent)) {
+      const { error } = await admin
+        .from('ad_accounts')
+        .update({ meta_amount_spent: amount, meta_currency: 'USD', meta_refreshed_at: at(minutes) })
+        .eq('id', id)
+      if (error) throw new Error(error.message)
+    }
+    return rpc('record_meta_spend_readings', { p_actor: null })
+  }
+  async function position(id: string) {
+    const { data, error } = await admin.from('meta_account_positions').select('*').eq('ad_account_id', id).single()
+    if (error) throw new Error(error.message)
+    const f = (k: string) => dec(data[k] as number).toFixed(2)
+    return { spent: f('spent_usd'), funded: f('funded_usd'), left: f('prepaid_left_usd'), leftBdt: f('prepaid_left_bdt'), paid: f('paid_usd'), owed: f('owed_usd') }
+  }
+  async function lastSpend(id: string) {
+    const { data, error } = await admin
+      .from('meta_spend_events')
+      .select('*')
+      .eq('ad_account_id', id)
+      .eq('status', 'POSTED')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+    if (error) throw new Error(error.message)
+    return data as Record<string, unknown>
+  }
+
+  beforeAll(async () => {
+    admin = createClient(creds!.url, creds!.serviceKey, noSession)
+    const { data: src, error } = await admin
+      .from('usd_sources')
+      .insert({ name: `ZZ-META-${SUFFIX}`, payment_method: 'Binance', receiving_institution: 'DBBL' })
+      .select('id')
+      .single()
+    if (error) throw new Error(error.message)
+    sourceId = src.id
+
+    const { data: left } = await admin.from('usd_fifo_summary').select('left_usd').single()
+    if (dec(left!.left_usd).gt(0)) {
+      const d = await rpc('post_usd_outflow', {
+        p_actor: null, p_kind: 'OTHER', p_usd: dec(left!.left_usd).toNumber(), p_event_at: at(0),
+        p_ad_account_id: null, p_idempotency_key: `meta-drain-${SUFFIX}`, p_notes: tag,
+      })
+      drainId = d.id as string
+    }
+
+    const g = GOLDEN.batches
+    const binance = (amount: number) =>
+      resolveFeeRule(defaultFeeRules('2020-01-01'), { channel: 'BINANCE', from_institution: 'Binance', to_institution: 'Binance', date: '2026-10-20', transfer_amount: amount })
+    const npsb = resolveFeeRule(defaultFeeRules('2020-01-01'), { channel: 'NPSB', from_institution: 'DBBL', to_institution: 'BRAC', date: '2026-10-20', transfer_amount: 1 })
+    for (const [i, [gross, principal, fees]] of ([
+      [1000, g.B1.principal, [binance(1000)]],
+      [500, g.B2.principal, [manualFee({ currency: 'USD', total: 10, your_share: 4, reason: 'Payoneer statement', gross: 500 }), npsb]],
+      [300, g.B3.principal, [binance(300)]],
+    ] as const).entries()) {
+      const b = await rpc('post_usd_purchase', {
+        p_actor: null, p_source_id: sourceId, p_gross_usd: gross, p_bdt_principal: Number(principal),
+        p_fees: fees, p_purchased_at: at(1 + i), p_method: null, p_external_reference: null, p_notes: tag,
+      })
+      batches.push(b.id as string)
+    }
+
+    const { data: accts, error: aErr } = await admin
+      .from('ad_accounts')
+      .insert([
+        { name: `ZZ P prepaid ${SUFFIX}`, platform: 'META', is_platform: true, organization_id: null },
+        { name: `ZZ Q postpaid ${SUFFIX}`, platform: 'META', is_platform: true, organization_id: null },
+      ])
+      .select('id, name')
+    if (aErr) throw new Error(aErr.message)
+    P = accts!.find((a) => a.name.includes(' P '))!.id
+    Q = accts!.find((a) => a.name.includes(' Q '))!.id
+  }, 90_000)
+
+  afterAll(async () => {
+    if (!admin) return
+    const { data: spends } = await admin
+      .from('meta_spend_events')
+      .select('id')
+      .in('ad_account_id', [P, Q].filter(Boolean))
+      .eq('status', 'POSTED')
+    for (const s of spends ?? []) {
+      await admin.rpc('reverse_meta_spend', { p_actor: null, p_event: s.id, p_reason: 'test cleanup' })
+    }
+    for (const id of [...outflows].reverse()) {
+      await admin.rpc('reverse_usd_outflow', { p_actor: null, p_outflow_id: id, p_reason: 'test cleanup' })
+    }
+    for (const id of batches) {
+      await admin.rpc('reverse_usd_purchase', { p_actor: null, p_purchase_id: id, p_reason: 'test cleanup' })
+    }
+    if (drainId) await admin.rpc('reverse_usd_outflow', { p_actor: null, p_outflow_id: drainId, p_reason: 'test cleanup' })
+    const { data: open } = await admin.from('meta_spend_exceptions').select('id').in('ad_account_id', [P, Q].filter(Boolean)).is('resolved_at', null)
+    for (const x of open ?? []) {
+      await admin.rpc('resolve_meta_spend_exception', { p_actor: null, p_id: x.id, p_note: 'test cleanup' })
+    }
+    if (P || Q) await admin.from('ad_accounts').delete().in('id', [P, Q].filter(Boolean))
+    if (sourceId) await admin.from('usd_sources').update({ is_active: false }).eq('id', sourceId)
+  }, 90_000)
+
+  it('pool accounts start postpaid; only a prepaid account can be funded', async () => {
+    expect((await position(P)).owed).toBe('0.00')
+    await expect(outflow('META_PREPAID_FUNDING', 700, P, 10)).rejects.toThrow(/^NOT_PREPAID/)
+    expect((await rpc('set_meta_billing_mode', { p_actor: null, p_account: P, p_mode: 'META_PREPAID' })).changed).toBe(true)
+  })
+
+  it('funding P draws FIFO from inventory into P’s own lot (golden ৳88,200.88)', async () => {
+    const f = await outflow('META_PREPAID_FUNDING', 700, P, 10)
+    outflows.push(f.id as string)
+    expect(dec(f.bdt_cost as number).toFixed(2)).toBe(GOLDEN.prepaidFunding.bdt)
+    expect(await position(P)).toMatchObject({ funded: '700.00', left: '700.00', leftBdt: GOLDEN.prepaidFunding.bdt })
+  })
+
+  it('reads spend from Meta: first reading is the baseline, then the change is spend', async () => {
+    const first = await reading({ [P]: 0, [Q]: 1000 }, 20)
+    expect(first.baselined).toBeGreaterThanOrEqual(2)
+    expect((await position(Q)).spent).toBe('0.00') // spend before tracking is not booked
+
+    await reading({ [P]: 650, [Q]: 1450 }, 30)
+    // Postpaid Q: owed to Meta in USD, no cost yet.
+    expect(await position(Q)).toMatchObject({ spent: '450.00', owed: '450.00', paid: '0.00' })
+    expect(dec((await lastSpend(Q)).bdt_cost as number).toFixed(2)).toBe('0.00')
+    // Prepaid P: consumed its own lot (golden ৳81,900.82), $50 / ৳6,300.06 left.
+    const p = await lastSpend(P)
+    expect(dec(p.bdt_cost as number).toFixed(2)).toBe(GOLDEN.prepaidSpend.bdt)
+    expect(await position(P)).toMatchObject({ spent: '650.00', left: '50.00', leftBdt: GOLDEN.prepaidSpend.left_bdt })
+  })
+
+  it('paying Q’s bill settles what is owed at FIFO cost (golden ৳57,235.82)', async () => {
+    const bill = await outflow('META_BILL_PAYMENT', 450, Q, 40)
+    outflows.push(bill.id as string)
+    expect(dec(bill.bdt_cost as number).toFixed(2)).toBe(GOLDEN.postpaidSettlement.bdt)
+    expect(await position(Q)).toMatchObject({ paid: '450.00', owed: '0.00' })
+    const { data: inv } = await admin.from('usd_fifo_summary').select('left_usd, left_bdt').single()
+    expect(dec(inv!.left_bdt).toFixed(2)).toBe(GOLDEN.closingInventory.bdt)
+  })
+
+  it('journal: prepaid funding and spend are posted; postpaid spend is not; cost = golden', async () => {
+    const lines = async (type: string, id: string) => {
+      const { data } = await admin
+        .from('journal_entries')
+        .select('lines:journal_lines(account_code, debit_bdt, credit_bdt)')
+        .eq('source_type', type)
+        .eq('source_id', id)
+        .eq('is_reversal', false)
+      return (data ?? []).flatMap((e) => (e.lines as Array<{ account_code: string; debit_bdt: number; credit_bdt: number }>)
+        .map((l) => [l.account_code, dec(l.debit_bdt).toFixed(2), dec(l.credit_bdt).toFixed(2)])).sort()
+    }
+    expect(await lines('USD_OUTFLOW', outflows[0])).toEqual([['1200', '0.00', '88200.88'], ['1400', '88200.88', '0.00']])
+    expect(await lines('META_SPEND', (await lastSpend(P)).id as string)).toEqual([['1400', '0.00', '81900.82'], ['5000', '81900.82', '0.00']])
+    expect(await lines('META_SPEND', (await lastSpend(Q)).id as string)).toEqual([])
+    // Cost recognised = prepaid spend + the postpaid bill: the golden figure.
+    expect(dec(GOLDEN.prepaidSpend.bdt).plus(GOLDEN.postpaidSettlement.bdt).toFixed(2)).toBe(GOLDEN.grossProfit.cost_bdt)
+  })
+
+  it('guards: prepaid → postpaid refused while credit is left; spent funding cannot be reversed', async () => {
+    await expect(rpc('set_meta_billing_mode', { p_actor: null, p_account: P, p_mode: 'META_POSTPAID' })).rejects.toThrow(/^PREPAID_LEFT/)
+    await expect(rpc('reverse_usd_outflow', { p_actor: null, p_outflow_id: outflows[0], p_reason: 'x' })).rejects.toThrow(/^LOT_IN_USE/)
+  })
+
+  it('prepaid overspend: the lot covers what it can, the rest is flagged, never negative', async () => {
+    await reading({ [P]: 730 }, 50)
+    const e = await lastSpend(P)
+    expect([dec(e.covered_usd as number).toFixed(2), dec(e.unfunded_usd as number).toFixed(2), dec(e.bdt_cost as number).toFixed(2)])
+      .toEqual(['50.00', '30.00', GOLDEN.prepaidSpend.left_bdt])
+    expect(await position(P)).toMatchObject({ left: '0.00', leftBdt: '0.00' })
+    const { data: x } = await admin.from('meta_spend_exceptions').select('kind, usd').eq('ad_account_id', P).is('resolved_at', null)
+    expect(x!.map((r) => [r.kind, dec(r.usd).toFixed(2)])).toEqual([['UNFUNDED_SPEND', '30.00']])
+  })
+
+  it('a drop in Meta’s figure is flagged, not booked; tracking restarts from it', async () => {
+    await reading({ [Q]: 1400 }, 60)
+    expect((await position(Q)).spent).toBe('450.00')
+    const { data: x } = await admin.from('meta_spend_exceptions').select('kind, usd').eq('ad_account_id', Q).is('resolved_at', null)
+    expect(x!.map((r) => [r.kind, dec(r.usd).toFixed(2)])).toEqual([['NEGATIVE_CHANGE', '50.00']])
+    await reading({ [Q]: 1410 }, 70)
+    expect(await position(Q)).toMatchObject({ spent: '460.00', owed: '10.00' })
+  })
+
+  it('reversing prepaid spend puts it back in the lot; the books tie to lots and FIFO', async () => {
+    const e = await lastSpend(P)
+    await rpc('reverse_meta_spend', { p_actor: null, p_event: e.id, p_reason: 'test' })
+    expect(await position(P)).toMatchObject({ left: '50.00', leftBdt: GOLDEN.prepaidSpend.left_bdt })
+
+    const { data: tb } = await admin.rpc('gl_trial_balance', { p_as_of: 'infinity' })
+    const rows = tb as Array<{ code: string; balance_bdt: number; debit_bdt: number; credit_bdt: number }>
+    const bal = (c: string) => dec(rows.find((r) => r.code === c)!.balance_bdt).toFixed(2)
+    const { data: lots } = await admin.from('meta_prepaid_lot_balances').select('left_bdt').eq('status', 'POSTED')
+    expect(bal('1400')).toBe((lots ?? []).reduce((s, l) => s.plus(l.left_bdt), dec(0)).toFixed(2))
+    const { data: inv } = await admin.from('usd_fifo_summary').select('left_bdt').single()
+    expect(bal('1200')).toBe(dec(inv!.left_bdt).toFixed(2))
+    expect(rows.reduce((s, r) => s.plus(r.debit_bdt), dec(0)).toFixed(2)).toBe(rows.reduce((s, r) => s.plus(r.credit_bdt), dec(0)).toFixed(2))
+  })
+})

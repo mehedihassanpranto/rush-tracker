@@ -160,6 +160,9 @@ short; detail belongs in the changelog.
   The journal (000061) is posted by triggers on `usd_purchases` /
   `usd_outflows` / `usd_sales` — never post it from app code; a new money
   event needs its own trigger + posting-map row in ACCOUNTING_POLICY.md §8.
+  Meta spend (000063) is the change in `meta_amount_spent` between readings
+  (`record_meta_spend_readings()`, run by the cron) — never a spend cap, never
+  booked negative; pool accounts only.
 - **Client segments**: `prepaid` (pays full cost up front), `partial` (pays
   part, rest becomes due), `postpaid` (all due). Segment is read server-side and
   snapshotted on each request.
