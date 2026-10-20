@@ -9,7 +9,7 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 ## 2026-10-20
 
 **Platform finance v2: Milestone 1 — FIFO inventory with transfer fees
-(migration 000059 — staging: applied 2026-10-20; production: awaiting owner OK).** Owner accepted
+(migration 000059 — staging: applied 2026-10-20; production: applied 2026-10-20 by the owner via `supabase db push`).** Owner accepted
 every Milestone 0 suggestion ("go with your suggestions"); recorded in
 `docs/ACCOUNTING_POLICY.md` and the Milestone 0 doc. Key model decision:
 dollars leave the platform's stock when Meta's bill is paid, not when a sale
@@ -38,7 +38,11 @@ FIFO payout → reversals, light/dark/phone, zero console errors). Browser check
 caught the five-tab bar pushing the page 176px sideways at 390px; it now
 scrolls inside itself like the ad-account page's. Staging: applied via the
 Management API (CLI stays linked to production); `npm test` 297/297, e2e
-40/40, typecheck and build clean.
+40/40, typecheck and build clean. Production before/after (read-only snapshots):
+4 sources, 2 purchases $858.48 / ৳110,010.00, 0 sales, 264 ledger rows net
+৳100,771.00 — identical after; the 2 purchases are now opening batches #1
+($390.28 / ৳50,000) and #2 ($468.20 / ৳60,010), FIFO stock $858.48 until the
+owner sets the opening stock.
 
 **Platform finance v2: Milestone 0 (mapping + engine, no migration).**
 Owner supplied "Financial Dashboard Full Plan v2" (FIFO batches, transfer
