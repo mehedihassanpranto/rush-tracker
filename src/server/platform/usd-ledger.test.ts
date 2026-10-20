@@ -960,3 +960,198 @@ describe.skipIf(!creds)('Finance v2 Meta accounts (000063)', () => {
     expect(rows.reduce((s, r) => s.plus(r.debit_bdt), dec(0)).toFixed(2)).toBe(rows.reduce((s, r) => s.plus(r.credit_bdt), dec(0)).toFixed(2))
   })
 })
+
+/**
+ * Finance v2 agency billing (migration 000064): a throwaway agency with a
+ * client on a granted POOL account. Approving its limit requests must bill it
+ * at its rate (or wait for one); payments settle what is owed and turn the
+ * rest into an advance that later charges use up; guards on reversals; an
+ * opening balance; an agency-owned account is never billed; and a closed month
+ * refuses postings. Everything is reversed after; the org and its accounts are
+ * deleted (charges and payments survive with a NULL org, as designed).
+ */
+describe.skipIf(!creds)('Finance v2 agency billing (000064)', () => {
+  let admin: SupabaseClient
+  let org = ''
+  let client = ''
+  let pool = ''
+  let own = ''
+  let sourceId = ''
+  const requests: Array<string> = []
+  const payments: Array<string> = []
+  const base = Date.now() + 4 * 60 * 60_000
+  const at = (minutes: number) => new Date(base + minutes * 60_000).toISOString()
+  const dhakaDay = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' })
+  // A month that has certainly ended and that nothing else posts into.
+  const PAST_MONTH = '2025-01-01'
+
+  const rpc = async (fn: string, args: Record<string, unknown>) => {
+    const { data, error } = await admin.rpc(fn, args)
+    if (error) throw new Error(error.message)
+    return data as Record<string, unknown>
+  }
+  async function approve(account: string, usd: number, minutes: number) {
+    const { data: asg } = await admin.from('ad_account_assignments').select('id').eq('ad_account_id', account).eq('status', 'ACTIVE').single()
+    const { data: lr, error } = await admin
+      .from('limit_requests')
+      .insert({
+        client_id: client, ad_account_id: account, organization_id: org, assignment_id: asg!.id,
+        opening_balance_usd: 0, requested_amount_usd: usd, default_usd_rate: 120,
+        expected_new_limit_usd: usd, status: 'PENDING', segment: 'postpaid', total_cost_bdt: usd * 120,
+      })
+      .select('id')
+      .single()
+    if (error) throw new Error(error.message)
+    requests.push(lr.id)
+    const upd = await admin
+      .from('limit_requests')
+      .update({ status: 'APPROVED', approved_amount_usd: usd, approved_at: at(minutes) })
+      .eq('id', lr.id)
+    if (upd.error) throw new Error(upd.error.message)
+    const { data: charge } = await admin.from('agency_charges').select('*').eq('limit_request_id', lr.id).maybeSingle()
+    return charge as Record<string, unknown> | null
+  }
+  async function balance() {
+    const b = await rpc('agency_balance', { p_org: org })
+    return { owed: dec(b.owed_bdt as number).toFixed(2), advance: dec(b.advance_bdt as number).toFixed(2) }
+  }
+  const pay = async (bdt: number, minutes: number) => {
+    const p = await rpc('record_agency_payment', {
+      p_actor: null, p_org: org, p_bdt: bdt, p_received_at: at(minutes), p_method: 'DBBL',
+      p_is_internal: false, p_reference: null, p_notes: null, p_key: `ab-${SUFFIX}-${Math.random()}`,
+    })
+    payments.push(p.id as string)
+    return p
+  }
+
+  beforeAll(async () => {
+    admin = createClient(creds!.url, creds!.serviceKey, noSession)
+    const { data: o, error: oErr } = await admin.from('organizations').insert({ name: `ZZ AB ${SUFFIX}`, subscription_status: 'active' }).select('id').single()
+    if (oErr) throw new Error(oErr.message)
+    org = o.id
+    const { data: c, error: cErr } = await admin.from('clients').insert({ name: `ZZ AB client ${SUFFIX}`, organization_id: org, segment: 'postpaid' }).select('id').single()
+    if (cErr) throw new Error(cErr.message)
+    client = c.id
+    const { data: a, error: aErr } = await admin
+      .from('ad_accounts')
+      .insert([
+        { name: `ZZ AB pool ${SUFFIX}`, platform: 'META', status: 'ACTIVE', is_platform: true, organization_id: null, usd_rate: 0 },
+        { name: `ZZ AB own ${SUFFIX}`, platform: 'META', status: 'ACTIVE', is_platform: false, organization_id: org, usd_rate: 0 },
+      ])
+      .select('id, name')
+    if (aErr) throw new Error(aErr.message)
+    pool = a!.find((r) => r.name.includes(' pool '))!.id
+    own = a!.find((r) => r.name.includes(' own '))!.id
+    const g = await admin.from('platform_account_grants').insert({ ad_account_id: pool, organization_id: org })
+    if (g.error) throw new Error(g.error.message)
+    const s = await admin.from('ad_account_assignments').insert([
+      { ad_account_id: pool, client_id: client, opening_limit_usd: 0, organization_id: org },
+      { ad_account_id: own, client_id: client, opening_limit_usd: 0, organization_id: org },
+    ])
+    if (s.error) throw new Error(s.error.message)
+    const { data: src } = await admin.from('usd_sources').insert({ name: `ZZ-AB-${SUFFIX}`, payment_method: 'Binance', receiving_institution: 'DBBL' }).select('id').single()
+    sourceId = src!.id
+  }, 90_000)
+
+  afterAll(async () => {
+    if (!admin) return
+    await admin.rpc('reopen_finance_period', { p_actor: null, p_month: PAST_MONTH, p_reason: 'test cleanup' })
+    for (const id of [...payments].reverse()) {
+      await admin.rpc('reverse_agency_payment', { p_actor: null, p_id: id, p_reason: 'test cleanup' })
+    }
+    const { data: charges } = await admin.from('agency_charges').select('id').eq('organization_id', org).neq('status', 'REVERSED').order('event_at', { ascending: false })
+    for (const c of charges ?? []) {
+      await admin.rpc('reverse_agency_charge', { p_actor: null, p_id: c.id, p_reason: 'test cleanup' })
+    }
+    if (requests.length) await admin.from('limit_requests').delete().in('id', requests)
+    await admin.from('audit_logs').delete().eq('organization_id', org)
+    await admin.from('ad_account_assignments').delete().in('ad_account_id', [pool, own].filter(Boolean))
+    if (pool) await admin.from('platform_account_grants').delete().eq('ad_account_id', pool)
+    await admin.from('ad_accounts').delete().in('id', [pool, own].filter(Boolean))
+    if (client) await admin.from('clients').delete().eq('id', client)
+    if (org) await admin.from('organizations').delete().eq('id', org)
+    if (sourceId) await admin.from('usd_sources').update({ is_active: false }).eq('id', sourceId)
+  }, 90_000)
+
+  it('an approval with no rate waits; setting the rate bills it and posts the journal', async () => {
+    const c = await approve(pool, 100, 10)
+    expect(c).toMatchObject({ status: 'PENDING_RATE', bdt_amount: null })
+    expect(await balance()).toEqual({ owed: '0.00', advance: '0.00' })
+
+    const r = await rpc('set_agency_rate', { p_actor: null, p_org: org, p_rate: 130, p_from: dhakaDay(at(10)), p_note: null })
+    expect(r.priced).toBe(1)
+    expect(await balance()).toEqual({ owed: '13000.00', advance: '0.00' })
+    const { data: je } = await admin
+      .from('journal_entries')
+      .select('lines:journal_lines(account_code, debit_bdt, credit_bdt, party_org_id)')
+      .eq('source_type', 'AGENCY_CHARGE').eq('source_id', c!.id as string).single()
+    const lines = (je!.lines as Array<{ account_code: string; debit_bdt: number; credit_bdt: number; party_org_id: string | null }>)
+      .map((l) => [l.account_code, dec(l.debit_bdt).toFixed(2), dec(l.credit_bdt).toFixed(2), l.party_org_id]).sort()
+    expect(lines).toEqual([['1300', '13000.00', '0.00', org], ['4000', '0.00', '13000.00', null]])
+  })
+
+  it('an approval on the agency’s own account is never billed', async () => {
+    expect(await approve(own, 50, 15)).toBeNull()
+  })
+
+  it('a payment settles what is owed; the rest is an advance the next approval uses', async () => {
+    const p = await pay(20000, 20)
+    expect([dec(p.applied_bdt as number).toFixed(2), dec(p.advance_bdt as number).toFixed(2)]).toEqual(['13000.00', '7000.00'])
+    expect(await balance()).toEqual({ owed: '0.00', advance: '7000.00' })
+
+    const c = await approve(pool, 40, 30) // 40 × 130 = 5,200, paid from the advance
+    expect(dec(c!.bdt_amount as number).toFixed(2)).toBe('5200.00')
+    expect(await balance()).toEqual({ owed: '0.00', advance: '1800.00' })
+    const { count } = await admin.from('journal_entries').select('id', { count: 'exact', head: true })
+      .eq('source_type', 'AGENCY_ADVANCE_APPLIED').eq('source_id', c!.id as string)
+    expect(count).toBe(1)
+  })
+
+  it('a payment whose advance was used can’t be reversed until that charge is', async () => {
+    await expect(rpc('reverse_agency_payment', { p_actor: null, p_id: payments[0], p_reason: 'x' })).rejects.toThrow(/^PAYMENT_APPLIED/)
+    const { data: c } = await admin.from('agency_charges').select('id').eq('organization_id', org).eq('usd_amount', 40).single()
+    await rpc('reverse_agency_charge', { p_actor: null, p_id: c!.id, p_reason: 'test' })
+    expect(await balance()).toEqual({ owed: '0.00', advance: '7000.00' })
+    await rpc('reverse_agency_payment', { p_actor: null, p_id: payments.shift()!, p_reason: 'test' })
+    expect(await balance()).toEqual({ owed: '13000.00', advance: '0.00' })
+  })
+
+  it('a new rate applies from its start date; earlier charges keep theirs', async () => {
+    await rpc('set_agency_rate', { p_actor: null, p_org: org, p_rate: 135, p_from: dhakaDay(at(3 * 24 * 60)), p_note: null })
+    const later = await approve(pool, 10, 4 * 24 * 60)
+    expect([dec(later!.rate as number).toFixed(2), dec(later!.bdt_amount as number).toFixed(2)]).toEqual(['135.00', '1350.00'])
+    const { data: first } = await admin.from('agency_charges').select('rate').eq('organization_id', org).eq('usd_amount', 100).single()
+    expect(dec(first!.rate).toFixed(2)).toBe('130.00')
+    await expect(rpc('set_agency_rate', { p_actor: null, p_org: org, p_rate: 140, p_from: dhakaDay(at(3 * 24 * 60)), p_note: null })).rejects.toThrow(/^DUPLICATE/)
+  })
+
+  it('opening balance: owed before go-live, once per agency, not revenue', async () => {
+    const before = await balance()
+    await rpc('record_agency_opening_balance', { p_actor: null, p_org: org, p_bdt: 5000, p_as_of: at(5), p_notes: 'test' })
+    expect((await balance()).owed).toBe(dec(before.owed).plus(5000).toFixed(2))
+    await expect(rpc('record_agency_opening_balance', { p_actor: null, p_org: org, p_bdt: 1, p_as_of: at(5), p_notes: 'x' })).rejects.toThrow(/^DUPLICATE/)
+    const { data: c } = await admin.from('agency_charges').select('id').eq('organization_id', org).eq('kind', 'OPENING_BALANCE').single()
+    const { data: je } = await admin.from('journal_entries').select('lines:journal_lines(account_code)').eq('source_type', 'AGENCY_CHARGE').eq('source_id', c!.id).single()
+    expect((je!.lines as Array<{ account_code: string }>).map((l) => l.account_code).sort()).toEqual(['1300', '3000'])
+  })
+
+  it('the billing summary agrees with the journal', async () => {
+    const { data: s } = await admin.from('agency_billing_summary').select('*').eq('organization_id', org).single()
+    const b = await balance()
+    expect([dec(s!.owed_bdt).toFixed(2), dec(s!.advance_bdt).toFixed(2)]).toEqual([b.owed, b.advance])
+    expect(dec(s!.current_rate).toFixed(2)).toBe('130.00') // 135 starts in the future
+  })
+
+  it('a closed month refuses postings dated in it; the current month can’t be closed; reopening needs a reason', async () => {
+    const now = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' }).slice(0, 7) + '-01'
+    await expect(rpc('close_finance_period', { p_actor: null, p_month: now })).rejects.toThrow(/^PERIOD_NOT_OVER/)
+    await rpc('close_finance_period', { p_actor: null, p_month: PAST_MONTH })
+    // A payment has no backdating guard of its own, so this is the period check.
+    await expect(rpc('record_agency_payment', {
+      p_actor: null, p_org: org, p_bdt: 100, p_received_at: '2025-01-15T10:00:00+06:00', p_method: null,
+      p_is_internal: false, p_reference: null, p_notes: null, p_key: `ab-closed-${SUFFIX}`,
+    })).rejects.toThrow(/^PERIOD_CLOSED/)
+    await expect(rpc('reopen_finance_period', { p_actor: null, p_month: PAST_MONTH, p_reason: ' ' })).rejects.toThrow(/^REASON_REQUIRED/)
+    await rpc('reopen_finance_period', { p_actor: null, p_month: PAST_MONTH, p_reason: 'test' })
+  })
+})

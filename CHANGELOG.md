@@ -6,6 +6,46 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-10-21
+
+**Platform finance v2: Milestone 4 — agency billing, payments, advances,
+periods (migration 000064; staging: applied; production: applied 2026-10-21 via `supabase db push`).** Owner
+decisions: bill each approval; bill xRush Agency too (internal rate); start
+at go-live with one opening balance per agency. Facts that drove it
+(production, read-only): 157 approved pool limits so far — xRush 155 ($21,380),
+Arrow Solutions 2 ($330) — and no agency sale ever recorded. New
+`agency_usd_rates` (effective-dated), `agency_charges` (one per approved pool
+limit, created by a trigger on `limit_requests` → APPROVED, PENDING_RATE until
+a rate is in force; never blocks an approval — failures go to
+`platform_finance_audit`), `agency_payments` (split at posting into settled +
+advance), `finance_periods`. Journal lines gain `party_org_id`, so receivables
+(1300) and advances (2300) are per agency; an advance is applied to the next
+charges automatically. Guards: a payment whose advance paid later charges
+can't be reversed first; one opening balance per agency; duplicate rate dates
+refused. Periods: `journal_post` / `journal_reverse` refuse an event in a
+closed month; only ended months close, not while charges wait for a rate;
+reopening needs a reason. UI: "Agency Summary" → **Agencies** (rate, billed,
+paid, owed, advance, waiting-for-rate; Payment / Rate / View with each
+agency's charges, payments, reversals and opening balance); "Record agency
+sale" → **Record agency payment** (shows how a payment will split); **Months**
+card on the Journal tab. Removed the orphaned sale dialog and allocation
+history table. Shared `PageHeader` actions now wrap on a phone (the longer
+header button pushed the page 176px sideways — caught by the e2e phone check).
+`npm test` 318/318 (new live suite: pending rate → priced, own account never
+billed, payment → advance → applied, reversal guards, rate change, opening
+balance, summary = journal, closed month), finance e2e passes, build clean. Production before/after
+(read-only): 2 purchases ৳110,010, 0 payouts, 2 journal entries, 157 approved
+limits, 274 ledger rows net ৳122,121 — unchanged; 0 agency charges (billing
+starts at go-live, as decided). First CI e2e run failed twice over, neither from the
+billing code: (1) the Journal tab listed entries by event date, so the live
+tests' future-dated entries pushed today's postings off the 100-row list — it
+now lists the most recently posted first (better for the owner too); (2) a
+CI run cancelled midway left the Meta-token "already alerted" state on staging,
+so the next run's monitoring.spec "alerts once" saw 0 alerts — e2e setup now
+clears that state before a run, not only after.
+
+---
+
 ## 2026-10-20
 
 **Platform finance v2: Milestone 3 — Meta accounts (migration 000063;

@@ -1,16 +1,14 @@
 import { useState } from 'react'
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { Landmark, Plus, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
-  getAgencyUsdSummaryFn,
   getSourceWiseStockFn,
   getTodayLimitApprovalsFn,
   getUsdStockSummaryFn,
-  listAgencyLimitApprovalsFn,
   listUsdPurchasesFn,
   listUsdSalesFn,
   listUsdSourcesFn,
@@ -18,19 +16,13 @@ import {
 } from '@/server/platform/finance.fns'
 import { bankName } from '@/schemas/usd-inventory'
 import { dec, formatBdt, formatUsd } from '@/lib/money/money'
-import { mergeAllocationHistory } from '@/lib/finance/agency-allocations'
-import {
-  AllocationHistoryTable,
-  limitToHistoryRow,
-  saleToHistoryRow,
-} from '@/components/platform/finance/allocation-history-table'
 import { fmtDateTime, fmtRate } from '@/components/platform/finance/format'
 import { AddPurchaseDialog } from '@/components/platform/finance/purchase-dialog'
 import { FeeRulesTab } from '@/components/platform/finance/fee-rules-tab'
 import { InventoryTab } from '@/components/platform/finance/inventory-tab'
 import { JournalTab } from '@/components/platform/finance/journal-tab'
 import { MetaAccountsTab } from '@/components/platform/finance/meta-accounts-tab'
-import { RecordSaleDialog } from '@/components/platform/finance/sale-dialog'
+import { AgencyBillingTab, AgencyPaymentDialog } from '@/components/platform/finance/agency-billing-tab'
 import { SalesTable } from '@/components/platform/finance/sales-table'
 import { SourceDialog } from '@/components/platform/finance/source-dialog'
 import type { EditableSource } from '@/components/platform/finance/source-dialog'
@@ -78,27 +70,27 @@ function signClass(value: string | null): string {
 
 function PlatformFinancePage() {
   const [purchaseOpen, setPurchaseOpen] = useState(false)
-  const [saleOpen, setSaleOpen] = useState(false)
-  const [salePreset, setSalePreset] = useState<string | undefined>(undefined)
+  const [paymentOpen, setPaymentOpen] = useState(false)
+  const [paymentPreset, setPaymentPreset] = useState<string | undefined>(undefined)
 
-  function openSale(organizationId?: string) {
-    setSalePreset(organizationId)
-    setSaleOpen(true)
+  function openPayment(organizationId?: string) {
+    setPaymentPreset(organizationId)
+    setPaymentOpen(true)
   }
 
   return (
     <div>
       <PageHeader
         title="Finance & Accounts"
-        description="The platform's USD stock — bought from sources, sold to agencies."
+        description="The platform's USD stock, Meta accounts, and what agencies owe it."
       >
         <Button variant="outline" onClick={() => setPurchaseOpen(true)}>
           <Plus className="size-4" />
           Add USD purchase
         </Button>
-        <Button onClick={() => openSale()}>
+        <Button onClick={() => openPayment()}>
           <Plus className="size-4" />
-          Record agency sale
+          Record agency payment
         </Button>
       </PageHeader>
 
@@ -110,7 +102,7 @@ function PlatformFinancePage() {
           <TabsTrigger value="inventory">Inventory (FIFO)</TabsTrigger>
           <TabsTrigger value="meta">Meta Accounts</TabsTrigger>
           <TabsTrigger value="sources">Source Summary</TabsTrigger>
-          <TabsTrigger value="agencies">Agency Summary</TabsTrigger>
+          <TabsTrigger value="agencies">Agencies</TabsTrigger>
           <TabsTrigger value="journal">Journal</TabsTrigger>
           <TabsTrigger value="fees">Fee Rules</TabsTrigger>
         </TabsList>
@@ -128,7 +120,7 @@ function PlatformFinancePage() {
           <SourcesTab />
         </TabsContent>
         <TabsContent value="agencies" className="space-y-6">
-          <AgenciesTab onRecordSale={openSale} />
+          <AgencyBillingTab onRecordPayment={openPayment} />
         </TabsContent>
         <TabsContent value="journal" className="space-y-6">
           <JournalTab />
@@ -139,10 +131,10 @@ function PlatformFinancePage() {
       </Tabs>
 
       <AddPurchaseDialog open={purchaseOpen} onOpenChange={setPurchaseOpen} />
-      <RecordSaleDialog
-        open={saleOpen}
-        onOpenChange={setSaleOpen}
-        presetOrganizationId={salePreset}
+      <AgencyPaymentDialog
+        open={paymentOpen}
+        onOpenChange={setPaymentOpen}
+        presetOrganizationId={paymentPreset}
       />
     </div>
   )
@@ -567,201 +559,6 @@ function SourcesTab() {
       </div>
 
       <SourceDialog open={sourceDialogOpen} onOpenChange={setSourceDialogOpen} source={editing} />
-    </>
-  )
-}
-
-// ------------------------------------------------------------ agency summary ---
-
-function AgenciesTab({ onRecordSale }: { onRecordSale: (organizationId?: string) => void }) {
-  const getAgencies = useServerFn(getAgencyUsdSummaryFn)
-  const listSales = useServerFn(listUsdSalesFn)
-  const listLimits = useServerFn(listAgencyLimitApprovalsFn)
-  const [selected, setSelected] = useState<string | null>(null)
-
-  const agencies = useQuery({
-    queryKey: ['platform-usd', 'agencies'],
-    queryFn: () => getAgencies(),
-  })
-  const rows = agencies.data ?? []
-  const real = rows.filter((r) => !r.removed)
-  const active = real.find((r) => r.organization_id === selected) ?? null
-
-  // One agency's history is two sources merged: the sales recorded by hand and
-  // the approved limit requests on platform-owned accounts.
-  const sales = useQuery({
-    queryKey: ['platform-usd', 'sales', 'agency', selected],
-    queryFn: () => listSales({ data: { organization_id: selected! } }),
-    enabled: selected !== null,
-  })
-  const limits = useQuery({
-    queryKey: ['platform-usd', 'limit-approvals', selected],
-    queryFn: () => listLimits({ data: { organization_id: selected! } }),
-    enabled: selected !== null,
-  })
-  const history =
-    sales.data && limits.data
-      ? mergeAllocationHistory(
-          sales.data.map(saleToHistoryRow),
-          limits.data
-            .filter((l): l is typeof l & { approved_at: string } => l.approved_at !== null)
-            .map(limitToHistoryRow),
-        )
-      : undefined
-
-  return (
-    <>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard label="Agencies" value={real.length} loading={agencies.isLoading} />
-        <StatCard
-          label="Agencies with USD allocated"
-          hint="Sales plus approved limit requests"
-          value={real.filter((r) => dec(r.total_usd_allocated).gt(0)).length}
-          loading={agencies.isLoading}
-        />
-      </div>
-
-      <Card className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Agency</TableHead>
-              <TableHead>Subscription</TableHead>
-              <TableHead className="text-right">USD allocated</TableHead>
-              <TableHead className="text-right">Limits today</TableHead>
-              <TableHead className="text-right">BDT paid</TableHead>
-              <TableHead className="text-right">Sales</TableHead>
-              <TableHead className="text-right">Avg. selling rate</TableHead>
-              <TableHead>Last activity</TableHead>
-              <TableHead className="text-right">History</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {agencies.isLoading &&
-              Array.from({ length: 3 }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell colSpan={9}>
-                    <Skeleton className="h-6 w-full" />
-                  </TableCell>
-                </TableRow>
-              ))}
-
-            {!!agencies.error && (
-              <TableRow>
-                <TableCell colSpan={9}>
-                  <div className="py-10 text-center text-sm text-destructive">
-                    Couldn't load agencies:{' '}
-                    {agencies.error instanceof Error ? agencies.error.message : 'unknown error'}
-                  </div>
-                </TableCell>
-              </TableRow>
-            )}
-
-            {rows.map((r) => (
-              <TableRow
-                key={r.organization_id ?? `removed-${r.name}`}
-                data-state={r.organization_id === selected ? 'selected' : undefined}
-              >
-                <TableCell>
-                  {r.organization_id ? (
-                    <Link
-                      to="/platform/organizations/$organizationId"
-                      params={{ organizationId: r.organization_id }}
-                      className="text-primary underline-offset-4 hover:underline"
-                    >
-                      {r.name}
-                    </Link>
-                  ) : (
-                    <span className="text-muted-foreground">{r.name} (removed)</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {r.subscription_status ? (
-                    <StatusBadge status={r.subscription_status.toUpperCase()} />
-                  ) : (
-                    '—'
-                  )}
-                </TableCell>
-                <TableCell className="num text-right">
-                  <div>{formatUsd(r.total_usd_allocated)}</div>
-                  {dec(r.total_usd_allocated).gt(0) && (
-                    // Both halves stay visible: they can overlap, and a single
-                    // merged figure would hide that.
-                    <div className="text-xs font-normal text-muted-foreground">
-                      sales {formatUsd(r.sales_usd)} · limits {formatUsd(r.limits_usd)}
-                    </div>
-                  )}
-                </TableCell>
-                <TableCell className="num text-right">
-                  {r.limits_today_count > 0 ? (
-                    <>
-                      <div>{formatUsd(r.limits_today_usd)}</div>
-                      <div className="text-xs font-normal text-muted-foreground">
-                        {r.limits_today_count} {r.limits_today_count === 1 ? 'request' : 'requests'}
-                      </div>
-                    </>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </TableCell>
-                <TableCell className="num text-right">{formatBdt(r.total_bdt_paid)}</TableCell>
-                <TableCell className="num text-right">{r.transaction_count}</TableCell>
-                <TableCell className="num text-right text-muted-foreground">
-                  {r.avg_selling_rate === null ? '—' : fmtRate(r.avg_selling_rate)}
-                </TableCell>
-                <TableCell className="whitespace-nowrap text-muted-foreground">
-                  {r.last_activity_at ? fmtDateTime(r.last_activity_at) : '—'}
-                </TableCell>
-                <TableCell className="text-right">
-                  {r.organization_id && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        setSelected(r.organization_id === selected ? null : r.organization_id)
-                      }
-                    >
-                      {r.organization_id === selected ? 'Hide' : 'View'}
-                    </Button>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Card>
-      <p className="-mt-3 text-xs text-muted-foreground">
-        USD allocated is the sales recorded here plus the agency&apos;s approved limit
-        requests on platform accounts. BDT paid, the sale count and the average
-        selling rate come from recorded sales only — a limit approval carries no BDT.
-      </p>
-
-      {active && selected && (
-        <div>
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <div>
-              <h2 className="text-lg font-semibold">Allocated to {active.name}</h2>
-              <p className="text-sm text-muted-foreground">
-                {active.transaction_count} {active.transaction_count === 1 ? 'sale' : 'sales'} ·{' '}
-                {active.limit_approval_count} limit{' '}
-                {active.limit_approval_count === 1 ? 'approval' : 'approvals'}
-                {active.limits_today_count > 0 &&
-                  ` · ${formatUsd(active.limits_today_usd)} approved today`}
-              </p>
-            </div>
-            <Button size="sm" onClick={() => onRecordSale(selected)}>
-              <Plus className="size-4" />
-              Record sale
-            </Button>
-          </div>
-          <AllocationHistoryTable
-            rows={history}
-            isLoading={sales.isLoading || limits.isLoading}
-            error={sales.error ?? limits.error}
-            emptyText={`Nothing has been allocated to ${active.name} yet.`}
-          />
-        </div>
-      )}
     </>
   )
 }

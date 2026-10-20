@@ -64,6 +64,10 @@ async function makeUser(admin: SupabaseClient, email: string, name: string) {
 export async function seed(env: E2EEnv, run: string): Promise<Fixtures> {
   const startedAt = new Date().toISOString()
   const admin = adminClient(env)
+  // Token-check state is cleared by teardown, but a CANCELLED run never tears
+  // down: its "already alerted" state would make this run's first cron send no
+  // alert (monitoring.spec "alerts once" then sees 0). Start from a clean slate.
+  await admin.from('integration_health').delete().neq('scope_key', '')
   const roles = await must(admin.from('roles').select('id, key'), 'roles')
   const roleId = (k: string) => roles.find((r) => r.key === k)!.id
 

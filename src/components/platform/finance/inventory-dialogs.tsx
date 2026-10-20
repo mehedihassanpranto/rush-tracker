@@ -310,14 +310,14 @@ export function OpeningStockDialog({
   )
 }
 
-/** Reason-required confirmation for reversing a batch or an outflow. */
+/** Reason-required confirmation: reversing a record, reopening a month. */
 export function ReverseDialog({
   target,
   onOpenChange,
   onConfirm,
   pending,
 }: {
-  target: { title: string; description: string } | null
+  target: { title: string; description: string; confirmLabel?: string } | null
   onOpenChange: (open: boolean) => void
   onConfirm: (reason: string) => void
   pending: boolean
@@ -353,7 +353,7 @@ export function ReverseDialog({
             onClick={() => onConfirm(reason.trim())}
           >
             {pending && <Loader2 className="size-4 animate-spin" />}
-            Reverse
+            {target?.confirmLabel ?? 'Reverse'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -163,6 +163,9 @@ short; detail belongs in the changelog.
   Meta spend (000063) is the change in `meta_amount_spent` between readings
   (`record_meta_spend_readings()`, run by the cron) — never a spend cap, never
   booked negative; pool accounts only.
+  Agencies are billed by a trigger on `limit_requests` → APPROVED (pool
+  accounts only, 000064); it must never block an approval. Journal lines for
+  receivables/advances carry `party_org_id`; closed months refuse postings.
 - **Client segments**: `prepaid` (pays full cost up front), `partial` (pays
   part, rest becomes due), `postpaid` (all due). Segment is read server-side and
   snapshotted on each request.

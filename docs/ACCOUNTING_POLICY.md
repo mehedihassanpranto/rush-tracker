@@ -167,8 +167,12 @@ column is named `meta_billing_mode` so the two never get confused.
    | Prepaid Meta funding | 1400 Meta prepaid | 1200 (FIFO cost) |
    | Prepaid Meta spend | 5000 Service cost — Meta | 1400 (the account's lot FIFO cost) |
    | Postpaid Meta spend | — no entry: no taka moves; a USD payable is tracked | |
-   | Sale to an agency | 1300 Agency receivables | 4000 Revenue |
-   | …its BDT received (v1: recorded paid at sale) | 1010 | 1300 |
+   | Pool limit approved (agency billed) | 1300 Receivables (agency) | 4000 Revenue |
+   | …agency's advance applied | 2300 Advances (agency) | 1300 (agency) |
+   | Agency payment | 1010 | 1300 up to what is owed; 2300 the rest |
+   | Agency opening balance owed / credit | 1300 / 3000 | 3000 / 2300 |
+   | Sale to an agency (retired from the UI in Milestone 4) | 1300 Agency receivables | 4000 Revenue |
+   | …its BDT received (recorded paid at sale) | 1010 | 1300 |
    | Any reversal | the original's lines, sides swapped | |
 
 5. The trial balance is by **event date** (as of the end of a Dhaka business
@@ -197,4 +201,33 @@ column is named `meta_billing_mode` so the two never get confused.
    whose credit was spent can't be reversed before that spend is.
 7. **Not yet built (Milestone 5):** returning unspent prepaid credit to
    inventory, or writing it off.
+
+## 10. Agency billing and periods (Milestone 4, migration 000064)
+
+Owner decisions of 2026-10-21:
+
+1. **Each approval is billed.** A limit approved on a platform POOL account is
+   charged to its agency at approved USD × the agency's rate in force on the
+   approval date (Asia/Dhaka), snapshotted on the charge. An approval on an
+   agency's own account is never billed. Billing is done by a database
+   trigger on the approval and can never block it (a failure is logged).
+2. **No rate yet:** the charge waits ("waiting for a rate"). Setting the rate,
+   from a date on or before the approval, bills it.
+3. **xRush Agency is billed too**, at its own internal rate; its payments can
+   be marked internal.
+4. **From go-live (21 Oct 2026):** earlier approvals aren't billed. What an
+   agency owed (or had paid ahead) before then is one opening balance,
+   against opening equity — not this period's revenue.
+5. **Payments** never create revenue. A payment settles what the agency owes;
+   anything beyond is an **advance** (2300), which the agency's next charges
+   use up automatically. The split is fixed when the payment is recorded.
+6. A payment can't be reversed once its advance has paid later charges —
+   reverse those charges first. Reversing a charge gives back any advance it
+   used.
+7. **"Record agency sale" is retired**; agencies pay through "Record agency
+   payment". The old `usd_sales` table stays for history.
+8. **Periods:** calendar months (Asia/Dhaka). Only a month that has ended can
+   be closed, and not while it holds charges waiting for a rate. Nothing can be
+   posted dated in a closed month; corrections go into the open month.
+   Reopening needs a reason and is audited.
 
