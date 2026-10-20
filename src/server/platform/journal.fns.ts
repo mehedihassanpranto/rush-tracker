@@ -122,7 +122,9 @@ export const listJournalEntriesFn = createServerFn({ method: 'GET' })
       .select(
         'id, entry_number, event_at, source_type, is_reversal, description, lines:journal_lines(line_no, account_code, debit_bdt, credit_bdt, usd_amount, memo, account:gl_accounts(name))',
       )
-      .order('event_at', { ascending: false })
+      // Most recently POSTED first. Event dates can sit in the future (a
+      // payment dated tomorrow) and would otherwise bury today's postings.
+      .order('created_at', { ascending: false })
       .order('entry_number', { ascending: false })
       .limit(data.limit ?? 100)
     if (error) throw new Error(error.message)

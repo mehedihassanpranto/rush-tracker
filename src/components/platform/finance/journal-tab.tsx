@@ -272,8 +272,8 @@ export function JournalTab() {
           </Table>
         </Card>
         <p className="mt-2 text-xs text-muted-foreground">
-          The latest 100 entries. Entries can't be edited or deleted; reversing a purchase
-          or a payout posts its mirror.
+          The 100 most recently posted entries. Entries can't be edited or deleted;
+          reversing a purchase or a payout posts its mirror.
         </p>
       </div>
     </>

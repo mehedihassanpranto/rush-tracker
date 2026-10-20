@@ -36,7 +36,13 @@ billed, payment → advance → applied, reversal guards, rate change, opening
 balance, summary = journal, closed month), finance e2e passes, build clean. Production before/after
 (read-only): 2 purchases ৳110,010, 0 payouts, 2 journal entries, 157 approved
 limits, 274 ledger rows net ৳122,121 — unchanged; 0 agency charges (billing
-starts at go-live, as decided).
+starts at go-live, as decided). First CI e2e run failed twice over, neither from the
+billing code: (1) the Journal tab listed entries by event date, so the live
+tests' future-dated entries pushed today's postings off the 100-row list — it
+now lists the most recently posted first (better for the owner too); (2) a
+CI run cancelled midway left the Meta-token "already alerted" state on staging,
+so the next run's monitoring.spec "alerts once" saw 0 alerts — e2e setup now
+clears that state before a run, not only after.
 
 ---
 
