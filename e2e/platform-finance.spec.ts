@@ -34,8 +34,17 @@ test('fee-aware purchase, FIFO payout and reversals', async ({ page }) => {
   test.setTimeout(3 * 60_000)
   const errors: Array<string> = []
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`))
+  // A failed app or Supabase request fails the test; the Google Fonts
+  // stylesheet is third-party and its outages are not ours. The browser's
+  // matching "Failed to load resource: net::…" console line carries no URL,
+  // so network failures are judged here, by URL, and skipped in the console
+  // check. An HTTP error status (a 500) still fails it.
+  const THIRD_PARTY = /^https:\/\/fonts\.(googleapis|gstatic)\.com\//
+  page.on('requestfailed', (r) => {
+    if (!THIRD_PARTY.test(r.url())) errors.push(`requestfailed: ${r.url()} ${r.failure()?.errorText ?? ''}`)
+  })
   page.on('console', (m) => {
-    if (m.type() === 'error') errors.push(`console: ${m.text()}`)
+    if (m.type() === 'error' && !/^Failed to load resource: net::/.test(m.text())) errors.push(`console: ${m.text()}`)
   })
   const stamp = Date.now()
   const name = `E2E-V2-${stamp}`
@@ -59,12 +68,12 @@ test('fee-aware purchase, FIFO payout and reversals', async ({ page }) => {
   const dialog = page.getByRole('dialog')
   await choose(page, 'Source', new RegExp(name))
   await dialog.getByLabel('USD sent').fill('1000')
-  await dialog.getByLabel('BDT paid to supplier').fill('125998.74')
+  await dialog.getByLabel('BDT paid to supplier').fill('126000')
   await expect(dialog.getByText('Binance transfer')).toBeVisible()
   await expect(dialog.getByText(/Dutch-Bangla Bank → Dutch-Bangla Bank/)).toBeVisible()
   await expect(dialog.locator('dd').filter({ hasText: '$999.99' })).toBeVisible()
   await expect(dialog.locator('dd').filter({ hasText: '৳126,000' })).toBeVisible()
-  await expect(dialog.locator('dd').filter({ hasText: '৳1.26' })).toBeVisible()
+  await expect(dialog.locator('dd').filter({ hasText: '৳126.0000' })).toBeVisible()
   await page.screenshot({ path: 'test-results/finance-purchase-light.png', fullPage: true })
   await dialog.getByRole('button', { name: 'Record purchase' }).click()
   await expect(dialog).toBeHidden()

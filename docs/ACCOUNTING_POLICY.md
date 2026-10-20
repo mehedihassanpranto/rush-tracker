@@ -47,18 +47,23 @@ switch, OFF while there is one platform admin.
 
 ## 2. Batch cost
 
-1. **[confirmed, A4]** The supplier prices on **net USD received**.
-2. **[confirmed, A5]** Your share of every fee is added to that batch's
-   acquisition cost, and appears nowhere else (no second expense line).
+1. **[confirmed, A4]** The supplier prices on **net USD received**: you pay
+   for the dollars that land plus your share of the USD fee.
+2. **[confirmed, A5]** A fee you bear is in the batch's cost exactly once,
+   and nowhere else (no second expense line).
 3. Net USD = gross USD − the total of every USD fee deducted in transit
    (whoever bears it). **[open]** confirm with a real Payoneer example that the
    Payoneer fee is deducted from the amount sent.
-4. Supplier rate = BDT principal ÷ net USD. A USD fee you bear is converted at
-   that batch's own supplier rate, rounded to 2 dp, and capitalized once.
-5. Total BDT cost = principal + capitalized fees. Effective rate = total ÷ net.
-6. Trap: if a supplier actually prices on **gross**, USD-leg fees are already
-   inside the principal. Set `PRICING_BASIS = 'gross'` and they're no longer
-   added a second time.
+4. Total BDT cost = BDT paid to the supplier + your share of the bank fee:
+   exactly the taka that left your accounts, so the purchase's journal entry
+   balances.
+5. A USD fee is **never** added on top as fee × rate. No taka left for it; its
+   cost is already inside the effective rate, because you paid for dollars
+   that never landed. (The first version did add it, corrected the same day
+   by migration 000060 before any real purchase was posted.)
+6. Supplier rate = BDT paid ÷ (net USD + your share of the USD fees), the
+   per-dollar price of the deal. Effective rate = total cost ÷ net USD, what
+   FIFO consumes at.
 
 ## 3. Inventory and FIFO
 

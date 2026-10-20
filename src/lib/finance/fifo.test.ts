@@ -27,16 +27,32 @@ describe('computeBatchCost (plan v2 fee tests 1, 7)', () => {
   })
 
   it('$100 with the $0.01 Binance fee nets $99.99; $1,000 nets $999.99', () => {
-    expect(computeBatchCost({ gross_usd: 100, bdt_principal: 12698.73, fees: [binance] }).net_usd).toBe('99.990000')
-    expect(computeBatchCost({ gross_usd: 1000, bdt_principal: 125998.74, fees: [binance] }).net_usd).toBe('999.990000')
+    expect(computeBatchCost({ gross_usd: 100, bdt_principal: 12700, fees: [binance] }).net_usd).toBe('99.990000')
+    expect(computeBatchCost({ gross_usd: 1000, bdt_principal: 126000, fees: [binance] }).net_usd).toBe('999.990000')
   })
 
-  it('capitalizes the Binance fee once, at the batch’s own rate', () => {
-    // Priced on net: 99.99 × 127 = 12,698.73, + 0.01 × 127 = 1.27.
-    const c = computeBatchCost({ gross_usd: 100, bdt_principal: 12698.73, fees: [binance] })
-    expect(c).toMatchObject({ supplier_rate: '127.000000', capitalized_fees_bdt: '1.27', total_bdt_cost: '12700.00' })
+  it('never adds a USD fee on top: cost is the taka that left, the fee sits in the effective rate', () => {
+    // Paid 100 × 127 = 12,700 for 99.99 landed.
+    const c = computeBatchCost({ gross_usd: 100, bdt_principal: 12700, fees: [binance] })
+    expect(c).toMatchObject({
+      supplier_rate: '127.000000',
+      capitalized_fees_bdt: '0.00',
+      total_bdt_cost: '12700.00',
+      effective_rate: '127.012701',
+    })
     // Pure: recomputing (edit/retry/reopen) gives the same, never a second deduction.
-    expect(computeBatchCost({ gross_usd: 100, bdt_principal: 12698.73, fees: [binance] })).toEqual(c)
+    expect(computeBatchCost({ gross_usd: 100, bdt_principal: 12700, fees: [binance] })).toEqual(c)
+  })
+
+  it('a bank fee you bear is added once; the supplier’s share of a USD fee costs you nothing', () => {
+    const npsb = { ...binance, rule_id: 'npsb', currency: 'BDT' as const, total: '10.00', your_share: '10.00', counterparty_share: '0.00', rule_total: '10.00' }
+    const payoneer = { ...binance, source: 'MANUAL' as const, rule_id: null, total: '10.000000', your_share: '4.000000', counterparty_share: '6.000000', rule_total: null, reason: 'statement' }
+    expect(computeBatchCost({ gross_usd: 500, bdt_principal: 63479, fees: [payoneer, npsb] })).toMatchObject({
+      net_usd: '490.000000',
+      supplier_rate: '128.500000',
+      capitalized_fees_bdt: '10.00',
+      total_bdt_cost: '63489.00',
+    })
   })
 
   it('warns on a supplier rate outside 124–131 without blocking', () => {

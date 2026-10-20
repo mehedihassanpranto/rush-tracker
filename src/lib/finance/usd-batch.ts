@@ -3,8 +3,6 @@ import { dec } from '@/lib/money/money'
 import type { MoneyInput } from '@/lib/money/money'
 import {
   BDT_DP,
-  CAPITALIZE_BORNE_FEES,
-  PRICING_BASIS,
   RATE_DP,
   SUPPLIER_RATE_WARN_MAX,
   SUPPLIER_RATE_WARN_MIN,
@@ -17,24 +15,28 @@ import type { ResolvedFee } from '@/lib/finance/fees'
  * One USD purchase → one FIFO batch with its own acquisition cost (plan v2
  * "Inventory and FIFO"; docs/ACCOUNTING_POLICY.md §2).
  *
- *   net USD          = gross USD − every USD fee deducted in transit (its TOTAL,
- *                      whoever bears it — the dollars simply did not arrive)
- *   supplier rate    = BDT principal ÷ net USD   (PRICING_BASIS 'net')
- *                      BDT principal ÷ gross USD (PRICING_BASIS 'gross')
- *   capitalized fees = your share of each BDT fee
- *                    + your share of each USD fee × supplier rate ('net' only;
- *                      under 'gross' those dollars are already in the principal)
- *   total BDT cost   = BDT principal + capitalized fees
- *   effective rate   = total BDT cost ÷ net USD — what FIFO consumes at
+ *   net USD        = gross USD − every USD fee deducted in transit (its TOTAL,
+ *                    whoever bears it — those dollars simply did not arrive)
+ *   capitalized    = your share of each BDT fee (the bank fee)
+ *   total BDT cost = BDT principal + capitalized — exactly the taka that left
+ *                    your accounts, so the journal entry balances
+ *   effective rate = total BDT cost ÷ net USD — what FIFO consumes at
+ *   supplier rate  = BDT principal ÷ (net USD + your share of the USD fees):
+ *                    the price per dollar you paid for. With the supplier
+ *                    pricing on net (Assumption 4), that is their quoted rate.
  *
- * Deterministic from its inputs: recomputing a batch (edit, retry, reopen)
- * cannot charge a fee twice, because the fee is an input, never a running
- * deduction. The DB stores the result as a snapshot at posting.
+ * A USD fee is NEVER added to cost as fee × rate. You didn't pay taka for it:
+ * its cost is already inside the effective rate, because the principal paid
+ * for dollars that never landed. Adding it again was a bug in the first
+ * version (2026-10-20) — the purchase's journal entry could not balance.
+ *
+ * Deterministic from its inputs, so recomputing (edit, retry, reopen) never
+ * charges a fee twice. The DB stores the result as a snapshot at posting.
  */
 
 export interface BatchInput {
   gross_usd: MoneyInput
-  /** BDT paid to the supplier, excluding bank fees. */
+  /** BDT actually paid to the supplier, excluding the bank fee. */
   bdt_principal: MoneyInput
   /** Every fee on this purchase, BDT leg (bank) and USD leg (Binance, Payoneer). */
   fees: Array<ResolvedFee>
@@ -52,8 +54,6 @@ export interface BatchCost {
   effective_rate: string
 }
 
-const bdt = (v: Decimal) => v.toDecimalPlaces(BDT_DP, Decimal.ROUND_HALF_UP)
-
 export function computeBatchCost(input: BatchInput): BatchCost {
   const gross = dec(input.gross_usd)
   const principal = dec(input.bdt_principal)
@@ -62,23 +62,22 @@ export function computeBatchCost(input: BatchInput): BatchCost {
     throw new FinanceRuleError('BATCH_INVALID', 'BDT principal must be positive')
   }
 
-  const usdFees = input.fees.filter((f) => f.currency === 'USD')
-  const bdtFees = input.fees.filter((f) => f.currency === 'BDT')
-
-  const usdDeducted = usdFees.reduce((s, f) => s.plus(dec(f.total)), dec(0))
+  let usdDeducted = dec(0)
+  let usdYours = dec(0)
+  let capitalized = dec(0)
+  for (const f of input.fees) {
+    if (f.currency === 'USD') {
+      usdDeducted = usdDeducted.plus(dec(f.total))
+      usdYours = usdYours.plus(dec(f.your_share))
+    } else {
+      capitalized = capitalized.plus(dec(f.your_share))
+    }
+  }
   const net = gross.minus(usdDeducted)
   if (net.lte(0)) throw new FinanceRuleError('BATCH_INVALID', 'fees exceed the USD received')
 
-  const rate = principal.div(PRICING_BASIS === 'net' ? net : gross)
-
-  let capitalized = dec(0)
-  if (CAPITALIZE_BORNE_FEES) {
-    for (const f of bdtFees) capitalized = capitalized.plus(dec(f.your_share))
-    if (PRICING_BASIS === 'net') {
-      for (const f of usdFees) capitalized = capitalized.plus(bdt(dec(f.your_share).mul(rate)))
-    }
-  }
-  const total = principal.plus(capitalized)
+  const rate = principal.div(net.plus(usdYours))
+  const total = principal.plus(capitalized).toDecimalPlaces(BDT_DP, Decimal.ROUND_HALF_UP)
 
   return {
     gross_usd: gross.toFixed(USD_DP),

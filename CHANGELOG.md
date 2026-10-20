@@ -8,6 +8,21 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-20
 
+**Fixed (Finance v2, before it went live): a purchase's cost counted a USD
+fee twice — migration 000060.** Found while designing the Milestone 2
+journal: 000059 added your share of a USD fee to the batch cost as fee ×
+rate (৳1.26 on a $1,000 Binance buy), but no taka left your accounts for it —
+the principal already paid for the dollars that never landed — so the
+purchase's journal entry could not balance. Now cost = BDT paid + the bank
+fee you bear; supplier rate = paid ÷ (net + your USD fee share). Same fix in
+`usd-batch.ts` (the `PRICING_BASIS`/`CAPITALIZE_BORNE_FEES` switches are gone:
+there is one correct answer). Golden dataset: inputs restated as BDT
+actually paid; every cost and downstream figure unchanged. No production row
+affected — nothing had been posted through the function (the UI was not
+deployed). Staging: applied; `npm test` 298/298; finance e2e passes (it now
+ignores Google Fonts network outages, which timed out from this machine,
+while still failing on any app/Supabase request or HTTP error).
+
 **Platform finance v2: Milestone 1 — FIFO inventory with transfer fees
 (migration 000059 — staging: applied 2026-10-20; production: applied 2026-10-20 by the owner via `supabase db push`).** Owner accepted
 every Milestone 0 suggestion ("go with your suggestions"); recorded in

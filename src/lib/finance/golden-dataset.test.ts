@@ -38,7 +38,7 @@ describe('Finance v2 golden dataset — engine reproduces the hand-computed figu
     fees: [fee('BINANCE', 'BINANCE', 'BINANCE', '300'), fee('BANK_INTERNAL', 'DBBL', 'DBBL', g.batches.B3.principal)],
   })
 
-  it('batch costs: fees capitalized once, only your share', () => {
+  it('batch costs: exactly the taka that left your accounts; the supplier rate is the deal rate', () => {
     for (const [got, want] of [
       [b1, g.batches.B1],
       [b2, g.batches.B2],
@@ -47,6 +47,7 @@ describe('Finance v2 golden dataset — engine reproduces the hand-computed figu
       expect(got.net_usd).toBe(want.net_usd)
       expect(got.capitalized_fees_bdt).toBe(want.fees_bdt)
       expect(got.total_bdt_cost).toBe(want.cost)
+      expect(got.supplier_rate).toBe(want.rate)
       expect(got.rate_warning).toBe(false)
     }
   })

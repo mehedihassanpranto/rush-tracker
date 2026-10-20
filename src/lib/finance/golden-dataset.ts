@@ -8,14 +8,19 @@
  * The working is in docs/FINANCE_V2_MILESTONE0.md §5. Rates are BDT per USD.
  *
  * Batches (posting order):
+ * A batch costs exactly the BDT that left your accounts (principal + the bank
+ * fee you bear). The supplier prices on net USD, so you pay for the dollars
+ * that land plus your share of the USD fee; the fee's cost is then inside the
+ * effective rate, never added on top.
+ *
  *   B1  Binance, gross 1,000.00, fee 0.01 (yours) → net 999.99 @ 126.00
- *       principal 999.99 × 126 = 125,998.74; fee 0.01 × 126 = 1.26;
- *       paid DBBL → DBBL, BDT 0                         cost 126,000.00
+ *       paid (999.99 + 0.01) × 126 = 126,000.00; DBBL → DBBL, BDT 0
+ *                                                       cost 126,000.00
  *   B2  Payoneer, gross 500.00, fee 10.00 (yours 4.00, supplier 6.00)
- *       → net 490.00 @ 128.50; principal 62,965.00; your fee 4 × 128.5 =
- *       514.00; paid DBBL → BRAC by NPSB, BDT 10         cost  63,489.00
+ *       → net 490.00 @ 128.50; paid (490 + 4) × 128.5 = 63,479.00;
+ *       DBBL → BRAC by NPSB, BDT 10                      cost  63,489.00
  *   B3  Binance, gross 300.00, fee 0.01 → net 299.99 @ 130.00
- *       principal 38,998.70; fee 1.30; DBBL → DBBL       cost  39,000.00
+ *       paid 300 × 130 = 39,000.00; DBBL → DBBL           cost  39,000.00
  *   B4  Binance, gross 100.00 @ 127 — posted by mistake, reversed untouched.
  *
  * Outgoing (posting order):
@@ -28,10 +33,10 @@
 
 export const GOLDEN = {
   batches: {
-    B1: { gross_usd: '1000', principal: '125998.74', net_usd: '999.990000', fees_bdt: '1.26', cost: '126000.00' },
-    B2: { gross_usd: '500', principal: '62965.00', net_usd: '490.000000', fees_bdt: '524.00', cost: '63489.00' },
-    B3: { gross_usd: '300', principal: '38998.70', net_usd: '299.990000', fees_bdt: '1.30', cost: '39000.00' },
-    B4: { gross_usd: '100', principal: '12698.73', net_usd: '99.990000', fees_bdt: '1.27', cost: '12700.00' },
+    B1: { gross_usd: '1000', principal: '126000.00', net_usd: '999.990000', fees_bdt: '0.00', cost: '126000.00', rate: '126.000000' },
+    B2: { gross_usd: '500', principal: '63479.00', net_usd: '490.000000', fees_bdt: '10.00', cost: '63489.00', rate: '128.500000' },
+    B3: { gross_usd: '300', principal: '39000.00', net_usd: '299.990000', fees_bdt: '0.00', cost: '39000.00', rate: '130.000000' },
+    B4: { gross_usd: '100', principal: '12700.00', net_usd: '99.990000', fees_bdt: '0.00', cost: '12700.00', rate: '127.000000' },
   },
   /** Step 1: 700 × 126,000 ÷ 999.99 = 88,200.882… → 88,200.88 */
   prepaidFunding: { usd: '700', bdt: '88200.88', b1_left_usd: '299.990000', b1_left_bdt: '37799.12' },

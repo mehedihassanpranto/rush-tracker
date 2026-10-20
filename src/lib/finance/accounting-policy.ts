@@ -10,16 +10,10 @@
  * read the same values.
  */
 
-/** Assumption 4 (DEFAULT). What the supplier's BDT price is per:
- *  - 'net'   — USD that actually landed. A USD fee YOU bear is then a real
- *              extra cost and is capitalized on top of the principal.
- *  - 'gross' — USD the supplier sent. Fees on the USD leg are already inside
- *              the principal; capitalizing them again would double-count. */
-export const PRICING_BASIS: 'net' | 'gross' = 'net'
-
-/** Assumption 5 (DEFAULT). Fees you bear go into the batch's acquisition cost
- * and nowhere else — never a second operating-expense line. */
-export const CAPITALIZE_BORNE_FEES = true
+/* Assumptions 4 and 5 (confirmed) need no switch: the supplier prices on
+ * net USD, and a batch costs exactly the taka that left your accounts
+ * (principal + the bank fee you bear) — see usd-batch.ts for why a USD fee is
+ * never added on top. */
 
 /** Assumption 8 (DEFAULT). A purchase dated before a batch that has already
  * been consumed is refused (FIFO follows posting order). */

@@ -529,7 +529,7 @@ describe.skipIf(!creds)('Finance v2 FIFO inventory (000059)', () => {
     if (sourceId) await admin.from('usd_sources').update({ is_active: false }).eq('id', sourceId)
   }, 60_000)
 
-  it('posts the golden batches with fees capitalized once, only your share', async () => {
+  it('posts the golden batches: cost is the taka that left, at the deal rate', async () => {
     expect(await fifo()).toEqual({ usd: '0.00', bdt: '0.00' })
     const g = GOLDEN.batches
     const b1 = await purchase(1000, Number(g.B1.principal), [ruleFee('BINANCE', 'Binance', 'Binance', 1000), ruleFee('BANK_INTERNAL', 'DBBL', 'DBBL', 1)], 1, `ref-${SUFFIX}`)
@@ -545,13 +545,14 @@ describe.skipIf(!creds)('Finance v2 FIFO inventory (000059)', () => {
       expect(dec(row.net_usd as number).toFixed(6)).toBe(want.net_usd)
       expect(dec(row.capitalized_fees_bdt as number).toFixed(2)).toBe(want.fees_bdt)
       expect(dec(row.bdt_amount as number).toFixed(2)).toBe(want.cost)
+      expect(dec(row.supplier_rate as number).toFixed(6)).toBe(want.rate)
       expect(row.rate_warning).toBe(false)
     }
     expect(await fifo()).toEqual({ usd: '1789.98', bdt: '228489.00' })
   })
 
   it('a duplicate transfer reference posts nothing new', async () => {
-    const again = await purchase(1000, 125998.74, [ruleFee('BINANCE', 'Binance', 'Binance', 1000)], 4, ` REF-${SUFFIX} `)
+    const again = await purchase(1000, 126000, [ruleFee('BINANCE', 'Binance', 'Binance', 1000)], 4, ` REF-${SUFFIX} `)
     expect(again.error).toBeNull()
     expect(again.data).toMatchObject({ id: batchIds.B1, duplicate: true })
     expect(await fifo()).toEqual({ usd: '1789.98', bdt: '228489.00' })
