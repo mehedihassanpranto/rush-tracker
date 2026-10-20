@@ -157,6 +157,9 @@ short; detail belongs in the changelog.
   FIFO stock leaves on `usd_outflows` (Meta bill paid), never on `usd_sales`
   (revenue). Inventory writes go through the 000059 RPCs only;
   `inventory_allocations` / `platform_finance_audit` are insert-only.
+  The journal (000061) is posted by triggers on `usd_purchases` /
+  `usd_outflows` / `usd_sales` — never post it from app code; a new money
+  event needs its own trigger + posting-map row in ACCOUNTING_POLICY.md §8.
 - **Client segments**: `prepaid` (pays full cost up front), `partial` (pays
   part, rest becomes due), `postpaid` (all due). Segment is read server-side and
   snapshotted on each request.

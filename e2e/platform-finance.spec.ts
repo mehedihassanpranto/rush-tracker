@@ -5,8 +5,9 @@ import { auth } from './support/fixtures'
 /**
  * Platform Finance v2 (migration 000059) through the real UI: a supplier with
  * a receiving bank, a Binance purchase whose fees the dialog works out from
- * the rules, a USD payout drawn FIFO, the fee rules list — then the payout and
- * the batch are reversed, so staging's inventory ends where it started.
+ * the rules, a USD payout drawn FIFO, the journal and trial balance, the fee
+ * rules list — the payout and the batch are reversed, so staging's inventory
+ * ends where it started.
  *
  * Screenshots (light, dark, phone) go to test-results/ for review; the
  * assertions are what CI checks, including no horizontal scroll at phone
@@ -115,6 +116,21 @@ test('fee-aware purchase, FIFO payout and reversals', async ({ page }) => {
   await page.getByLabel('Reason').fill('e2e cleanup')
   await page.getByRole('dialog').getByRole('button', { name: 'Reverse' }).click()
   await expect(batch).toContainText('Reversed')
+
+  // Journal (000061): the purchase and both reversals are posted, the trial
+  // balance balances, and the books tie to the FIFO stock.
+  await page.getByRole('tab', { name: 'Journal' }).click()
+  await expect(page.getByText('The books agree with the USD stock')).toBeVisible()
+  await expect(page.getByText('· balanced')).toBeVisible()
+  await expect(page.getByText(new RegExp(`from ${name}`)).first()).toBeVisible()
+  await expect(page.getByText(/Reversal of JE-/).first()).toBeVisible()
+  await setTheme(page, 'dark')
+  await page.screenshot({ path: 'test-results/finance-journal-dark.png', fullPage: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  const journalOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+  expect(journalOverflow, 'journal: horizontal page scroll at 390px').toBeLessThanOrEqual(0)
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await setTheme(page, 'light')
 
   // Fee rules: the owner's three seeded rules.
   await page.getByRole('tab', { name: 'Fee Rules' }).click()

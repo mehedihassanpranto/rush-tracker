@@ -28,6 +28,7 @@ import { fmtDateTime, fmtRate } from '@/components/platform/finance/format'
 import { AddPurchaseDialog } from '@/components/platform/finance/purchase-dialog'
 import { FeeRulesTab } from '@/components/platform/finance/fee-rules-tab'
 import { InventoryTab } from '@/components/platform/finance/inventory-tab'
+import { JournalTab } from '@/components/platform/finance/journal-tab'
 import { RecordSaleDialog } from '@/components/platform/finance/sale-dialog'
 import { SalesTable } from '@/components/platform/finance/sales-table'
 import { SourceDialog } from '@/components/platform/finance/source-dialog'
@@ -101,13 +102,14 @@ function PlatformFinancePage() {
       </PageHeader>
 
       <Tabs defaultValue="stock">
-        {/* Five tabs don't fit a phone: the bar scrolls inside itself instead
+        {/* Six tabs don't fit a phone: the bar scrolls inside itself instead
             of pushing the page sideways (same as the ad account page). */}
         <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="stock">USD Stock</TabsTrigger>
           <TabsTrigger value="inventory">Inventory (FIFO)</TabsTrigger>
           <TabsTrigger value="sources">Source Summary</TabsTrigger>
           <TabsTrigger value="agencies">Agency Summary</TabsTrigger>
+          <TabsTrigger value="journal">Journal</TabsTrigger>
           <TabsTrigger value="fees">Fee Rules</TabsTrigger>
         </TabsList>
 
@@ -122,6 +124,9 @@ function PlatformFinancePage() {
         </TabsContent>
         <TabsContent value="agencies" className="space-y-6">
           <AgenciesTab onRecordSale={openSale} />
+        </TabsContent>
+        <TabsContent value="journal" className="space-y-6">
+          <JournalTab />
         </TabsContent>
         <TabsContent value="fees" className="space-y-6">
           <FeeRulesTab />

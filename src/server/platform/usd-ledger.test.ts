@@ -98,12 +98,19 @@ describe.skipIf(!creds)('platform USD stock ledger', () => {
 
   afterAll(async () => {
     if (!admin) return
-    if (saleIds.length) await admin.from('usd_sales').delete().in('id', saleIds)
-    if (purchaseIds.length) await admin.from('usd_purchases').delete().in('id', purchaseIds)
-    // A failed run can leave rows the id lists never captured.
-    await admin.from('usd_sales').delete().like('reference_id', `ZZ-${SUFFIX}%`)
-    await admin.from('usd_purchases').delete().in('source_id', [sourceA, sourceB].filter(Boolean))
-    await admin.from('usd_sources').delete().in('id', [sourceA, sourceB].filter(Boolean))
+    // Purchases and sales can't be deleted (000062: the journal would no
+    // longer tie out). Purchases are reversed; sales stay — they have no
+    // reversal path until receivables (Milestone 4), and staging is
+    // disposable. Sources with purchases are deactivated, not deleted.
+    const { data: mine } = await admin
+      .from('usd_purchases')
+      .select('id')
+      .eq('status', 'POSTED')
+      .in('source_id', [sourceA, sourceB].filter(Boolean))
+    for (const p of mine ?? []) {
+      await admin.rpc('reverse_usd_purchase', { p_actor: null, p_purchase_id: p.id, p_reason: 'test cleanup' })
+    }
+    await admin.from('usd_sources').update({ is_active: false }).in('id', [sourceA, sourceB].filter(Boolean))
     if (accountIds.length) await admin.from('ad_accounts').delete().in('id', accountIds)
     if (orgId) await admin.from('organizations').delete().eq('id', orgId)
     if (userId) await admin.auth.admin.deleteUser(userId)
@@ -210,9 +217,16 @@ describe.skipIf(!creds)('platform USD stock ledger', () => {
     expect((await agent.from('usd_sources').select('payment_method')).error).not.toBeNull()
     expect((await agent.from('usd_sources').update({ payment_method: 'PayPal' }).eq('id', withMethod!.id)).error).not.toBeNull()
 
-    await admin.from('usd_purchases').delete().eq('id', purchase!.id)
+    await admin.rpc('reverse_usd_purchase', { p_actor: null, p_purchase_id: purchase!.id, p_reason: 'test cleanup' })
     purchaseIds.pop()
-    await admin.from('usd_sources').delete().eq('id', withMethod!.id)
+    await admin.from('usd_sources').update({ is_active: false }).eq('id', withMethod!.id)
+  })
+
+  it('refuses to delete a purchase or a sale — corrections are reversals (000062)', async () => {
+    const del = await admin.from('usd_purchases').delete().eq('id', purchaseIds[0])
+    expect(del.error?.message).toMatch(/IMMUTABLE/)
+    const delSale = await admin.from('usd_sales').delete().eq('id', saleIds[0])
+    expect(delSale.error?.message).toMatch(/IMMUTABLE/)
   })
 
   it('rejects zero amounts, and a duplicate source name in any capitalisation', async () => {
@@ -582,6 +596,39 @@ describe.skipIf(!creds)('Finance v2 FIFO inventory (000059)', () => {
     expect(await fifo()).toEqual({ usd: '639.98', bdt: GOLDEN.closingInventory.bdt })
   })
 
+  async function entryFor(sourceType: string, sourceId: string, reversal = false) {
+    const { data, error } = await admin
+      .from('journal_entries')
+      .select('id, lines:journal_lines(account_code, debit_bdt, credit_bdt, usd_amount)')
+      .eq('source_type', sourceType)
+      .eq('source_id', sourceId)
+      .eq('is_reversal', reversal)
+      .single()
+    if (error) throw new Error(error.message)
+    return (data.lines as Array<{ account_code: string; debit_bdt: number; credit_bdt: number; usd_amount: number | null }>)
+      .map((l) => [l.account_code, dec(l.debit_bdt).toFixed(2), dec(l.credit_bdt).toFixed(2)])
+      .sort()
+  }
+
+  it('posts a balanced journal entry for every purchase and payout (000061)', async () => {
+    // B2: inventory at cost; the supplier and the NPSB fee as separate credits.
+    expect(await entryFor('USD_PURCHASE', batchIds.B2)).toEqual([
+      ['1010', '0.00', '10.00'],
+      ['1010', '0.00', '63479.00'],
+      ['1200', '63489.00', '0.00'],
+    ].sort())
+    // B1 went DBBL → DBBL: the free bank fee posts no line at all.
+    expect(await entryFor('USD_PURCHASE', batchIds.B1)).toEqual([
+      ['1010', '0.00', '126000.00'],
+      ['1200', '126000.00', '0.00'],
+    ].sort())
+    // The split payout: one entry at its FIFO cost.
+    expect(await entryFor('USD_OUTFLOW', outflowIds[1])).toEqual([
+      ['1200', '0.00', GOLDEN.postpaidSettlement.bdt],
+      ['5900', GOLDEN.postpaidSettlement.bdt, '0.00'],
+    ].sort())
+  })
+
   it('refuses: more than in stock, a backdated purchase, reversing a used batch, a manual fee without a reason', async () => {
     expect((await outflow(640)).error?.message).toMatch(/^INSUFFICIENT_INVENTORY/)
     expect((await purchase(100, 12700, [], -5)).error?.message).toMatch(/^BACKDATED_PURCHASE/)
@@ -632,8 +679,49 @@ describe.skipIf(!creds)('Finance v2 FIFO inventory (000059)', () => {
     expect(audit.error?.message).toMatch(/IMMUTABLE/)
   })
 
+  it('journal: reversals mirror, unbalanced entries are refused, rows are immutable, the books tie to FIFO', async () => {
+    // The outflow reversed in the previous test has a mirror entry.
+    const { data: rev } = await admin
+      .from('usd_outflows')
+      .select('id')
+      .eq('status', 'REVERSED')
+      .like('notes', `v2 test ${SUFFIX}`)
+      .limit(1)
+      .single()
+    const original = await entryFor('USD_OUTFLOW', rev!.id)
+    const mirror = await entryFor('USD_OUTFLOW', rev!.id, true)
+    expect(mirror).toEqual(original.map(([a, d, c]) => [a, c, d]).sort())
+
+    // A one-sided entry cannot commit: the deferred check rolls it back.
+    const { data: lonely } = await admin
+      .from('journal_entries')
+      .insert({ event_at: at(40), source_type: 'MANUAL', description: `unbalanced ${SUFFIX}` })
+      .select('id')
+    expect(lonely ?? []).toEqual([])
+    const { count } = await admin
+      .from('journal_entries')
+      .select('id', { count: 'exact', head: true })
+      .eq('description', `unbalanced ${SUFFIX}`)
+    expect(count).toBe(0)
+
+    const { data: anyEntry } = await admin.from('journal_entries').select('id').limit(1).single()
+    expect((await admin.from('journal_entries').delete().eq('id', anyEntry!.id)).error?.message).toMatch(/IMMUTABLE/)
+    expect((await admin.from('journal_lines').update({ memo: 'x' }).eq('entry_id', anyEntry!.id)).error?.message).toMatch(/IMMUTABLE/)
+
+    // Everything ever posted: inventory in the books = the FIFO stock.
+    const { data: tb, error } = await admin.rpc('gl_trial_balance', { p_as_of: 'infinity' })
+    expect(error).toBeNull()
+    const rows = tb as Array<{ code: string; debit_bdt: number; credit_bdt: number; balance_bdt: number; usd: number | null }>
+    const sum = (k: 'debit_bdt' | 'credit_bdt') => rows.reduce((a, r) => a.plus(r[k]), dec(0)).toFixed(2)
+    expect(sum('debit_bdt')).toBe(sum('credit_bdt'))
+    const inv = rows.find((r) => r.code === '1200')!
+    const left = await fifo()
+    expect(dec(inv.balance_bdt).toFixed(2)).toBe(left.bdt)
+    expect(dec(inv.usd ?? 0).toFixed(2)).toBe(left.usd)
+  })
+
   it('anon and signed-in users reach none of it', async () => {
-    for (const t of ['fee_rules', 'usd_outflows', 'inventory_allocations', 'platform_finance_audit', 'usd_batch_balances', 'usd_fifo_summary']) {
+    for (const t of ['fee_rules', 'usd_outflows', 'inventory_allocations', 'platform_finance_audit', 'usd_batch_balances', 'usd_fifo_summary', 'gl_accounts', 'journal_entries', 'journal_lines']) {
       const { data } = await anon.from(t).select('*').limit(1)
       expect(data ?? [], t).toEqual([])
     }
@@ -642,5 +730,6 @@ describe.skipIf(!creds)('Finance v2 FIFO inventory (000059)', () => {
       p_ad_account_id: null, p_idempotency_key: null, p_notes: 'x',
     })
     expect(rpc.error).not.toBeNull()
+    expect((await anon.rpc('gl_trial_balance', { p_as_of: 'infinity' })).error).not.toBeNull()
   })
 })
