@@ -1,9 +1,19 @@
 import { Fragment, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import { CircleCheck, TriangleAlert } from 'lucide-react'
+import { CircleCheck, Lock, TriangleAlert } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { getTrialBalanceFn, listJournalEntriesFn } from '@/server/platform/journal.fns'
+import {
+  closeFinancePeriodFn,
+  listFinancePeriodsFn,
+  reopenFinancePeriodFn,
+} from '@/server/platform/agency-billing.fns'
+import { ReverseDialog } from '@/components/platform/finance/inventory-dialogs'
+import type { FinancePeriodRow } from '@/server/platform/agency-billing.fns'
+import { StatusBadge } from '@/components/shared/status-badge'
+import { Button } from '@/components/ui/button'
 import { formatBdt, formatUsd } from '@/lib/money/money'
 import { fmtDateTime } from '@/components/platform/finance/format'
 import type { TrialBalanceRow } from '@/server/platform/journal.fns'
@@ -36,6 +46,10 @@ const SOURCE_LABELS: Record<string, string> = {
   USD_OUTFLOW: 'USD paid out',
   USD_SALE: 'Agency sale',
   USD_SALE_RECEIPT: 'BDT received',
+  META_SPEND: 'Prepaid Meta spend',
+  AGENCY_CHARGE: 'Agency billed',
+  AGENCY_ADVANCE_APPLIED: 'Advance applied',
+  AGENCY_PAYMENT: 'Agency payment',
   MANUAL: 'Manual',
 }
 
@@ -86,6 +100,8 @@ export function JournalTab() {
           </AlertDescription>
         </Alert>
       )}
+
+      <PeriodsCard />
 
       <div>
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
@@ -263,3 +279,108 @@ export function JournalTab() {
     </>
   )
 }
+
+const monthLabel = (m: string) =>
+  new Date(`${m}T00:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+
+/**
+ * Month close (migration 000064). A closed month takes no postings: anything
+ * dated in it is refused, corrections go into the open month. Only a month
+ * that has ended can be closed, and not while approvals in it wait for a
+ * rate. Reopening needs a reason and is audited.
+ */
+function PeriodsCard() {
+  const queryClient = useQueryClient()
+  const list = useServerFn(listFinancePeriodsFn)
+  const close = useServerFn(closeFinancePeriodFn)
+  const reopen = useServerFn(reopenFinancePeriodFn)
+  const [reopening, setReopening] = useState<FinancePeriodRow | null>(null)
+  const periods = useQuery({ queryKey: ['platform-usd', 'periods'], queryFn: () => list() })
+  const current = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' }).slice(0, 7) + '-01'
+
+  const done = (msg: string) => {
+    toast.success(msg)
+    void queryClient.invalidateQueries({ queryKey: ['platform-usd'] })
+  }
+  const closing = useMutation({
+    mutationFn: (month: string) => close({ data: { month } }),
+    onSuccess: () => done('Month closed'),
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
+  })
+  const reopenMut = useMutation({
+    mutationFn: (v: { month: string; reason: string }) => reopen({ data: v }),
+    onSuccess: () => {
+      setReopening(null)
+      done('Month reopened')
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
+  })
+
+  // The current month and the three before it: enough to close last month.
+  const rows = (periods.data ?? []).slice(0, 4)
+  return (
+    <div>
+      <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
+        <Lock className="size-4" /> Months
+      </h2>
+      <Card className="p-0">
+        <Table>
+          <TableBody>
+            {periods.isLoading && (
+              <TableRow>
+                <TableCell colSpan={3}>
+                  <Skeleton className="h-6 w-full" />
+                </TableCell>
+              </TableRow>
+            )}
+            {rows.map((p) => (
+              <TableRow key={p.month}>
+                <TableCell className="font-medium">
+                  {monthLabel(p.month)}
+                  {p.reopen_reason && p.status === 'OPEN' && (
+                    <div className="text-xs font-normal text-muted-foreground">Reopened: {p.reopen_reason}</div>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <StatusBadge status={p.status === 'CLOSED' ? 'CLOSED' : p.month === current ? 'ACTIVE' : 'OPEN'} />
+                </TableCell>
+                <TableCell className="text-right">
+                  {p.status === 'CLOSED' ? (
+                    <Button size="sm" variant="outline" onClick={() => setReopening(p)}>
+                      Reopen
+                    </Button>
+                  ) : (
+                    p.month < current && (
+                      <Button size="sm" variant="outline" disabled={closing.isPending} onClick={() => closing.mutate(p.month)}>
+                        Close month
+                      </Button>
+                    )
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+      <p className="mt-2 text-xs text-muted-foreground">
+        A closed month takes no postings — a purchase, payment or payout dated in it is
+        refused, and corrections go into the current month.
+      </p>
+      <ReverseDialog
+        target={
+          reopening
+            ? {
+                title: `Reopen ${monthLabel(reopening.month)}`,
+                description: 'Postings dated in this month will be accepted again. The reason is kept in the audit trail.',
+                confirmLabel: 'Reopen',
+              }
+            : null
+        }
+        onOpenChange={(o) => !o && setReopening(null)}
+        onConfirm={(reason) => reopening && reopenMut.mutate({ month: reopening.month, reason })}
+        pending={reopenMut.isPending}
+      />
+    </div>
+  )
+}
+

@@ -147,6 +147,28 @@ test('fee-aware purchase, FIFO payout and reversals', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 })
   await setTheme(page, 'light')
 
+  // Agencies (000064): the billing table and the payment dialog's preview of
+  // how a payment splits into "settles what's owed" and "advance". Cancelled:
+  // payments are immutable, so e2e doesn't create one every run.
+  await page.getByRole('tab', { name: 'Agencies' }).click()
+  await expect(page.getByRole('heading', { name: 'Agencies' })).toBeVisible()
+  await page.getByRole('button', { name: 'Record agency payment' }).click()
+  const payDialog = page.getByRole('dialog')
+  await page.getByRole('combobox', { name: 'Agency', exact: true }).click()
+  await page.getByRole('option').first().click()
+  await payDialog.getByLabel('BDT received').fill('1000000')
+  await expect(payDialog.getByText(/settles what is owed;/)).toBeVisible()
+  await payDialog.getByRole('button', { name: 'Cancel' }).click()
+  await page.setViewportSize({ width: 390, height: 844 })
+  const agencyOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+  expect(agencyOverflow, 'agencies: horizontal page scroll at 390px').toBeLessThanOrEqual(0)
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.getByRole('tab', { name: 'Journal' }).click()
+  await expect(page.getByRole('heading', { name: 'Months' })).toBeVisible()
+  await setTheme(page, 'dark')
+  await page.screenshot({ path: 'test-results/finance-months-dark.png' })
+  await setTheme(page, 'light')
+
   // Fee rules: the owner's three seeded rules.
   await page.getByRole('tab', { name: 'Fee Rules' }).click()
   for (const code of ['dbbl-internal', 'npsb-flat', 'binance-transfer']) {
