@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import { Loader2 } from 'lucide-react'
+import { Loader2, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { createUsdPurchaseFn, listUsdSourcesFn } from '@/server/platform/finance.fns'
-import { dec } from '@/lib/money/money'
+import { listUsdSourcesFn } from '@/server/platform/finance.fns'
+import { postUsdPurchaseFn, previewUsdPurchaseFn } from '@/server/platform/usd-inventory.fns'
+import { BANK_INSTITUTIONS, PAID_IN_CASH, bankName } from '@/schemas/usd-inventory'
+import { formatBdt, formatUsd } from '@/lib/money/money'
 import { fmtRate, localInputToIso, nowLocalInput } from '@/components/platform/finance/format'
+import type { ManualFeeInput, UsdPurchaseDraft } from '@/schemas/usd-inventory'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -27,10 +31,42 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
+/** The bank the platform pays from unless told otherwise (owner, 2026-10-20). */
+const DEFAULT_PAID_FROM = 'DBBL'
+
+interface FeeEntry {
+  open: boolean
+  total: string
+  yourShare: string
+  reason: string
+}
+const EMPTY_FEE: FeeEntry = { open: false, total: '', yourShare: '', reason: '' }
+
+function toManual(f: FeeEntry): ManualFeeInput | undefined {
+  if (!f.open || f.total === '' || f.reason.trim() === '') return undefined
+  const total = Number(f.total)
+  const yours = f.yourShare === '' ? 0 : Number(f.yourShare)
+  if (!Number.isFinite(total) || !Number.isFinite(yours)) return undefined
+  return { total, your_share: yours, reason: f.reason.trim() }
+}
+
+/** Waits until typing settles, so the preview isn't re-run per keystroke. */
+function useSettled<T>(value: T, ms = 300): T {
+  const [settled, setSettled] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(value), ms)
+    return () => clearTimeout(t)
+  }, [value, ms])
+  return settled
+}
+
 /**
- * Records USD the platform bought: how many dollars, and how much BDT it paid.
- * The rate is worked out from the two — never typed — because each purchase
- * can carry a different one (spec §6.1).
+ * Records USD the platform bought as a FIFO batch (Finance v2). The server
+ * works out the transfer fees from the fee rules and the supplier's bank, and
+ * this dialog shows the result before anything is posted: net USD received,
+ * the fees added to the batch's cost, and the effective rate FIFO will use. A
+ * fee with no rule (Payoneer, an unusual route) must be entered here — it is
+ * never assumed to be zero.
  */
 export function AddPurchaseDialog({
   open,
@@ -41,23 +77,30 @@ export function AddPurchaseDialog({
 }) {
   const queryClient = useQueryClient()
   const listSources = useServerFn(listUsdSourcesFn)
-  const createPurchase = useServerFn(createUsdPurchaseFn)
+  const preview = useServerFn(previewUsdPurchaseFn)
+  const post = useServerFn(postUsdPurchaseFn)
 
   const [sourceId, setSourceId] = useState('')
-  const [method, setMethod] = useState('')
-  const [usd, setUsd] = useState('')
+  const [paidFrom, setPaidFrom] = useState<string>(DEFAULT_PAID_FROM)
+  const [gross, setGross] = useState('')
   const [bdt, setBdt] = useState('')
   const [when, setWhen] = useState(nowLocalInput())
+  const [reference, setReference] = useState('')
   const [notes, setNotes] = useState('')
+  const [bankFee, setBankFee] = useState<FeeEntry>(EMPTY_FEE)
+  const [usdFee, setUsdFee] = useState<FeeEntry>(EMPTY_FEE)
 
   useEffect(() => {
     if (open) {
       setSourceId('')
-      setMethod('')
-      setUsd('')
+      setPaidFrom(DEFAULT_PAID_FROM)
+      setGross('')
       setBdt('')
       setWhen(nowLocalInput())
+      setReference('')
       setNotes('')
+      setBankFee(EMPTY_FEE)
+      setUsdFee(EMPTY_FEE)
     }
   }, [open])
 
@@ -68,41 +111,62 @@ export function AddPurchaseDialog({
   })
   const active = (sources ?? []).filter((s) => s.is_active)
 
-  const usdNum = Number(usd)
+  const grossNum = Number(gross)
   const bdtNum = Number(bdt)
-  const usdOk = usd !== '' && Number.isFinite(usdNum) && usdNum > 0
-  const bdtOk = bdt !== '' && Number.isFinite(bdtNum) && bdtNum > 0
-  const rate = usdOk && bdtOk ? dec(bdtNum).div(dec(usdNum)) : null
-  const valid = sourceId !== '' && usdOk && bdtOk && when !== ''
+  const draft: UsdPurchaseDraft | null =
+    sourceId && gross !== '' && grossNum > 0 && bdt !== '' && bdtNum > 0 && when
+      ? {
+          source_id: sourceId,
+          paid_from: paidFrom as UsdPurchaseDraft['paid_from'],
+          gross_usd: grossNum,
+          bdt_principal: bdtNum,
+          purchased_at: localInputToIso(when),
+          bank_fee: toManual(bankFee),
+          usd_fee: toManual(usdFee),
+        }
+      : null
+  const settled = useSettled(draft)
+
+  const check = useQuery({
+    queryKey: ['platform-usd', 'purchase-preview', settled],
+    queryFn: () => preview({ data: settled! }),
+    enabled: open && !!settled,
+    retry: false,
+  })
+  const p = check.data
+  const current = JSON.stringify(draft) === JSON.stringify(settled)
+  const ready = !!draft && current && !!p?.cost && !check.isFetching
 
   const mutation = useMutation({
     mutationFn: () =>
-      createPurchase({
+      post({
         data: {
-          source_id: sourceId,
-          usd_amount: usdNum,
-          bdt_amount: bdtNum,
-          method: method || undefined,
-          purchased_at: localInputToIso(when),
+          ...draft!,
+          method: paidFrom === PAID_IN_CASH ? 'Cash' : bankName(paidFrom),
+          external_reference: reference || undefined,
           notes: notes || undefined,
         },
       }),
-    onSuccess: () => {
-      toast.success('USD purchase recorded')
+    onSuccess: (r) => {
+      if (r.duplicate) toast.info('That transfer reference is already recorded — nothing new was posted')
+      else toast.success('USD purchase recorded')
       void queryClient.invalidateQueries({ queryKey: ['platform-usd'] })
       onOpenChange(false)
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
   })
 
+  const missingFor = (leg: 'BANK' | 'USD') => p?.missing.find((m) => m.leg === leg)
+  const ruleFor = (leg: 'BANK' | 'USD') => p?.fees.find((f) => f.leg === leg)
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add USD purchase</DialogTitle>
           <DialogDescription>
-            Dollars the platform bought and the BDT it paid. The buying rate is
-            worked out from the two.
+            Dollars bought from a supplier. Transfer fees are worked out from the
+            fee rules; the ones you bear are added to this batch's cost.
           </DialogDescription>
         </DialogHeader>
 
@@ -130,20 +194,9 @@ export function AddPurchaseDialog({
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="purchase-method">Method (optional)</Label>
-            <Input
-              id="purchase-method"
-              value={method}
-              maxLength={100}
-              placeholder="Bank transfer, cash…"
-              onChange={(e) => setMethod(e.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="purchase-usd">USD bought</Label>
+              <Label htmlFor="purchase-usd">USD sent</Label>
               <Input
                 id="purchase-usd"
                 type="number"
@@ -151,12 +204,12 @@ export function AddPurchaseDialog({
                 step="0.01"
                 inputMode="decimal"
                 placeholder="0.00"
-                value={usd}
-                onChange={(e) => setUsd(e.target.value)}
+                value={gross}
+                onChange={(e) => setGross(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="purchase-bdt">BDT paid</Label>
+              <Label htmlFor="purchase-bdt">BDT paid to supplier</Label>
               <Input
                 id="purchase-bdt"
                 type="number"
@@ -170,22 +223,113 @@ export function AddPurchaseDialog({
             </div>
           </div>
 
-          <p className="text-sm text-muted-foreground">
-            Buying rate:{' '}
-            <span className="num font-medium text-foreground">
-              {rate ? `৳${fmtRate(rate)}` : '—'}
-            </span>{' '}
-            per USD
-          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="purchase-paid-from">Paid from</Label>
+              <Select value={paidFrom} onValueChange={setPaidFrom}>
+                <SelectTrigger id="purchase-paid-from">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {BANK_INSTITUTIONS.map((b) => (
+                    <SelectItem key={b.code} value={b.code}>
+                      {b.name}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={PAID_IN_CASH}>Cash</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="purchase-when">Purchased</Label>
+              <Input
+                id="purchase-when"
+                type="datetime-local"
+                value={when}
+                onChange={(e) => setWhen(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {draft && (
+            <div className="space-y-3 rounded-md border p-3">
+              <div className="flex items-center justify-between text-sm font-medium">
+                Fees
+                {check.isFetching && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+              </div>
+              {!!check.error && (
+                <p className="text-sm text-destructive">
+                  {check.error instanceof Error ? check.error.message : 'Could not work out the fees'}
+                </p>
+              )}
+              {(['BANK', 'USD'] as const).map((leg) => {
+                if (leg === 'BANK' && paidFrom === PAID_IN_CASH) return null
+                const fee = ruleFor(leg)
+                const missing = missingFor(leg)
+                const entry = leg === 'BANK' ? bankFee : usdFee
+                const setEntry = leg === 'BANK' ? setBankFee : setUsdFee
+                const currency = leg === 'BANK' ? 'BDT' : 'USD'
+                const fmt = (v: string) => (currency === 'BDT' ? formatBdt(v) : formatUsd(v))
+                return (
+                  <FeeLeg
+                    key={leg}
+                    title={leg === 'BANK' ? 'Bank transfer' : 'USD transfer'}
+                    currency={currency}
+                    line={
+                      fee
+                        ? {
+                            label: fee.label,
+                            total: fmt(fee.total),
+                            yours: fmt(fee.your_share),
+                            source: fee.source === 'MANUAL' ? 'entered' : fee.reason ? 'override' : 'rule',
+                          }
+                        : null
+                    }
+                    missing={missing?.message ?? null}
+                    entry={entry}
+                    onChange={setEntry}
+                  />
+                )
+              })}
+            </div>
+          )}
+
+          {p?.cost && current && (
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-md bg-muted/50 p-3 text-sm">
+              <dt className="text-muted-foreground">Net USD received</dt>
+              <dd className="num text-right font-medium">{formatUsd(p.cost.net_usd)}</dd>
+              <dt className="text-muted-foreground">Supplier rate</dt>
+              <dd className="num text-right">৳{fmtRate(p.cost.supplier_rate)}</dd>
+              <dt className="text-muted-foreground">Fees added to cost</dt>
+              <dd className="num text-right">{formatBdt(p.cost.capitalized_fees_bdt)}</dd>
+              <dt className="text-muted-foreground">Batch cost</dt>
+              <dd className="num text-right font-medium">{formatBdt(p.cost.total_bdt_cost)}</dd>
+              <dt className="text-muted-foreground">Effective rate</dt>
+              <dd className="num text-right font-medium">৳{fmtRate(p.cost.effective_rate)}</dd>
+            </dl>
+          )}
+          {p?.cost?.rate_warning && current && (
+            <Alert>
+              <TriangleAlert className="size-4" />
+              <AlertDescription>
+                The supplier rate is outside ৳124–131. Check the amounts — you can still record it.
+              </AlertDescription>
+            </Alert>
+          )}
 
           <div className="space-y-2">
-            <Label htmlFor="purchase-when">Purchased</Label>
+            <Label htmlFor="purchase-reference">Transfer reference (optional)</Label>
             <Input
-              id="purchase-when"
-              type="datetime-local"
-              value={when}
-              onChange={(e) => setWhen(e.target.value)}
+              id="purchase-reference"
+              value={reference}
+              maxLength={120}
+              placeholder="Binance / Payoneer transaction id"
+              autoComplete="off"
+              onChange={(e) => setReference(e.target.value)}
             />
+            <p className="text-xs text-muted-foreground">
+              The same reference from the same source is never recorded twice.
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -204,12 +348,119 @@ export function AddPurchaseDialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button disabled={!valid || mutation.isPending} onClick={() => mutation.mutate()}>
+          <Button disabled={!ready || mutation.isPending} onClick={() => mutation.mutate()}>
             {mutation.isPending && <Loader2 className="size-4 animate-spin" />}
             Record purchase
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function FeeLeg({
+  title,
+  currency,
+  line,
+  missing,
+  entry,
+  onChange,
+}: {
+  title: string
+  currency: 'BDT' | 'USD'
+  line: { label: string; total: string; yours: string; source: string } | null
+  missing: string | null
+  entry: FeeEntry
+  onChange: (f: FeeEntry) => void
+}) {
+  const id = title.toLowerCase().replace(/\s+/g, '-')
+  const showInputs = entry.open || (!!missing && !line)
+  return (
+    <div className="space-y-2 text-sm">
+      {line ? (
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div>{line.label}</div>
+            <div className="text-xs text-muted-foreground">
+              {line.source === 'rule' ? 'From fee rule' : line.source === 'override' ? 'Rule overridden' : 'Entered by hand'}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="num">{line.total}</div>
+            <div className="num text-xs text-muted-foreground">you bear {line.yours}</div>
+          </div>
+        </div>
+      ) : (
+        missing && <p className="text-warning">{missing}</p>
+      )}
+
+      {showInputs ? (
+        <div className="grid gap-2 rounded-md bg-muted/40 p-2 sm:grid-cols-2">
+          <div className="space-y-1">
+            <Label htmlFor={`${id}-total`} className="text-xs">
+              {title} fee ({currency})
+            </Label>
+            <Input
+              id={`${id}-total`}
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              value={entry.total}
+              onChange={(e) => onChange({ ...entry, open: true, total: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor={`${id}-yours`} className="text-xs">
+              Your share ({currency})
+            </Label>
+            <Input
+              id={`${id}-yours`}
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              placeholder="0"
+              value={entry.yourShare}
+              onChange={(e) => onChange({ ...entry, open: true, yourShare: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1 sm:col-span-2">
+            <Label htmlFor={`${id}-reason`} className="text-xs">
+              Reason
+            </Label>
+            <Input
+              id={`${id}-reason`}
+              value={entry.reason}
+              maxLength={500}
+              placeholder={currency === 'USD' ? 'Payoneer statement' : 'Bank waived the fee'}
+              onChange={(e) => onChange({ ...entry, open: true, reason: e.target.value })}
+            />
+          </div>
+          {line && line.source !== 'entered' && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="sm:col-span-2"
+              onClick={() => onChange(EMPTY_FEE)}
+            >
+              Use the rule's fee
+            </Button>
+          )}
+        </div>
+      ) : (
+        line &&
+        line.source === 'rule' && (
+          <button
+            type="button"
+            className="text-xs text-muted-foreground underline underline-offset-2"
+            onClick={() => onChange({ ...entry, open: true })}
+          >
+            Override this fee
+          </button>
+        )
+      )}
+    </div>
   )
 }

@@ -13,8 +13,10 @@ import {
   listAgencyLimitApprovalsFn,
   listUsdPurchasesFn,
   listUsdSalesFn,
+  listUsdSourcesFn,
   setUsdSourceActiveFn,
 } from '@/server/platform/finance.fns'
+import { bankName } from '@/schemas/usd-inventory'
 import { dec, formatBdt, formatUsd } from '@/lib/money/money'
 import { mergeAllocationHistory } from '@/lib/finance/agency-allocations'
 import {
@@ -24,6 +26,8 @@ import {
 } from '@/components/platform/finance/allocation-history-table'
 import { fmtDateTime, fmtRate } from '@/components/platform/finance/format'
 import { AddPurchaseDialog } from '@/components/platform/finance/purchase-dialog'
+import { FeeRulesTab } from '@/components/platform/finance/fee-rules-tab'
+import { InventoryTab } from '@/components/platform/finance/inventory-tab'
 import { RecordSaleDialog } from '@/components/platform/finance/sale-dialog'
 import { SalesTable } from '@/components/platform/finance/sales-table'
 import { SourceDialog } from '@/components/platform/finance/source-dialog'
@@ -97,20 +101,30 @@ function PlatformFinancePage() {
       </PageHeader>
 
       <Tabs defaultValue="stock">
-        <TabsList>
+        {/* Five tabs don't fit a phone: the bar scrolls inside itself instead
+            of pushing the page sideways (same as the ad account page). */}
+        <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="stock">USD Stock</TabsTrigger>
+          <TabsTrigger value="inventory">Inventory (FIFO)</TabsTrigger>
           <TabsTrigger value="sources">Source Summary</TabsTrigger>
           <TabsTrigger value="agencies">Agency Summary</TabsTrigger>
+          <TabsTrigger value="fees">Fee Rules</TabsTrigger>
         </TabsList>
 
         <TabsContent value="stock" className="space-y-6">
           <StockTab />
+        </TabsContent>
+        <TabsContent value="inventory" className="space-y-6">
+          <InventoryTab />
         </TabsContent>
         <TabsContent value="sources" className="space-y-6">
           <SourcesTab />
         </TabsContent>
         <TabsContent value="agencies" className="space-y-6">
           <AgenciesTab onRecordSale={openSale} />
+        </TabsContent>
+        <TabsContent value="fees" className="space-y-6">
+          <FeeRulesTab />
         </TabsContent>
       </Tabs>
 
@@ -270,6 +284,7 @@ function SourcesTab() {
   const getReport = useServerFn(getSourceWiseStockFn)
   const listPurchases = useServerFn(listUsdPurchasesFn)
   const setActive = useServerFn(setUsdSourceActiveFn)
+  const listSources = useServerFn(listUsdSourcesFn)
   // One dialog for both jobs: `editing` null means "new source".
   const [sourceDialogOpen, setSourceDialogOpen] = useState(false)
   const [editing, setEditing] = useState<EditableSource | null>(null)
@@ -289,6 +304,12 @@ function SourcesTab() {
     queryFn: () =>
       listPurchases({ data: filter === ALL_SOURCES ? {} : { source_id: filter } }),
   })
+
+  const sources = useQuery({
+    queryKey: ['platform-usd', 'sources'],
+    queryFn: () => listSources(),
+  })
+  const bankOf = new Map((sources.data ?? []).map((s) => [s.id, s.receiving_institution]))
 
   const toggle = useMutation({
     mutationFn: (vars: { id: string; is_active: boolean }) => setActive({ data: vars }),
@@ -324,6 +345,7 @@ function SourcesTab() {
               <TableRow>
                 <TableHead>Source</TableHead>
                 <TableHead>Payment method</TableHead>
+                <TableHead>Receiving bank</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Purchased</TableHead>
                 <TableHead className="text-right">Allocated</TableHead>
@@ -336,7 +358,7 @@ function SourcesTab() {
               {report.isLoading &&
                 Array.from({ length: 3 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell colSpan={8}>
+                    <TableCell colSpan={9}>
                       <Skeleton className="h-6 w-full" />
                     </TableCell>
                   </TableRow>
@@ -344,7 +366,7 @@ function SourcesTab() {
 
               {!!report.error && (
                 <TableRow>
-                  <TableCell colSpan={8}>
+                  <TableCell colSpan={9}>
                     <div className="py-10 text-center text-sm text-destructive">
                       Couldn't load sources:{' '}
                       {report.error instanceof Error ? report.error.message : 'unknown error'}
@@ -355,7 +377,7 @@ function SourcesTab() {
 
               {!report.isLoading && !report.error && rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8}>
+                  <TableCell colSpan={9}>
                     <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
                       <Landmark className="size-8 opacity-40" />
                       No sources yet. Add the first one to start recording purchases.
@@ -371,6 +393,13 @@ function SourcesTab() {
                     {r.payment_method ?? (
                       // Created before the column existed — say so, and the
                       // Edit button beside it is how it gets one.
+                      <span className="text-muted-foreground italic">Not set</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {bankOf.get(r.source_id) ? (
+                      bankName(bankOf.get(r.source_id))
+                    ) : (
                       <span className="text-muted-foreground italic">Not set</span>
                     )}
                   </TableCell>
@@ -397,6 +426,7 @@ function SourcesTab() {
                             id: r.source_id,
                             name: r.name,
                             payment_method: r.payment_method,
+                            receiving_institution: bankOf.get(r.source_id) ?? null,
                           })
                         }
                       >

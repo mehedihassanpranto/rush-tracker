@@ -3,6 +3,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { dec } from '@/lib/money/money'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { loadLiveTestEnv } from '@/test/live-env'
+import { GOLDEN } from '@/lib/finance/golden-dataset'
+import { defaultFeeRules, manualFee, resolveFeeRule } from '@/lib/finance/fees'
+import type { FeeChannel } from '@/lib/finance/fees'
 
 /**
  * The platform's USD/BDT stock ledger against the real project (migration
@@ -431,5 +434,213 @@ describe.skipIf(!creds)('platform USD stock ledger', () => {
     expect(Number(removed!.total_usd_allocated)).toBe(310)
     expect(Number(removed!.transaction_count)).toBe(2)
     expect(deletedOrgId).not.toBe('')
+  })
+})
+
+/**
+ * Finance v2 FIFO inventory (migration 000059) against the real database, with
+ * the hand-computed golden dataset (src/lib/finance/golden-dataset.ts): the
+ * RPCs must land on the same paisa as the engine.
+ *
+ * In THIS file on purpose: Vitest runs files in parallel but describe blocks
+ * of one file in order, hooks scoped. The block above inserts and deletes
+ * plain purchases; if this block's FIFO drew from them, their cleanup would
+ * fail on the allocation FK.
+ *
+ * Self-contained against whatever staging already holds: it first drains the
+ * inventory with one outflow, so FIFO only sees this test's batches, and at
+ * the end reverses everything it posted (newest first) and then the drain.
+ * The rows stay — the ledger is insert-only, which is the point — reversed.
+ */
+describe.skipIf(!creds)('Finance v2 FIFO inventory (000059)', () => {
+  let admin: SupabaseClient
+  let anon: SupabaseClient
+  let sourceId = ''
+  let drainId: string | null = null
+  const outflowIds: Array<string> = []
+  const batchIds: Record<string, string> = {}
+  const base = Date.now() + 60_000
+  const at = (minutes: number) => new Date(base + minutes * 60_000).toISOString()
+
+  const rules = () => defaultFeeRules('2020-01-01')
+  const ruleFee = (channel: FeeChannel, from: string, to: string, amount: number) =>
+    resolveFeeRule(rules(), { channel, from_institution: from, to_institution: to, date: '2026-10-20', transfer_amount: amount })
+
+  async function purchase(gross: number, principal: number, fees: Array<unknown>, minutes: number, ref?: string) {
+    return admin.rpc('post_usd_purchase', {
+      p_actor: null,
+      p_source_id: sourceId,
+      p_gross_usd: gross,
+      p_bdt_principal: principal,
+      p_fees: fees,
+      p_purchased_at: at(minutes),
+      p_method: null,
+      p_external_reference: ref ?? null,
+      p_notes: `v2 test ${SUFFIX}`,
+    })
+  }
+  async function outflow(usd: number, key = `${SUFFIX}-${Math.random()}`) {
+    return admin.rpc('post_usd_outflow', {
+      p_actor: null,
+      p_kind: 'OTHER',
+      p_usd: usd,
+      p_event_at: at(30),
+      p_ad_account_id: null,
+      p_idempotency_key: key,
+      p_notes: `v2 test ${SUFFIX}`,
+    })
+  }
+  async function fifo() {
+    const { data, error } = await admin.from('usd_fifo_summary').select('left_usd, left_bdt').single()
+    if (error) throw new Error(error.message)
+    return { usd: dec(data.left_usd).toFixed(2), bdt: dec(data.left_bdt).toFixed(2) }
+  }
+
+  beforeAll(async () => {
+    admin = createClient(creds!.url, creds!.serviceKey, noSession)
+    anon = createClient(creds!.url, creds!.anonKey, noSession)
+    const { data: src, error } = await admin
+      .from('usd_sources')
+      .insert({ name: `ZZ-V2-${SUFFIX}`, payment_method: 'Binance', receiving_institution: 'DBBL' })
+      .select('id')
+      .single()
+    if (error) throw new Error(error.message)
+    sourceId = src.id
+
+    const left = await fifo()
+    if (dec(left.usd).gt(0)) {
+      const { data, error: dErr } = await outflow(dec(left.usd).toNumber(), `drain-${SUFFIX}`)
+      if (dErr) throw new Error(dErr.message)
+      drainId = (data as { id: string }).id
+    }
+  }, 60_000)
+
+  afterAll(async () => {
+    if (!admin) return
+    for (const id of [...outflowIds].reverse()) {
+      await admin.rpc('reverse_usd_outflow', { p_actor: null, p_outflow_id: id, p_reason: 'test cleanup' })
+    }
+    for (const id of Object.values(batchIds)) {
+      await admin.rpc('reverse_usd_purchase', { p_actor: null, p_purchase_id: id, p_reason: 'test cleanup' })
+    }
+    if (drainId) {
+      await admin.rpc('reverse_usd_outflow', { p_actor: null, p_outflow_id: drainId, p_reason: 'test cleanup' })
+    }
+    if (sourceId) await admin.from('usd_sources').update({ is_active: false }).eq('id', sourceId)
+  }, 60_000)
+
+  it('posts the golden batches: cost is the taka that left, at the deal rate', async () => {
+    expect(await fifo()).toEqual({ usd: '0.00', bdt: '0.00' })
+    const g = GOLDEN.batches
+    const b1 = await purchase(1000, Number(g.B1.principal), [ruleFee('BINANCE', 'Binance', 'Binance', 1000), ruleFee('BANK_INTERNAL', 'DBBL', 'DBBL', 1)], 1, `ref-${SUFFIX}`)
+    const b2 = await purchase(500, Number(g.B2.principal), [
+      manualFee({ currency: 'USD', total: 10, your_share: 4, reason: 'Payoneer statement', gross: 500 }),
+      ruleFee('NPSB', 'DBBL', 'BRAC', 1),
+    ], 2)
+    const b3 = await purchase(300, Number(g.B3.principal), [ruleFee('BINANCE', 'Binance', 'Binance', 300), ruleFee('BANK_INTERNAL', 'DBBL', 'DBBL', 1)], 3)
+    for (const [name, res, want] of [['B1', b1, g.B1], ['B2', b2, g.B2], ['B3', b3, g.B3]] as const) {
+      expect(res.error).toBeNull()
+      const row = res.data as Record<string, unknown>
+      batchIds[name] = row.id as string
+      expect(dec(row.net_usd as number).toFixed(6)).toBe(want.net_usd)
+      expect(dec(row.capitalized_fees_bdt as number).toFixed(2)).toBe(want.fees_bdt)
+      expect(dec(row.bdt_amount as number).toFixed(2)).toBe(want.cost)
+      expect(dec(row.supplier_rate as number).toFixed(6)).toBe(want.rate)
+      expect(row.rate_warning).toBe(false)
+    }
+    expect(await fifo()).toEqual({ usd: '1789.98', bdt: '228489.00' })
+  })
+
+  it('a duplicate transfer reference posts nothing new', async () => {
+    const again = await purchase(1000, 126000, [ruleFee('BINANCE', 'Binance', 'Binance', 1000)], 4, ` REF-${SUFFIX} `)
+    expect(again.error).toBeNull()
+    expect(again.data).toMatchObject({ id: batchIds.B1, duplicate: true })
+    expect(await fifo()).toEqual({ usd: '1789.98', bdt: '228489.00' })
+  })
+
+  it('draws FIFO oldest first and splits across batches, to the paisa', async () => {
+    const one = await outflow(700)
+    expect(one.error).toBeNull()
+    outflowIds.push((one.data as { id: string }).id)
+    expect(dec((one.data as { bdt_cost: number }).bdt_cost).toFixed(2)).toBe(GOLDEN.prepaidFunding.bdt)
+
+    const two = await outflow(450)
+    expect(two.error).toBeNull()
+    const twoId = (two.data as { id: string }).id
+    outflowIds.push(twoId)
+    expect(dec((two.data as { bdt_cost: number }).bdt_cost).toFixed(2)).toBe(GOLDEN.postpaidSettlement.bdt)
+
+    const { data: allocs } = await admin
+      .from('inventory_allocations')
+      .select('batch_id, usd, bdt')
+      .eq('outflow_id', twoId)
+    const byBatch = Object.fromEntries((allocs ?? []).map((a) => [a.batch_id, [dec(a.usd).toFixed(6), dec(a.bdt).toFixed(2)]]))
+    expect(byBatch).toEqual({
+      [batchIds.B1]: ['299.990000', '37799.12'],
+      [batchIds.B2]: ['150.010000', '19436.70'],
+    })
+    expect(await fifo()).toEqual({ usd: '639.98', bdt: GOLDEN.closingInventory.bdt })
+  })
+
+  it('refuses: more than in stock, a backdated purchase, reversing a used batch, a manual fee without a reason', async () => {
+    expect((await outflow(640)).error?.message).toMatch(/^INSUFFICIENT_INVENTORY/)
+    expect((await purchase(100, 12700, [], -5)).error?.message).toMatch(/^BACKDATED_PURCHASE/)
+    const used = await admin.rpc('reverse_usd_purchase', { p_actor: null, p_purchase_id: batchIds.B1, p_reason: 'x' })
+    expect(used.error?.message).toMatch(/^BATCH_CONSUMED/)
+    const noReason = { ...manualFee({ currency: 'USD', total: 1, reason: 'x' }), reason: '' }
+    expect((await purchase(100, 12700, [noReason], 10)).error?.message).toMatch(/^FEE_INVALID/)
+    const bill = await admin.rpc('post_usd_outflow', {
+      p_actor: null, p_kind: 'META_BILL_PAYMENT', p_usd: 1, p_event_at: at(30),
+      p_ad_account_id: '00000000-0000-0000-0000-0000000000ff', p_idempotency_key: null, p_notes: null,
+    })
+    expect(bill.error?.message).toMatch(/^NOT_FOUND/)
+    expect(await fifo()).toEqual({ usd: '639.98', bdt: GOLDEN.closingInventory.bdt })
+  })
+
+  it('a retried outflow with the same key posts once', async () => {
+    const key = `retry-${SUFFIX}`
+    const first = await outflow(10, key)
+    const second = await outflow(10, key)
+    expect(first.error).toBeNull()
+    outflowIds.push((first.data as { id: string }).id)
+    expect(second.data).toMatchObject({ id: (first.data as { id: string }).id, duplicate: true })
+    expect((await fifo()).usd).toBe('629.98')
+  })
+
+  it('two outflows at once cannot spend the same dollars', async () => {
+    const [a, b] = await Promise.all([outflow(400), outflow(400)])
+    const ok = [a, b].filter((r) => !r.error)
+    expect(ok).toHaveLength(1)
+    outflowIds.push((ok[0].data as { id: string }).id)
+    expect([a, b].find((r) => r.error)?.error?.message).toMatch(/^INSUFFICIENT_INVENTORY/)
+    expect((await fifo()).usd).toBe('229.98')
+  })
+
+  it('reversing an outflow puts back exactly what it took; allocation rows cannot be edited', async () => {
+    const last = outflowIds.pop()!
+    const rev = await admin.rpc('reverse_usd_outflow', { p_actor: null, p_outflow_id: last, p_reason: 'test' })
+    expect(rev.error).toBeNull()
+    expect((await fifo()).usd).toBe('629.98')
+    const again = await admin.rpc('reverse_usd_outflow', { p_actor: null, p_outflow_id: last, p_reason: 'test' })
+    expect(again.error?.message).toMatch(/^ALREADY_REVERSED/)
+
+    const del = await admin.from('inventory_allocations').delete().eq('outflow_id', last)
+    expect(del.error?.message).toMatch(/IMMUTABLE/)
+    const upd = await admin.from('inventory_allocations').update({ bdt: 0 }).eq('outflow_id', last)
+    expect(upd.error?.message).toMatch(/IMMUTABLE/)
+    const audit = await admin.from('platform_finance_audit').delete().eq('entity_id', last)
+    expect(audit.error?.message).toMatch(/IMMUTABLE/)
+  })
+
+  it('anon and signed-in users reach none of it', async () => {
+    for (const t of ['fee_rules', 'usd_outflows', 'inventory_allocations', 'platform_finance_audit', 'usd_batch_balances', 'usd_fifo_summary']) {
+      const { data } = await anon.from(t).select('*').limit(1)
+      expect(data ?? [], t).toEqual([])
+    }
+    const rpc = await anon.rpc('post_usd_outflow', {
+      p_actor: null, p_kind: 'OTHER', p_usd: 1, p_event_at: at(30),
+      p_ad_account_id: null, p_idempotency_key: null, p_notes: 'x',
+    })
+    expect(rpc.error).not.toBeNull()
   })
 })

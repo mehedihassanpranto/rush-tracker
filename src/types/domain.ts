@@ -227,6 +227,8 @@ export interface UsdSource {
   /** How the dollars reach the platform (Payoneer, PayPal, …). null only for a
    * source created before the column existed — new sources must choose one. */
   payment_method: string | null
+  /** Bank code the supplier is paid into (000059); null = not set yet. */
+  receiving_institution: string | null
   is_active: boolean
   created_at: string
 }

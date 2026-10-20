@@ -6,6 +6,8 @@ import { toast } from 'sonner'
 
 import { createUsdSourceFn, updateUsdSourceFn } from '@/server/platform/finance.fns'
 import { USD_PAYMENT_METHODS } from '@/schemas/platform-finance'
+import { BANK_INSTITUTIONS } from '@/schemas/usd-inventory'
+import type { BankCode } from '@/schemas/usd-inventory'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -31,6 +33,7 @@ export interface EditableSource {
   id: string
   name: string
   payment_method: string | null
+  receiving_institution: string | null
 }
 
 /**
@@ -55,6 +58,7 @@ export function SourceDialog({
 
   const [name, setName] = useState('')
   const [method, setMethod] = useState('')
+  const [bank, setBank] = useState('')
 
   useEffect(() => {
     if (open) {
@@ -62,12 +66,17 @@ export function SourceDialog({
       // A source with no method yet opens with none chosen — the placeholder
       // asks for a real answer rather than defaulting to the first option.
       setMethod(source?.payment_method ?? '')
+      setBank(source?.receiving_institution ?? '')
     }
-  }, [open, source?.id, source?.name, source?.payment_method])
+  }, [open, source?.id, source?.name, source?.payment_method, source?.receiving_institution])
 
   const mutation = useMutation({
     mutationFn: () => {
-      const payload = { name, payment_method: method as (typeof USD_PAYMENT_METHODS)[number] }
+      const payload = {
+        name,
+        payment_method: method as (typeof USD_PAYMENT_METHODS)[number],
+        receiving_institution: bank ? (bank as BankCode) : undefined,
+      }
       return source
         ? updateSource({ data: { id: source.id, ...payload } })
         : createSource({ data: payload })
@@ -88,8 +97,8 @@ export function SourceDialog({
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit USD source' : 'New USD source'}</DialogTitle>
           <DialogDescription>
-            Where the platform buys dollars from, and the channel those dollars
-            arrive through. Names are unique regardless of capitals.
+            Where the platform buys dollars from, the channel those dollars
+            arrive through, and the bank you pay them into. Names are unique regardless of capitals.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -124,6 +133,25 @@ export function SourceDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="usd-source-bank">Receiving bank</Label>
+            <Select value={bank} onValueChange={setBank}>
+              <SelectTrigger id="usd-source-bank">
+                <SelectValue placeholder="Choose the bank you pay them into" />
+              </SelectTrigger>
+              <SelectContent>
+                {BANK_INSTITUTIONS.map((b) => (
+                  <SelectItem key={b.code} value={b.code}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Decides the bank fee on each purchase: same bank as yours is
+              usually free, another bank goes by NPSB.
+            </p>
           </div>
         </form>
         <DialogFooter>

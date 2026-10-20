@@ -17,7 +17,6 @@ import type { SourceWiseStock } from '@/lib/finance/usd-stock'
 import { dec } from '@/lib/money/money'
 import {
   agencyAdAccountsSchema,
-  usdPurchaseCreateSchema,
   usdPurchaseListSchema,
   usdSaleCreateSchema,
   usdSaleListSchema,
@@ -119,7 +118,11 @@ export const createUsdSourceFn = createServerFn({ method: 'POST' })
     const admin = getSupabaseAdminClient()
     const { data: row, error } = await admin
       .from('usd_sources')
-      .insert({ name: data.name, payment_method: data.payment_method })
+      .insert({
+        name: data.name,
+        payment_method: data.payment_method,
+        receiving_institution: data.receiving_institution ?? null,
+      })
       .select('*')
       .single()
     if (error) {
@@ -138,7 +141,11 @@ export const updateUsdSourceFn = createServerFn({ method: 'POST' })
     const admin = getSupabaseAdminClient()
     const { data: updated, error } = await admin
       .from('usd_sources')
-      .update({ name: data.name, payment_method: data.payment_method })
+      .update({
+        name: data.name,
+        payment_method: data.payment_method,
+        receiving_institution: data.receiving_institution ?? null,
+      })
       .eq('id', data.id)
       .select('*')
     if (error) {
@@ -181,6 +188,7 @@ async function fetchAllPurchaseLots(admin: SupabaseClient) {
     const { data, error } = await admin
       .from('usd_purchases')
       .select('source_id, usd_amount, bdt_amount, purchased_at')
+      .eq('status', 'POSTED')
       .order('purchased_at', { ascending: true })
       .order('created_at', { ascending: true })
       .order('id', { ascending: true })
@@ -236,6 +244,7 @@ export const listUsdPurchasesFn = createServerFn({ method: 'GET' })
     let query = admin
       .from('usd_purchases')
       .select('*, source:usd_sources(id, name, payment_method)')
+      .eq('status', 'POSTED')
       .order('purchased_at', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(500)
@@ -245,39 +254,9 @@ export const listUsdPurchasesFn = createServerFn({ method: 'GET' })
     return (rows ?? []) as unknown as Array<UsdPurchaseWithSource>
   })
 
-export const createUsdPurchaseFn = createServerFn({ method: 'POST' })
-  .validator(usdPurchaseCreateSchema)
-  .handler(async ({ data }): Promise<UsdPurchaseWithSource> => {
-    const actor = await requirePlatformAdmin()
-    const admin = getSupabaseAdminClient()
-
-    const { data: source } = await admin
-      .from('usd_sources')
-      .select('id, name, is_active')
-      .eq('id', data.source_id)
-      .maybeSingle()
-    if (!source) throw new Error('Source not found')
-    if (!(source as { is_active: boolean }).is_active) {
-      throw new Error('That source is deactivated — reactivate it before recording a purchase.')
-    }
-
-    const { data: row, error } = await admin
-      .from('usd_purchases')
-      .insert({
-        source_id: data.source_id,
-        usd_amount: dec(data.usd_amount).toDecimalPlaces(2).toNumber(),
-        bdt_amount: dec(data.bdt_amount).toDecimalPlaces(2).toNumber(),
-        method: data.method ?? null,
-        purchased_at: data.purchased_at ?? new Date().toISOString(),
-        notes: data.notes ?? null,
-        recorded_by: actor.id,
-      })
-      .select('*, source:usd_sources(id, name, payment_method)')
-      .single()
-    if (error) throw new Error(error.message)
-    // No audit row — see the AUDIT PLACEMENT note at the top of this file.
-    return row as unknown as UsdPurchaseWithSource
-  })
+// Recording a purchase moved to postUsdPurchaseFn (usd-inventory.fns.ts):
+// it resolves the transfer fees and posts a FIFO batch through the
+// post_usd_purchase() RPC (migration 000059).
 
 // ------------------------------------------------------------------- sales ---
 

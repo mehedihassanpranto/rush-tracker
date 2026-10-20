@@ -6,6 +6,80 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-10-20
+
+**Fixed (Finance v2, before it went live): a purchase's cost counted a USD
+fee twice — migration 000060.** Found while designing the Milestone 2
+journal: 000059 added your share of a USD fee to the batch cost as fee ×
+rate (৳1.26 on a $1,000 Binance buy), but no taka left your accounts for it —
+the principal already paid for the dollars that never landed — so the
+purchase's journal entry could not balance. Now cost = BDT paid + the bank
+fee you bear; supplier rate = paid ÷ (net + your USD fee share). Same fix in
+`usd-batch.ts` (the `PRICING_BASIS`/`CAPITALIZE_BORNE_FEES` switches are gone:
+there is one correct answer). Golden dataset: inputs restated as BDT
+actually paid; every cost and downstream figure unchanged. No production row
+affected — nothing had been posted through the function (the UI was not
+deployed). Staging: applied; `npm test` 298/298; finance e2e passes (it now
+ignores Google Fonts network outages, which timed out from this machine,
+while still failing on any app/Supabase request or HTTP error).
+
+**Platform finance v2: Milestone 1 — FIFO inventory with transfer fees
+(migration 000059 — staging: applied 2026-10-20; production: applied 2026-10-20 by the owner via `supabase db push`).** Owner accepted
+every Milestone 0 suggestion ("go with your suggestions"); recorded in
+`docs/ACCOUNTING_POLICY.md` and the Milestone 0 doc. Key model decision:
+dollars leave the platform's stock when Meta's bill is paid, not when a sale
+to an agency is recorded (that is revenue). Migration 000059 (additive): every
+`usd_purchases` row is now a FIFO batch (gross/net USD, fee snapshot,
+capitalized fees, supplier and effective rate, posting order, reversal
+status; existing rows backfilled as fee-less opening batches, no existing
+value changed); `bdt_amount` now includes the fees you bear, so the
+weighted-average USD Stock tab stays coherent and ignores reversed purchases.
+New `fee_rules` (seeded DBBL→DBBL 0, NPSB 10, Binance 0.01), `usd_outflows`,
+insert-only `inventory_allocations` and `platform_finance_audit`, views
+`usd_batch_balances` / `usd_fifo_summary`, RPCs `post_usd_purchase`,
+`post_usd_outflow`, `reverse_usd_outflow`, `reverse_usd_purchase` (one
+advisory lock serializes all inventory writes; idempotent by transfer
+reference / key; backdating and used-batch reversal refused). Suppliers gain a
+receiving bank. UI on `/platform/finance`: the purchase dialog previews fees
+from the rules (manual entry where no rule applies — Payoneer always — and
+reasoned overrides), net USD, batch cost and effective rate, with the 124–131
+soft warning; new **Inventory (FIFO)** tab (stock at cost, batches, USD paid
+out with the batches it drew from, reversals, a one-time "Set opening stock"
+cut-over) and **Fee Rules** tab; Source Summary shows each supplier's bank.
+Live-DB suite added to `usd-ledger.test.ts` (golden figures through the RPCs
+to the paisa, duplicates, concurrency, refusals, immutability, exposure) and
+e2e `platform-finance.spec.ts` (supplier with bank → fee preview → purchase →
+FIFO payout → reversals, light/dark/phone, zero console errors). Browser check
+caught the five-tab bar pushing the page 176px sideways at 390px; it now
+scrolls inside itself like the ad-account page's. Staging: applied via the
+Management API (CLI stays linked to production); `npm test` 297/297, e2e
+40/40, typecheck and build clean. Production before/after (read-only snapshots):
+4 sources, 2 purchases $858.48 / ৳110,010.00, 0 sales, 264 ledger rows net
+৳100,771.00 — identical after; the 2 purchases are now opening batches #1
+($390.28 / ৳50,000) and #2 ($468.20 / ৳60,010), FIFO stock $858.48 until the
+owner sets the opening stock.
+
+**Platform finance v2: Milestone 0 (mapping + engine, no migration).**
+Owner supplied "Financial Dashboard Full Plan v2" (FIFO batches, transfer
+fees, double entry, Meta prepaid/postpaid, maker-checker). Per the plan's own
+gate, nothing touches the database yet. `docs/FINANCE_V2_MILESTONE0.md` maps
+every plan entity onto the existing Finance & Accounts tables (`usd_sources` →
+suppliers, `usd_purchases` → batches, `usd_sales` → one transaction type) and
+lists the traps and the decisions needed: plan defaults 4–11, plus Q1–Q6
+(whose book "client" means, what a `usd_sales` row is, postpaid cost timing,
+Meta billing mode per account, Meta spend source, the second approver).
+`docs/ACCOUNTING_POLICY.md` is the rulebook. New pure engine in
+`src/lib/finance/`: `accounting-policy.ts` (defaults as constants), `fees.ts`
+(effective-dated rule matching; a missing rule blocks instead of defaulting to
+0; manual Payoneer split; reasoned overrides; the owner's DBBL/NPSB/Binance
+rules), `usd-batch.ts` (net USD, capitalized fees once, effective rate, 124–131
+rate warning), `fifo.ts` (posting-order FIFO that rounds without stranding a
+paisa, prepaid-lot spend with overspend exceptions, backdating and reversal
+guards), and a hand-computed golden dataset the tests reproduce exactly. The
+dashboard and its weighted-average figures are unchanged.
+
+---
+
 ## 2026-10-12
 
 **Fixed (dev only): random "socket hang up" / "read ECONNRESET" error overlay
