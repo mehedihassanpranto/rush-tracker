@@ -151,6 +151,9 @@ short; detail belongs in the changelog.
   `current_limit_usd` between accounts, never the ledger. A pool account →
   platform executes. Meta: source first; `syncAndPersistAdAccountSpendCap`
   defers a destination while its transfer source is out of sync.
+- **Platform finance v2** follows `docs/ACCOUNTING_POLICY.md` (defaults in
+  `src/lib/finance/accounting-policy.ts`). Meta's prepaid/postpaid billing is
+  `meta_billing_mode`, never the client `segment`.
 - **Client segments**: `prepaid` (pays full cost up front), `partial` (pays
   part, rest becomes due), `postpaid` (all due). Segment is read server-side and
   snapshotted on each request.

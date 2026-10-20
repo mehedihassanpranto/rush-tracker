@@ -6,6 +6,29 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-10-20
+
+**Platform finance v2: Milestone 0 (mapping + engine, no migration).**
+Owner supplied "Financial Dashboard Full Plan v2" (FIFO batches, transfer
+fees, double entry, Meta prepaid/postpaid, maker-checker). Per the plan's own
+gate, nothing touches the database yet. `docs/FINANCE_V2_MILESTONE0.md` maps
+every plan entity onto the existing Finance & Accounts tables (`usd_sources` →
+suppliers, `usd_purchases` → batches, `usd_sales` → one transaction type) and
+lists the traps and the decisions needed: plan defaults 4–11, plus Q1–Q6
+(whose book "client" means, what a `usd_sales` row is, postpaid cost timing,
+Meta billing mode per account, Meta spend source, the second approver).
+`docs/ACCOUNTING_POLICY.md` is the rulebook. New pure engine in
+`src/lib/finance/`: `accounting-policy.ts` (defaults as constants), `fees.ts`
+(effective-dated rule matching; a missing rule blocks instead of defaulting to
+0; manual Payoneer split; reasoned overrides; the owner's DBBL/NPSB/Binance
+rules), `usd-batch.ts` (net USD, capitalized fees once, effective rate, 124–131
+rate warning), `fifo.ts` (posting-order FIFO that rounds without stranding a
+paisa, prepaid-lot spend with overspend exceptions, backdating and reversal
+guards), and a hand-computed golden dataset the tests reproduce exactly. The
+dashboard and its weighted-average figures are unchanged.
+
+---
+
 ## 2026-10-12
 
 **Fixed (dev only): random "socket hang up" / "read ECONNRESET" error overlay
