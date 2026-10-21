@@ -1,33 +1,10 @@
 import { z } from 'zod'
-import { organizationId } from '@/schemas/organization'
 import { bankCode } from '@/schemas/usd-inventory'
 
 /**
- * Platform USD/BDT stock ledger (spec §6.1). Amounts are entered, rates never
- * are — a rate is always bdt_amount / usd_amount, computed by the database per
- * transaction. `organizationId` (not z.uuid) because organization zero's
- * hand-picked sentinel id fails a strict RFC 4122 check.
+ * Platform suppliers (usd_sources) and the purchase list filter. Purchases
+ * themselves are posted through Finance v2 (src/schemas/usd-inventory.ts).
  */
-
-const usdAmount = z.coerce
-  .number({ message: 'Enter a valid USD amount' })
-  .positive('Must be greater than zero')
-  .max(1_000_000_000, 'Amount is too large')
-
-const bdtAmount = z.coerce
-  .number({ message: 'Enter a valid BDT amount' })
-  .positive('Must be greater than zero')
-  .max(1_000_000_000_000, 'Amount is too large')
-
-const isoDateTime = z.iso.datetime({ offset: true, message: 'Enter a valid date and time' })
-
-const optionalText = (max: number) =>
-  z
-    .string()
-    .trim()
-    .max(max, `Keep it under ${max} characters`)
-    .optional()
-    .transform((v) => (v ? v : undefined))
 
 /**
  * How the dollars reach the platform. Defined once and read by both the source
@@ -77,23 +54,4 @@ export const usdSourceStatusSchema = z.object({
 
 export const usdPurchaseListSchema = z.object({
   source_id: z.uuid().optional(),
-})
-
-export const usdSaleCreateSchema = z.object({
-  organization_id: organizationId,
-  ad_account_id: z.uuid().optional(),
-  usd_amount: usdAmount,
-  bdt_amount: bdtAmount,
-  sold_at: isoDateTime.optional(),
-  notes: optionalText(1000),
-})
-export type UsdSaleCreateInput = z.infer<typeof usdSaleCreateSchema>
-
-export const usdSaleListSchema = z.object({
-  organization_id: organizationId.optional(),
-  limit: z.number().int().min(1).max(500).optional(),
-})
-
-export const agencyAdAccountsSchema = z.object({
-  organization_id: organizationId,
 })

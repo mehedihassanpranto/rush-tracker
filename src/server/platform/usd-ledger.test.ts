@@ -1155,3 +1155,168 @@ describe.skipIf(!creds)('Finance v2 agency billing (000064)', () => {
     await rpc('reopen_finance_period', { p_actor: null, p_month: PAST_MONTH, p_reason: 'test' })
   })
 })
+
+/**
+ * Finance v2 close-out (migration 000065): prepaid credit returned to stock or
+ * written off (golden account P: $50 / ৳6,300.06 left after spending $650),
+ * the guards and reversals, the opening bank balance, reconciliation against
+ * the books, and the profit report for this test's own time window.
+ */
+describe.skipIf(!creds)('Finance v2 close-out (000065)', () => {
+  let admin: SupabaseClient
+  let sourceId = ''
+  let drainId: string | null = null
+  let P = ''
+  let fundingId = ''
+  let spendId = ''
+  const batches: Array<string> = []
+  const base = Date.now() + 6 * 60 * 60_000
+  const at = (minutes: number) => new Date(base + minutes * 60_000).toISOString()
+  const tag = `close-${SUFFIX}`
+
+  const rpc = async (fn: string, args: Record<string, unknown>) => {
+    const { data, error } = await admin.rpc(fn, args)
+    if (error) throw new Error(error.message)
+    return data as Record<string, unknown>
+  }
+  async function left() {
+    const { data } = await admin.from('meta_prepaid_lot_balances').select('left_usd, left_bdt').eq('ad_account_id', P).eq('status', 'POSTED')
+    return {
+      usd: (data ?? []).reduce((s, l) => s.plus(l.left_usd), dec(0)).toFixed(2),
+      bdt: (data ?? []).reduce((s, l) => s.plus(l.left_bdt), dec(0)).toFixed(2),
+    }
+  }
+  async function entryLines(type: string, id: string) {
+    const { data } = await admin
+      .from('journal_entries')
+      .select('lines:journal_lines(account_code, debit_bdt, credit_bdt)')
+      .eq('source_type', type).eq('source_id', id).eq('is_reversal', false)
+    return (data ?? []).flatMap((e) => (e.lines as Array<{ account_code: string; debit_bdt: number; credit_bdt: number }>)
+      .map((l) => [l.account_code, dec(l.debit_bdt).toFixed(2), dec(l.credit_bdt).toFixed(2)])).sort()
+  }
+
+  beforeAll(async () => {
+    admin = createClient(creds!.url, creds!.serviceKey, noSession)
+    // A failed earlier run may have left an opening bank balance live.
+    await admin.rpc('reverse_opening_bank', { p_actor: null, p_reason: 'test reset' })
+    const { data: src } = await admin.from('usd_sources').insert({ name: `ZZ-CLOSE-${SUFFIX}`, payment_method: 'Binance', receiving_institution: 'DBBL' }).select('id').single()
+    sourceId = src!.id
+    const { data: inv } = await admin.from('usd_fifo_summary').select('left_usd').single()
+    if (dec(inv!.left_usd).gt(0)) {
+      drainId = (await rpc('post_usd_outflow', {
+        p_actor: null, p_kind: 'OTHER', p_usd: dec(inv!.left_usd).toNumber(), p_event_at: at(0),
+        p_ad_account_id: null, p_idempotency_key: `close-drain-${SUFFIX}`, p_notes: tag,
+      })).id as string
+    }
+    const binance = resolveFeeRule(defaultFeeRules('2020-01-01'), { channel: 'BINANCE', from_institution: 'Binance', to_institution: 'Binance', date: '2026-10-20', transfer_amount: 1000 })
+    batches.push((await rpc('post_usd_purchase', {
+      p_actor: null, p_source_id: sourceId, p_gross_usd: 1000, p_bdt_principal: Number(GOLDEN.batches.B1.principal),
+      p_fees: [binance], p_purchased_at: at(1), p_method: null, p_external_reference: null, p_notes: tag,
+    })).id as string)
+    const { data: acct } = await admin.from('ad_accounts').insert({ name: `ZZ close P ${SUFFIX}`, platform: 'META', is_platform: true, organization_id: null }).select('id').single()
+    P = acct!.id
+    await rpc('set_meta_billing_mode', { p_actor: null, p_account: P, p_mode: 'META_PREPAID' })
+    fundingId = (await rpc('post_usd_outflow', {
+      p_actor: null, p_kind: 'META_PREPAID_FUNDING', p_usd: 700, p_event_at: at(2),
+      p_ad_account_id: P, p_idempotency_key: null, p_notes: tag,
+    })).id as string
+    spendId = (await rpc('record_manual_meta_spend', {
+      p_actor: null, p_account: P, p_usd: 650, p_event_at: at(3), p_notes: tag, p_key: `close-spend-${SUFFIX}`,
+    })).id as string
+  }, 90_000)
+
+  afterAll(async () => {
+    if (!admin) return
+    const { data: adj } = await admin.from('meta_prepaid_adjustments').select('group_id').eq('ad_account_id', P).eq('status', 'POSTED')
+    for (const g of new Set((adj ?? []).map((a) => a.group_id))) {
+      await admin.rpc('reverse_prepaid_adjustment', { p_actor: null, p_group: g, p_reason: 'test cleanup' })
+    }
+    if (spendId) await admin.rpc('reverse_meta_spend', { p_actor: null, p_event: spendId, p_reason: 'test cleanup' })
+    if (fundingId) await admin.rpc('reverse_usd_outflow', { p_actor: null, p_outflow_id: fundingId, p_reason: 'test cleanup' })
+    for (const id of batches) await admin.rpc('reverse_usd_purchase', { p_actor: null, p_purchase_id: id, p_reason: 'test cleanup' })
+    if (drainId) await admin.rpc('reverse_usd_outflow', { p_actor: null, p_outflow_id: drainId, p_reason: 'test cleanup' })
+    await admin.rpc('reverse_opening_bank', { p_actor: null, p_reason: 'test cleanup' })
+    if (P) await admin.from('ad_accounts').delete().eq('id', P)
+    if (sourceId) await admin.from('usd_sources').update({ is_active: false }).eq('id', sourceId)
+  }, 90_000)
+
+  it('starts from the golden prepaid position: $50 / ৳6,300.06 left', async () => {
+    expect(await left()).toEqual({ usd: '50.00', bdt: GOLDEN.prepaidSpend.left_bdt })
+  })
+
+  it('returns credit to stock as a new batch at the lot’s cost; the batch can’t be reversed directly', async () => {
+    const before = await admin.from('usd_fifo_summary').select('left_usd, left_bdt').single()
+    const r = await rpc('adjust_prepaid_credit', { p_actor: null, p_account: P, p_kind: 'RETURN', p_usd: 30, p_reason: tag })
+    // 30 × 6,300.06 ÷ 50 = 3,780.036 → 3,780.04
+    expect(dec(r.bdt as number).toFixed(2)).toBe('3780.04')
+    expect(await left()).toEqual({ usd: '20.00', bdt: '2520.02' })
+    const after = await admin.from('usd_fifo_summary').select('left_usd, left_bdt').single()
+    expect(dec(after.data!.left_usd).minus(before.data!.left_usd).toFixed(2)).toBe('30.00')
+    expect(dec(after.data!.left_bdt).minus(before.data!.left_bdt).toFixed(2)).toBe('3780.04')
+    expect(await entryLines('USD_PURCHASE', r.return_batch_id as string)).toEqual([['1200', '3780.04', '0.00'], ['1400', '0.00', '3780.04']])
+    await expect(rpc('reverse_usd_purchase', { p_actor: null, p_purchase_id: r.return_batch_id, p_reason: 'x' })).rejects.toThrow(/^RETURN_BATCH/)
+    await expect(rpc('set_meta_billing_mode', { p_actor: null, p_account: P, p_mode: 'META_POSTPAID' })).rejects.toThrow(/^PREPAID_LEFT/)
+  })
+
+  it('writes off the rest at exactly what is left; more than is left is refused', async () => {
+    await expect(rpc('adjust_prepaid_credit', { p_actor: null, p_account: P, p_kind: 'WRITE_OFF', p_usd: 20.01, p_reason: tag })).rejects.toThrow(/^INSUFFICIENT_INVENTORY/)
+    await expect(rpc('adjust_prepaid_credit', { p_actor: null, p_account: P, p_kind: 'WRITE_OFF', p_usd: 20, p_reason: ' ' })).rejects.toThrow(/^REASON_REQUIRED/)
+    const w = await rpc('adjust_prepaid_credit', { p_actor: null, p_account: P, p_kind: 'WRITE_OFF', p_usd: 20, p_reason: tag })
+    expect(dec(w.bdt as number).toFixed(2)).toBe('2520.02')
+    expect(await left()).toEqual({ usd: '0.00', bdt: '0.00' })
+    const { data: rows } = await admin.from('meta_prepaid_adjustments').select('id').eq('group_id', w.group_id as string)
+    expect(await entryLines('PREPAID_ADJUSTMENT', rows![0].id)).toEqual([['1400', '0.00', '2520.02'], ['5800', '2520.02', '0.00']])
+  })
+
+  it('the profit report: prepaid spend in its window; the write-off when it was made', async () => {
+    // Exactly this run's spend instant: runs minutes apart have overlapping
+    // future windows, and an earlier run's spend stays in its own window.
+    const r = await rpc('finance_profit_report', { p_from: at(3), p_to: at(3.001) })
+    expect(dec(r.meta_cost_bdt as number).toFixed(2)).toBe(GOLDEN.prepaidSpend.bdt)
+    expect(dec(r.gross_profit_bdt as number).toFixed(2)).toBe(dec(r.revenue_bdt as number).minus(GOLDEN.prepaidSpend.bdt).toFixed(2))
+    // A write-off is dated when it is made (now), not in the spend's window.
+    const now = await rpc('finance_profit_report', {
+      p_from: new Date(Date.now() - 10 * 60_000).toISOString(),
+      p_to: new Date(Date.now() + 10 * 60_000).toISOString(),
+    })
+    expect(dec(now.write_off_bdt as number).toFixed(2)).toBe('2520.02')
+    const agencies = r.agencies as Array<{ name: string; spend_usd: number }>
+    expect(agencies.find((a) => a.name === 'Not held by an agency')?.spend_usd).toBe(650)
+  })
+
+  it('reversing the write-off and the return gives the credit back and takes the batch out of stock', async () => {
+    const { data: adj } = await admin.from('meta_prepaid_adjustments').select('group_id, kind').eq('ad_account_id', P).eq('status', 'POSTED')
+    const wo = adj!.find((a) => a.kind === 'WRITE_OFF')!.group_id
+    const ret = adj!.find((a) => a.kind === 'RETURN')!.group_id
+    await rpc('reverse_prepaid_adjustment', { p_actor: null, p_group: wo, p_reason: 'test' })
+    expect(await left()).toEqual({ usd: '20.00', bdt: '2520.02' })
+    await rpc('reverse_prepaid_adjustment', { p_actor: null, p_group: ret, p_reason: 'test' })
+    expect(await left()).toEqual({ usd: '50.00', bdt: GOLDEN.prepaidSpend.left_bdt })
+    await expect(rpc('reverse_prepaid_adjustment', { p_actor: null, p_group: ret, p_reason: 'test' })).rejects.toThrow(/^ALREADY_REVERSED/)
+  })
+
+  it('opening bank balance: once, posted against opening equity', async () => {
+    const o = await rpc('record_opening_bank', { p_actor: null, p_bdt: 250000, p_as_of: at(4), p_notes: tag })
+    expect(await entryLines('OPENING_BANK', o.id as string)).toEqual([['1010', '250000.00', '0.00'], ['3000', '0.00', '250000.00']])
+    await expect(rpc('record_opening_bank', { p_actor: null, p_bdt: 1, p_as_of: at(4), p_notes: tag })).rejects.toThrow(/^DUPLICATE/)
+  })
+
+  it('reconciliation: matched within ৳1, a difference stays open until explained', async () => {
+    const probe = await rpc('record_reconciliation', { p_actor: null, p_scope: 'BANK', p_as_of: at(5), p_actual: 0, p_details: [], p_note: tag })
+    const expected = dec(probe.expected as number)
+    await rpc('resolve_reconciliation', { p_actor: null, p_id: probe.id, p_note: 'probe' })
+    const ok = await rpc('record_reconciliation', { p_actor: null, p_scope: 'BANK', p_as_of: at(5), p_actual: expected.plus(0.5).toNumber(), p_details: [], p_note: tag })
+    expect(ok.status).toBe('MATCHED')
+    const off = await rpc('record_reconciliation', { p_actor: null, p_scope: 'BANK', p_as_of: at(5), p_actual: expected.plus(500).toNumber(), p_details: [], p_note: tag })
+    expect([off.status, dec(off.difference as number).toFixed(2)]).toEqual(['DIFFERENCE', '500.00'])
+    await expect(rpc('resolve_reconciliation', { p_actor: null, p_id: off.id, p_note: '' })).rejects.toThrow(/^REASON_REQUIRED/)
+    expect((await rpc('resolve_reconciliation', { p_actor: null, p_id: off.id, p_note: 'test' })).status).toBe('RESOLVED')
+
+    const { data: inv } = await admin.from('usd_fifo_summary').select('left_usd').single()
+    const wallets = await rpc('record_reconciliation', {
+      p_actor: null, p_scope: 'USD_WALLETS', p_as_of: new Date().toISOString(), p_actual: dec(inv!.left_usd).toDecimalPlaces(2).toNumber(),
+      p_details: [{ wallet: 'Binance', usd: dec(inv!.left_usd).toNumber() }], p_note: tag,
+    })
+    expect(wallets.status).toBe('MATCHED')
+  })
+})

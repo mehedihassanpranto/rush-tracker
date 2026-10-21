@@ -55,9 +55,12 @@ test('fee-aware purchase, FIFO payout and reversals', async ({ page }) => {
   await page.waitForLoadState('networkidle')
   await expect(page.getByRole('heading', { name: 'Finance & Accounts' })).toBeVisible()
 
+  // Overview (000065): the go-live checklist is the landing view.
+  await expect(page.getByRole('heading', { name: 'Go-live checklist' })).toBeVisible()
+
   // Supplier with its receiving bank.
-  await page.getByRole('tab', { name: 'Source Summary' }).click()
-  await page.getByRole('button', { name: 'New source' }).click()
+  await page.getByRole('tab', { name: 'Suppliers' }).click()
+  await page.getByRole('button', { name: 'New supplier' }).click()
   await page.getByLabel('Name').fill(name)
   await choose(page, 'Payment method (USD)', 'Binance')
   await choose(page, 'Receiving bank', 'Dutch-Bangla Bank')
@@ -169,6 +172,24 @@ test('fee-aware purchase, FIFO payout and reversals', async ({ page }) => {
   await page.screenshot({ path: 'test-results/finance-months-dark.png' })
   await setTheme(page, 'light')
 
+  // Profit and Reconcile (000065).
+  await page.getByRole('tab', { name: 'Profit' }).click()
+  await expect(page.getByText('Costs still to come (as of now)')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'By agency' })).toBeVisible()
+  await page.getByRole('tab', { name: 'Reconcile' }).click()
+  await expect(page.getByRole('heading', { name: 'USD in your wallets' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Opening bank balance' })).toBeVisible()
+  await setTheme(page, 'dark')
+  await page.screenshot({ path: 'test-results/finance-reconcile-dark.png', fullPage: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  for (const t of ['Overview', 'Profit', 'Reconcile']) {
+    await page.getByRole('tab', { name: t }).click()
+    const o = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+    expect(o, `${t}: horizontal page scroll at 390px`).toBeLessThanOrEqual(0)
+  }
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await setTheme(page, 'light')
+
   // Fee rules: the owner's three seeded rules.
   await page.getByRole('tab', { name: 'Fee Rules' }).click()
   for (const code of ['dbbl-internal', 'npsb-flat', 'binance-transfer']) {
@@ -178,7 +199,7 @@ test('fee-aware purchase, FIFO payout and reversals', async ({ page }) => {
   await page.screenshot({ path: 'test-results/finance-fees-dark.png', fullPage: true })
 
   // Leave the supplier deactivated.
-  await page.getByRole('tab', { name: 'Source Summary' }).click()
+  await page.getByRole('tab', { name: 'Suppliers' }).click()
   await page.getByRole('row', { name: new RegExp(name) }).getByRole('button', { name: 'Deactivate' }).click()
 
   await setTheme(page, 'light')

@@ -4,6 +4,8 @@ import { useServerFn } from '@tanstack/react-start'
 import { Loader2, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { getAgencyStatementFn } from '@/server/platform/finance-close.fns'
+import { downloadCsv } from '@/lib/csv/csv'
 import {
   getEarliestPendingChargeFn,
   listAgencyBillingFn,
@@ -533,7 +535,27 @@ function AgencyLedgerDialog({
   const listLedger = useServerFn(listAgencyLedgerFn)
   const reverseCharge = useServerFn(reverseAgencyChargeFn)
   const reversePayment = useServerFn(reverseAgencyPaymentFn)
+  const getStatement = useServerFn(getAgencyStatementFn)
   const [reversing, setReversing] = useState<AgencyLedgerRow | null>(null)
+  // Client-safe: what was billed and paid, the agency's own rate, the running
+  // balance — never cost, margin or supplier figures.
+  const statement = useMutation({
+    mutationFn: () => getStatement({ data: { organization_id: agency!.organization_id } }),
+    onSuccess: (st) => {
+      const slug = st.agency.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      downloadCsv(`statement-${slug}-${new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' })}.csv`, st.rows, [
+        { header: 'Date', value: (r) => new Date(r.date).toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' }) },
+        { header: 'Reference', value: (r) => r.reference },
+        { header: 'Description', value: (r) => r.description },
+        { header: 'USD', value: (r) => r.usd ?? '' },
+        { header: 'Rate (BDT/USD)', value: (r) => r.rate ?? '' },
+        { header: 'Billed (BDT)', value: (r) => r.billed_bdt ?? '' },
+        { header: 'Paid (BDT)', value: (r) => r.paid_bdt ?? '' },
+        { header: 'Balance (BDT)', value: (r) => r.balance_bdt },
+      ])
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
+  })
 
   const ledger = useQuery({
     queryKey: ['platform-usd', 'agency-ledger', agency?.organization_id],
@@ -564,6 +586,12 @@ function AgencyLedgerDialog({
             {agency && dec(agency.advance_bdt).gt(0) && ` · advance ${formatBdt(agency.advance_bdt)}`}
           </DialogDescription>
         </DialogHeader>
+        <div className="flex justify-end">
+          <Button size="sm" variant="outline" disabled={statement.isPending} onClick={() => statement.mutate()}>
+            {statement.isPending && <Loader2 className="size-4 animate-spin" />}
+            Download statement (CSV)
+          </Button>
+        </div>
         {!ledger.isLoading && !hasOpening && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm">
             <span className="text-muted-foreground">Did this agency owe you anything before 21 Oct 2026?</span>

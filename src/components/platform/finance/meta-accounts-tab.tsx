@@ -14,6 +14,12 @@ import {
   reverseMetaSpendFn,
   setMetaBillingModeFn,
 } from '@/server/platform/meta-accounts.fns'
+import {
+  adjustPrepaidCreditFn,
+  listPrepaidAdjustmentsFn,
+  reversePrepaidAdjustmentFn,
+} from '@/server/platform/finance-close.fns'
+import type { PrepaidAdjustmentRow } from '@/server/platform/finance-close.fns'
 import { META_BILLING_LABELS, META_BILLING_MODES } from '@/schemas/usd-inventory'
 import { dec, formatBdt, formatCurrencyAmount, formatUsd } from '@/lib/money/money'
 import { fmtDateTime, localInputToIso, nowLocalInput } from '@/components/platform/finance/format'
@@ -86,6 +92,20 @@ export function MetaAccountsTab() {
   const [manualFor, setManualFor] = useState<MetaAccountPosition | null>(null)
   const [resolving, setResolving] = useState<MetaSpendExceptionRow | null>(null)
   const [reversing, setReversing] = useState<MetaSpendEventRow | null>(null)
+  const [adjustFor, setAdjustFor] = useState<MetaAccountPosition | null>(null)
+  const [undoAdjust, setUndoAdjust] = useState<PrepaidAdjustmentRow | null>(null)
+  const listAdjustments = useServerFn(listPrepaidAdjustmentsFn)
+  const reverseAdjustment = useServerFn(reversePrepaidAdjustmentFn)
+  const adjustments = useQuery({ queryKey: ['platform-usd', 'prepaid-adjustments'], queryFn: () => listAdjustments() })
+  const undoAdjustMut = useMutation({
+    mutationFn: (v: { group_id: string; reason: string }) => reverseAdjustment({ data: v }),
+    onSuccess: () => {
+      toast.success('Reversed')
+      setUndoAdjust(null)
+      void queryClient.invalidateQueries({ queryKey: ['platform-usd'] })
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
+  })
 
   const positions = useQuery({ queryKey: ['platform-usd', 'meta-positions'], queryFn: () => listPositions() })
   const events = useQuery({ queryKey: ['platform-usd', 'meta-spend'], queryFn: () => listEvents() })
@@ -258,6 +278,11 @@ export function MetaAccountsTab() {
                             Pay bill
                           </Button>
                         )}
+                        {dec(a.prepaid_left_usd).gt(0) && (
+                          <Button size="sm" variant="outline" onClick={() => setAdjustFor(a)}>
+                            Return / write off
+                          </Button>
+                        )}
                         <Button size="sm" variant="ghost" onClick={() => setManualFor(a)}>
                           Add spend
                         </Button>
@@ -343,6 +368,68 @@ export function MetaAccountsTab() {
         </Card>
       </div>
 
+      {(adjustments.data?.length ?? 0) > 0 && (
+        <div>
+          <h2 className="mb-3 text-lg font-semibold">Prepaid credit returned or written off</h2>
+          <Card className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>When</TableHead>
+                  <TableHead>Reference</TableHead>
+                  <TableHead>Account</TableHead>
+                  <TableHead className="text-right">USD</TableHead>
+                  <TableHead className="text-right">At cost</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {adjustments.data!.map((x) => (
+                  <TableRow key={x.group_id}>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">{fmtDateTime(x.event_at)}</TableCell>
+                    <TableCell className="num">
+                      {x.reference_id}
+                      <div className="text-xs text-muted-foreground">{x.kind === 'RETURN' ? 'Returned to stock' : 'Written off'}</div>
+                    </TableCell>
+                    <TableCell className="whitespace-normal">
+                      {x.ad_account ? `${x.ad_account.account_code} · ${x.ad_account.name}` : '—'}
+                      <div className="text-xs text-muted-foreground">{x.reason}</div>
+                    </TableCell>
+                    <TableCell className="num text-right">{formatUsd(x.usd)}</TableCell>
+                    <TableCell className="num text-right">{formatBdt(x.bdt)}</TableCell>
+                    <TableCell>
+                      <StatusBadge status={x.status} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {x.status === 'POSTED' && (
+                        <Button size="sm" variant="outline" onClick={() => setUndoAdjust(x)}>
+                          Reverse
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </div>
+      )}
+
+      <AdjustPrepaidDialog account={adjustFor} onOpenChange={(o) => !o && setAdjustFor(null)} />
+      <ReverseDialog
+        target={
+          undoAdjust
+            ? {
+                title: `Reverse ${undoAdjust.reference_id}`,
+                description: `${formatUsd(undoAdjust.usd)} goes back onto the account as prepaid credit${undoAdjust.kind === 'RETURN' ? ', and out of stock again' : ''}.`,
+              }
+            : null
+        }
+        onOpenChange={(o) => !o && setUndoAdjust(null)}
+        onConfirm={(reason) => undoAdjust && undoAdjustMut.mutate({ group_id: undoAdjust.group_id, reason })}
+        pending={undoAdjustMut.isPending}
+      />
       <OutflowDialog open={!!outflow} onOpenChange={(o) => !o && setOutflow(null)} preset={outflow} />
       <ManualSpendDialog account={manualFor} onOpenChange={(o) => !o && setManualFor(null)} />
       <ResolveDialog exception={resolving} onOpenChange={(o) => !o && setResolving(null)} />
@@ -492,3 +579,89 @@ function ResolveDialog({
     </Dialog>
   )
 }
+
+/**
+ * Unspent prepaid credit leaving an account (policy §4.5): back into stock at
+ * the lot's original cost, or written off as an expense. A reason is required
+ * either way.
+ */
+function AdjustPrepaidDialog({
+  account,
+  onOpenChange,
+}: {
+  account: MetaAccountPosition | null
+  onOpenChange: (open: boolean) => void
+}) {
+  const queryClient = useQueryClient()
+  const adjust = useServerFn(adjustPrepaidCreditFn)
+  const [kind, setKind] = useState<'RETURN' | 'WRITE_OFF'>('RETURN')
+  const [usd, setUsd] = useState('')
+  const [why, setWhy] = useState('')
+  useEffect(() => {
+    if (account) {
+      setKind('RETURN')
+      setUsd(account.prepaid_left_usd)
+      setWhy('')
+    }
+  }, [account])
+  const n = Number(usd)
+  const valid = !!account && usd !== '' && n > 0 && dec(n).lte(account.prepaid_left_usd) && why.trim() !== ''
+  const mutation = useMutation({
+    mutationFn: () => adjust({ data: { ad_account_id: account!.ad_account_id, kind, usd: n, reason: why } }),
+    onSuccess: (r) => {
+      toast.success(`${r.reference_id}: ${kind === 'RETURN' ? 'returned to stock' : 'written off'} at ${formatBdt(r.bdt)}`)
+      void queryClient.invalidateQueries({ queryKey: ['platform-usd'] })
+      onOpenChange(false)
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
+  })
+  return (
+    <Dialog open={!!account} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Unspent prepaid credit</DialogTitle>
+          <DialogDescription>
+            {account ? `${account.account_code} · ${account.name}: ${formatUsd(account.prepaid_left_usd)} left (${formatBdt(account.prepaid_left_bdt)} at cost).` : ''}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="adjust-kind">What happened to it</Label>
+            <Select value={kind} onValueChange={(v) => setKind(v as typeof kind)}>
+              <SelectTrigger id="adjust-kind">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="RETURN">Back in our wallets — return to stock</SelectItem>
+                <SelectItem value="WRITE_OFF">Lost — write it off</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="adjust-usd">USD</Label>
+            <Input id="adjust-usd" type="number" min="0" step="0.01" inputMode="decimal" value={usd} onChange={(e) => setUsd(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="adjust-why">Why</Label>
+            <Textarea id="adjust-why" rows={2} maxLength={500} value={why} onChange={(e) => setWhy(e.target.value)} />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {kind === 'RETURN'
+              ? 'It becomes a new batch in stock at the cost it was loaded at, oldest credit first.'
+              : 'It becomes an expense ("Prepaid credit written off") at the cost it was loaded at.'}
+          </p>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button disabled={!valid || mutation.isPending} onClick={() => mutation.mutate()}>
+            {mutation.isPending && <Loader2 className="size-4 animate-spin" />}
+            {kind === 'RETURN' ? 'Return to stock' : 'Write off'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
