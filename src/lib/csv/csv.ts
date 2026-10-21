@@ -3,9 +3,19 @@
  * CSV"). Client-safe — triggers a browser download from in-memory rows.
  */
 
+/** A plain number ("-500", "1234.50") is data, not a formula. */
+const PLAIN_NUMBER = /^[+-]?\d+(\.\d+)?$/
+
 function escapeCell(value: unknown): string {
   if (value === null || value === undefined) return ''
-  const s = String(value)
+  let s = String(value)
+  // Formula injection: a cell starting with = + - @ (or a tab / CR that some
+  // spreadsheets skip) runs as a formula when the file is opened — a client
+  // named "=HYPERLINK(…)" would. Prefix a quote so it stays text. Real numbers
+  // pass untouched so they still add up.
+  if (typeof value !== 'number' && /^[=+\-@\t\r]/.test(s) && !PLAIN_NUMBER.test(s)) {
+    s = `'${s}`
+  }
   if (/[",\n\r]/.test(s)) {
     return `"${s.replace(/"/g, '""')}"`
   }

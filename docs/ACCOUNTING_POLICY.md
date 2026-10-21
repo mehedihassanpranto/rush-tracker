@@ -171,6 +171,9 @@ column is named `meta_billing_mode` so the two never get confused.
    | …agency's advance applied | 2300 Advances (agency) | 1300 (agency) |
    | Agency payment | 1010 | 1300 up to what is owed; 2300 the rest |
    | Agency opening balance owed / credit | 1300 / 3000 | 3000 / 2300 |
+   | Opening bank balance (overdrawn: reversed sides) | 1010 Bank & cash | 3000 |
+   | Prepaid credit returned to stock (a new batch) | 1200 | 1400 (the lot's cost) |
+   | Prepaid credit written off | 5800 Prepaid credit written off | 1400 |
    | Sale to an agency (retired from the UI in Milestone 4) | 1300 Agency receivables | 4000 Revenue |
    | …its BDT received (recorded paid at sale) | 1010 | 1300 |
    | Any reversal | the original's lines, sides swapped | |
@@ -199,8 +202,9 @@ column is named `meta_billing_mode` so the two never get confused.
    prepaid asset never goes negative.
 6. Prepaid → postpaid is refused while prepaid credit is left; a funding
    whose credit was spent can't be reversed before that spend is.
-7. **Not yet built (Milestone 5):** returning unspent prepaid credit to
-   inventory, or writing it off.
+7. Unspent prepaid credit leaves only by **return to stock** (a new batch at
+   the lot's original cost, oldest credit first) or **write-off** (an expense),
+   each with a reason (Milestone 5, §11).
 
 ## 10. Agency billing and periods (Milestone 4, migration 000064)
 
@@ -230,4 +234,37 @@ Owner decisions of 2026-10-21:
    be closed, and not while it holds charges waiting for a rate. Nothing can be
    posted dated in a closed month; corrections go into the open month.
    Reopening needs a reason and is audited.
+
+## 11. Close-out (Milestone 5, migration 000065)
+
+1. **Overview** replaces the weighted-average "USD Stock" tab, with the
+   go-live checklist: opening stock, opening bank balance, supplier banks,
+   agency rates, nothing waiting for a rate, no Meta spend to review, wallets
+   reconciled.
+2. **Opening bank balance:** entered once (Dr 1010 / Cr 3000), so "Bank &
+   cash" is the real balance, not movement since go-live. Reversible.
+3. **Reconciliation:** the owner's real wallet USD (vs the FIFO stock) or bank
+   BDT (vs account 1010 at that moment). Within ৳1 / $1 is a match; a
+   difference stays open until someone says what explains it. It records,
+   never corrects: the fix is a real entry (a purchase, payout or payment not
+   yet recorded).
+4. **Profit** by event date: revenue (4000) − Meta cost (5000) − write-offs
+   (5800) = gross profit; other USD outflows (5900) shown after. "Costs still
+   to come" shows, as of now, Meta spend not yet paid for and dollars billed
+   to agencies not yet spent — revenue counted, cost not yet. Per agency is an
+   **estimate**: spend read on accounts it held × the period's Meta cost per
+   dollar (or the stock's average cost). Spend events record the holding
+   agency when read (grants keep no history).
+5. **Prepaid return / write-off** (§4.7). A return batch can't be reversed
+   from the Inventory tab, only by reversing the return (so the lot gets its
+   credit back in the same step).
+6. **Agency statement** (CSV, from Agencies → View): what was billed and paid,
+   the agency's own rate and the running balance — no cost, margin, supplier
+   or stock figure.
+7. **CSV exports** escape cells starting `= + - @` (tab/CR too) against
+   formula injection; plain numbers are left as numbers. This also covers the
+   agency reports export.
+8. Retired: the weighted-average stock views in the UI, "Record agency sale"
+   (Milestone 4), and the sales-based source report. `usd_sales` and its views
+   stay in the database as history.
 

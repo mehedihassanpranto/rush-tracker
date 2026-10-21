@@ -38,4 +38,17 @@ describe('toCsv', () => {
     const csv = toCsv<Row>([{ name: 'X', amount: '5', note: null }], columns)
     expect(csv).toBe('Name,Amount,Note\r\nX,5,')
   })
+
+  it('neutralises formula injection but leaves real numbers alone', () => {
+    const csv = toCsv<Row>(
+      [
+        { name: '=HYPERLINK("http://x","y")', amount: '-500', note: '@SUM(A1)' },
+        { name: '+cmd', amount: '1234.50', note: '-not a number' },
+      ],
+      columns,
+    )
+    expect(csv).toBe(
+      'Name,Amount,Note\r\n"\'=HYPERLINK(""http://x"",""y"")",-500,\'@SUM(A1)\r\n\'+cmd,1234.50,\'-not a number',
+    )
+  })
 })

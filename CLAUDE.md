@@ -166,6 +166,7 @@ short; detail belongs in the changelog.
   Agencies are billed by a trigger on `limit_requests` → APPROVED (pool
   accounts only, 000064); it must never block an approval. Journal lines for
   receivables/advances carry `party_org_id`; closed months refuse postings.
+  `toCsv()` escapes formula cells (`= + - @`) — keep every export on it.
 - **Client segments**: `prepaid` (pays full cost up front), `partial` (pays
   part, rest becomes due), `postpaid` (all due). Segment is read server-side and
   snapshotted on each request.

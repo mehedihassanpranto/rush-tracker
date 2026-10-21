@@ -8,6 +8,33 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-21
 
+**Platform finance v2: Milestone 5 — close-out (migration 000065; staging:
+applied; production: NOT YET).** New **Overview** tab replaces the weighted-
+average "USD Stock" tab: stock, owed by agencies, owed to Meta, this month's
+revenue and gross profit, and the go-live checklist (each line jumps to its
+tab). **Profit** tab: revenue − Meta cost − write-offs = gross profit by event
+date for a month, "costs still to come" (Meta spend not yet paid, dollars
+billed not yet spent), and an estimated per-agency margin, with CSV export —
+spend events now snapshot the agency holding the pool account
+(`meta_spend_events.agency_org_id`). **Reconcile** tab: real wallet USD vs
+FIFO stock and real bank BDT vs account 1010 (`reconciliation_records`; within
+৳1/$1 matches, a difference stays open until explained), and a one-time
+**opening bank balance** (`finance_openings`, Dr 1010 / Cr 3000). **Prepaid
+credit return / write-off** on Meta Accounts (`meta_prepaid_adjustments`):
+return becomes a new batch at the lot's cost (`usd_purchases.kind =
+PREPAID_RETURN`, no supplier; only reversible through the return), write-off
+posts to new account 5800. **Agency statement** CSV (Agencies → View),
+client-safe. Source Summary rebuilt on FIFO as **Suppliers** (bought, cost,
+average cost, still in stock). **Security:** `toCsv()` now escapes cells
+starting `= + - @` (tab/CR) against spreadsheet formula injection — this also
+fixes the existing agency reports export; numbers stay numbers. Removed dead
+code: the weighted-average and sale server fns, `usd-stock.ts`,
+`agency-allocations.ts` (+ tests), the sales table, unused sale schemas and
+types (`usd_sales` and its views stay as history). `npm test` 296/296 (new
+close-out live suite: return at the lot's cost ৳3,780.04, write-off of exactly
+what is left ৳2,520.02, guards, reversals, opening bank, reconciliation,
+profit report), e2e 40/40, build clean.
+
 **Platform finance v2: Milestone 4 — agency billing, payments, advances,
 periods (migration 000064; staging: applied; production: applied 2026-10-21 via `supabase db push`).** Owner
 decisions: bill each approval; bill xRush Agency too (internal rate); start
