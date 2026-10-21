@@ -9,7 +9,7 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 ## 2026-10-21
 
 **Platform finance v2: Milestone 5 — close-out (migration 000065; staging:
-applied; production: NOT YET).** New **Overview** tab replaces the weighted-
+applied; production: applied 2026-10-21 via `supabase db push`).** New **Overview** tab replaces the weighted-
 average "USD Stock" tab: stock, owed by agencies, owed to Meta, this month's
 revenue and gross profit, and the go-live checklist (each line jumps to its
 tab). **Profit** tab: revenue − Meta cost − write-offs = gross profit by event
@@ -33,7 +33,22 @@ code: the weighted-average and sale server fns, `usd-stock.ts`,
 types (`usd_sales` and its views stay as history). `npm test` 296/296 (new
 close-out live suite: return at the lot's cost ৳3,780.04, write-off of exactly
 what is left ৳2,520.02, guards, reversals, opening bank, reconciliation,
-profit report), e2e 40/40, build clean.
+profit report), e2e 40/40, build clean. Production before/after
+(read-only): 2 purchases ৳110,010 (both now kind PURCHASE), 0 payouts, 2
+journal entries, 0 spend events, 0 charges, 274 ledger rows net ৳122,121 —
+unchanged.
+
+**Found: production is NOT running Finance v2 yet — Hostinger hasn't
+redeployed since before PR #22.** The live finance page bundle
+(`/assets/finance-Bq8BURSb.js`) still has "Record agency sale" and "Agency
+Summary" and none of Inventory / Meta Accounts / Journal / Fee Rules, and this
+morning's meta-sync cron summary has no `pool_spend` key (the M3 job always
+writes one). Merges #22–#25 are on `main` but were never built. Nothing broke:
+every migration 000059–000065 is additive and the old code runs against the
+new schema (old purchase inserts get batch fields from the 000059 trigger, the
+journal triggers post, and pool approvals already create "waiting for a rate"
+charges). The fix is a redeploy from Hostinger's panel; "the merge is the
+deploy" (CLAUDE.md) did not hold.
 
 **Platform finance v2: Milestone 4 — agency billing, payments, advances,
 periods (migration 000064; staging: applied; production: applied 2026-10-21 via `supabase db push`).** Owner
