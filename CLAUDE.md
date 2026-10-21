@@ -30,8 +30,13 @@ short; detail belongs in the changelog.
 - **Commit and push the same day.** `main` is protected: branch, open a PR, and
   merge only when CI (`.github/workflows/ci.yml`: typecheck, build, unit + live
   tests, Playwright e2e on staging) is green.
-- **The merge is the deploy** — Hostinger pulls `main` and rebuilds. A migration
-  the new code depends on must be applied to production BEFORE merging.
+- **A merge should deploy, but verify it did** — Hostinger builds `main`
+  (hPanel → Deployments). Auto-deploy silently stopped after PR #21 and
+  #22–#25 never went live until a deploy was started by hand (2026-10-21);
+  hPanel's "Redeploy" rebuilds the OLD snapshot, not `main`. After a merge,
+  confirm the live bundle changed (`docs/DEPLOYMENT-HOSTINGER.md` §6). A
+  migration the new code depends on must be applied to production BEFORE
+  merging, and stay backward-compatible: old code may run against it.
 - **Never run destructive checks against production.** Live-DB tests and e2e
   target the staging project only (`.env.test`, `docs/STAGING.md`);
   `src/test/live-env.ts` and `e2e/support/env.ts` refuse production's URL.

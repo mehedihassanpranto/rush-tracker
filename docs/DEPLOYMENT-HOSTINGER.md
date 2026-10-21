@@ -229,6 +229,23 @@ host, two schedulers are calling the job — remove the extra one.
 
 Run `docs/DEPLOYMENT.md` §6's full checklist. The Hostinger-specific additions:
 
+- [ ] **The new build is actually live.** In hPanel → Deployments, the top row
+      must be the merge commit you expect, **Completed** and **Current**. Then
+      confirm from outside: `/login` references a new `/assets/index-*.js`, and
+      a route chunk contains text the change added. (On 2026-10-21 PRs #22–#25
+      had been merged for a day with no deployment row at all — auto-deploy
+      from GitHub had stopped after PR #21 — and the site kept serving the old
+      build while returning 200 everywhere.)
+- [ ] **"Redeploy" is not "deploy `main`".** Its build log says "Source:
+      previous deployment source — Restoring source files from the last
+      successful deployment": it rebuilds the current snapshot. To ship new
+      commits, the deployment must be created from GitHub (check the GitHub
+      App's repository access under GitHub → Settings → Applications →
+      Hostinger if pushes stop producing rows).
+- [ ] After a deploy, a tab opened before it may show errors like
+      `["…"] data is undefined` — the old page calling server functions the
+      new build removed. A hard refresh fixes it; nothing is wrong with data.
+
 - [ ] `/login` returns **200**, not 500. A 500 on every page means the build ran
       without the `VITE_` variables — set them and rebuild (see §3).
 - [ ] Signing in as an agency admin lands on `/agency`; a client on `/client`; a

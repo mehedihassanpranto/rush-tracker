@@ -8,6 +8,16 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-21
 
+**Deploys: verify, don't assume.** Finance v2 went live only on 2026-10-21
+13:34 Dhaka, as hPanel deployment `5df75f30` (PR #26, started by hand): auto-
+deploy from GitHub had stopped after PR #21 (last row 2026-10-13), so #22–#25
+were never built, and hPanel's "Redeploy" only rebuilt the old snapshot ("Source:
+previous deployment source"). Nothing broke meanwhile — migrations 000059–000065
+were additive and the old build ran against them. CLAUDE.md's "the merge is the
+deploy" now says to verify, and `docs/DEPLOYMENT-HOSTINGER.md` §6 has the
+checks (deployment row = merge commit, live `/assets/index-*.js` changed, the
+"Redeploy ≠ deploy `main`" trap, and the stale-tab "data is undefined" error).
+
 **Platform finance v2: Milestone 5 — close-out (migration 000065; staging:
 applied; production: applied 2026-10-21 via `supabase db push`).** New **Overview** tab replaces the weighted-
 average "USD Stock" tab: stock, owed by agencies, owed to Meta, this month's
