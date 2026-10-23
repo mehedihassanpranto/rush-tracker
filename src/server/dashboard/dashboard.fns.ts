@@ -30,13 +30,10 @@ export interface AdminDashboardStats {
   pendingPaymentVerifications: number
   totalOutstandingDueBdt: string
   totalOutstandingDueUsd: string
-  todayApprovedLimitUsd: string
-  todayApprovedBillingBdt: string
-  todayCollectionBdt: string
 }
 
-/** Live counts derivable from data available so far (spec §65). Financial
- *  cards arrive with their phases. */
+/** Live counts derivable from data available so far (spec §65). Period
+ *  figures (spent / approved / paid) are dashboard-period.fns.ts. */
 export const adminDashboardStatsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<AdminDashboardStats> => {
     const actor = await requireAdmin(PERMISSIONS.DASHBOARD_VIEW)
@@ -101,17 +98,6 @@ export const adminDashboardStatsFn = createServerFn({ method: 'GET' }).handler(
       )
     }
 
-    const { data: todayData } = await admin.rpc('admin_today_totals', {
-      p_organization_id: orgId,
-    })
-    const today = (
-      todayData as Array<{
-        approved_limit_usd: string
-        approved_billing_bdt: string
-        collection_bdt: string
-      }> | null
-    )?.[0]
-
     return {
       totalClients: clients.count ?? 0,
       activeAccounts: active.count ?? 0,
@@ -120,9 +106,6 @@ export const adminDashboardStatsFn = createServerFn({ method: 'GET' }).handler(
       pendingPaymentVerifications: pendingPay.count ?? 0,
       totalOutstandingDueBdt: dueBdt,
       totalOutstandingDueUsd: dueUsd.toFixed(2),
-      todayApprovedLimitUsd: today?.approved_limit_usd ?? '0',
-      todayApprovedBillingBdt: today?.approved_billing_bdt ?? '0',
-      todayCollectionBdt: today?.collection_bdt ?? '0',
     }
   },
 )

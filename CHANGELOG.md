@@ -8,6 +8,29 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-23
 
+**Agency dashboard: period filter for spend, approvals and client payments —
+migration 000067 (staging: applied; production: NOT YET).** Owner request:
+daily USD spending, approved limit and paid by clients — today, this week,
+this month, last month. Owner decisions: spend comes from **Meta's own daily
+spend (Insights)**, weeks start **Sunday**. New `meta_daily_spend` cache (one
+row per account per day, 0 for a fetched day without spend; display only)
+filled by `fetchMetaDailySpend()` (`act_…/insights`, `time_increment=1`, paged,
+8 accounts at a time like `fetchMetaAdAccounts`) through
+`refreshDailySpend()` — nightly for every account (new 5th meta-sync job,
+"daily spend", covering the 1st of last month → today) and the dashboard's
+Refresh (scoped to the agency's accounts, at most once a minute).
+`agency_daily_totals()` gives limits approved (USD + BDT billed) and client
+payments per Asia/Dhaka day from the ledger — the same rule as the old
+"today" cards. Dashboard: the three fixed "Today's …" tiles are replaced by a
+Today / This week / This month / Last month switch, USD spent / Limit approved
+/ Paid by clients cards, "Meta spend as of …" + Refresh, and a day-by-day
+table (not for Today). Only USD accounts are summed (others counted). Pure
+date logic in `src/lib/dashboard/periods.ts` (Dhaka days, Sunday weeks, year
+rollover, leap Feb) and Insights parsing in `src/lib/meta/insights.ts`, unit
+tested. Not testable against real Meta from staging (inert token): the first
+production Refresh is the live check. `npm test` 313/313, e2e 46/46 (new
+`agency-dashboard-period.spec.ts`), build clean.
+
 **Agency Finance now connects clients and the platform (no migration).**
 Owner: "what's the need of Finance? … client payments are sent to the platform
 for platform-assigned accounts." Production facts (read-only): the agency

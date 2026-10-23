@@ -76,6 +76,7 @@ export interface MetaAdAccountSummary {
 }
 
 import type { MetaCredentialScope } from '@/lib/meta/credential-scope'
+import type { InsightsDailyRow } from '@/lib/meta/insights'
 
 interface MetaConfig {
   token: string
@@ -297,6 +298,58 @@ export async function fetchMetaAdAccounts(
           config,
         )
         results[i] = toSummary(raw)
+      } catch {
+        results[i] = null
+      }
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(FETCH_CONCURRENCY, externalAccountIds.length) }, worker),
+  )
+  return results
+}
+
+/**
+ * Meta's own spend per calendar day (Insights, time_increment=1) for each
+ * account over [since, until] — days in the ACCOUNT's timezone, spend in its
+ * currency, major units. Same shape as fetchMetaAdAccounts: credentials once,
+ * at most FETCH_CONCURRENCY in flight, one result per id in order, a failed
+ * account is `null`. Display only (the dashboard), never a limit.
+ */
+export async function fetchMetaDailySpend(
+  externalAccountIds: Array<string>,
+  since: string,
+  until: string,
+  scope: MetaCredentialScope,
+): Promise<Array<Array<InsightsDailyRow> | null>> {
+  const config = await getMetaConfig(scope)
+  const results: Array<Array<InsightsDailyRow> | null> = new Array(externalAccountIds.length).fill(null)
+  let next = 0
+  async function worker() {
+    while (next < externalAccountIds.length) {
+      const i = next++
+      const id = externalAccountIds[i]
+      const actId = id.startsWith('act_') ? id : `act_${id}`
+      try {
+        const rows: Array<InsightsDailyRow> = []
+        let after: string | undefined
+        for (let page = 0; page < MAX_PAGES; page++) {
+          const params: Record<string, string> = {
+            fields: 'spend,account_currency',
+            time_range: JSON.stringify({ since, until }),
+            time_increment: '1',
+            limit: '100',
+          }
+          if (after) params.after = after
+          const body = await graphGet<{
+            data: Array<InsightsDailyRow>
+            paging?: { cursors?: { after?: string }; next?: string }
+          }>(`${actId}/insights`, params, config)
+          rows.push(...(body.data ?? []))
+          after = body.paging?.next ? body.paging.cursors?.after : undefined
+          if (!after) break
+        }
+        results[i] = rows
       } catch {
         results[i] = null
       }

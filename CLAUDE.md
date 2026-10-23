@@ -205,6 +205,9 @@ short; detail belongs in the changelog.
     `currency === 'USD'` (`LOW_BALANCE_THRESHOLD` ≤ 60, `META_DUE_THRESHOLD`
     100, `src/lib/meta/thresholds.ts`). Format Meta money with
     `formatCurrencyAmount()`, not `formatUsd`/`formatBdt`.
+  - Dashboard spend is Meta Insights per day (`meta_daily_spend`, 000067,
+    `fetchMetaDailySpend`: spend in MAJOR units, account timezone), refreshed
+    nightly + on demand — display only, never a limit or the platform's books.
   - Meta's `account_status` is display-only; our `ad_accounts.status` stays
     admin-controlled. Bulk import never sets a limit from Meta's spend cap.
   - Manual spend-cap push/pull/retry on a pool account is platform-only

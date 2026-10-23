@@ -3,6 +3,8 @@ import { getServerEnv } from '@/lib/env/env.server'
 import { syncMetaAdAccounts } from '@/server/meta/meta-sync.server'
 import { retryPendingMetaSpendCapSyncs } from '@/server/meta/spend-cap-sync.server'
 import { readPoolSpend } from '@/server/platform/meta-spend.service'
+import { allSpendAccounts, refreshDailySpend } from '@/server/meta/meta-daily-spend.service'
+import { spendCacheRange } from '@/lib/dashboard/periods'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import {
   finishCronRun,
@@ -55,12 +57,17 @@ export const Route = createFileRoute('/api/cron/meta-sync')({
 
         // The jobs run independently — a failure in one (e.g. Meta
         // unreachable) must not block the others.
-        const [syncResult, retryResult, tokenResult, spendResult] = await Promise.allSettled([
+        const [syncResult, retryResult, tokenResult, spendResult, dailySpendResult] = await Promise.allSettled([
           syncMetaAdAccounts(),
           retryPendingMetaSpendCapSyncs(),
           runMetaTokenChecks(),
           // The day's Meta spend for the platform's pool (Finance v2, 000063).
           readPoolSpend(null),
+          // Meta's daily spend for every account, for the dashboards (000067).
+          allSpendAccounts().then((rows) => {
+            const { from, to } = spendCacheRange(new Date())
+            return refreshDailySpend(rows, from, to)
+          }),
         ])
 
         const failures: Array<string> = []
@@ -69,6 +76,7 @@ export const Route = createFileRoute('/api/cron/meta-sync')({
           ['spend cap retry', retryResult],
           ['token check', tokenResult],
           ['pool spend', spendResult],
+          ['daily spend', dailySpendResult],
         ] as const
         for (const [label, r] of labelled) {
           if (r.status === 'rejected') {
@@ -117,6 +125,7 @@ export const Route = createFileRoute('/api/cron/meta-sync')({
             retryResult.status === 'fulfilled' ? retryResult.value : { error: 'failed' },
           tokens: tokenResult.status === 'fulfilled' ? tokenResult.value : { error: 'failed' },
           pool_spend: spendResult.status === 'fulfilled' ? spendResult.value : { error: 'failed' },
+          daily_spend: dailySpendResult.status === 'fulfilled' ? dailySpendResult.value : { error: 'failed' },
           errors_last_24h: digest.count,
         }
         await finishCronRun(
