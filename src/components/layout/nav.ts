@@ -20,7 +20,6 @@ import {
   UserCog,
   Users,
   UserRound,
-  Receipt,
   Wallet,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -48,8 +47,7 @@ export const ADMIN_NAV: Array<NavItem> = [
   { label: 'Ledger', icon: BookText, to: '/agency/ledger' },
   { label: 'Adjustments', icon: SlidersHorizontal, to: '/agency/adjustments' },
   { label: 'Reports', icon: BarChart3, to: '/agency/reports' },
-  { label: 'Finance', icon: TrendingUp, to: '/agency/finance' },
-  { label: 'Platform Billing', icon: Receipt, to: '/agency/platform-billing', superAdminOnly: true },
+  { label: 'Finance', icon: TrendingUp, to: '/agency/finance', superAdminOnly: true },
   { label: 'Audit Log', icon: ScrollText, to: '/agency/audit' },
   { label: 'Users', icon: UserCog, to: '/agency/users' },
   { label: 'Settings', icon: Settings, to: '/agency/settings' },

@@ -8,6 +8,30 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-23
 
+**Agency Finance now connects clients and the platform (no migration).**
+Owner: "what's the need of Finance? … client payments are sent to the platform
+for platform-assigned accounts." Production facts (read-only): the agency
+Finance page was a manual USD buy/sell margin log with **0 entries ever**, while
+every approval of both agencies is on a platform pool account (xRush 160 /
+$21,880 billed to clients ৳2,848,360; Arrow 2 / $330 ৳42,900). Owner decisions:
+the agency owes the platform at approval (unchanged), one automatic Finance
+page, SUPER_ADMIN only. `/agency/finance` is rebuilt
+(`agency-finance.fns.ts`): **Overview** for a month — billed to clients, owed
+to the platform for the same limits (its rate), margin (and per USD);
+collected from clients (ledger payments net of reversals) vs paid to the
+platform; what it owes the platform now, with a jump to paying. **Margin by
+approval** — each pool-account approval: client rate/BDT, platform rate/BDT,
+margin, status (priced / waiting for a rate / before platform billing /
+platform reversed; a client-side ledger reversal zeroes the client side), CSV.
+**Pay the platform** — the former Platform Billing page, moved into a panel;
+`/agency/platform-billing` now redirects to it. Nav: one "Finance" item,
+SUPER_ADMIN only (it was shown to every admin). Removed the manual margin log
+UI, its server fns, schema and type. e2e `agency-finance.spec.ts` (renamed):
+a $100 pool approval at the client's ৳130 vs the agency's ৳125 shows ৳13,000 /
+৳12,500 / ৳500 margin (৳5.00 per USD) on both tabs; a regular admin is
+redirected from both addresses; the payment flow now settles what the agency
+owed. `npm test` 302/302, e2e 45/45, build clean.
+
 **Agencies can now pay the platform — migration 000066 (staging: applied;
 production: applied 2026-10-23 via `supabase db push`).** Gap reported by the owner: the platform could bill
 agencies (000064) but an agency could neither see what it owed nor pay. Owner
