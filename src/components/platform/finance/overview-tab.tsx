@@ -39,6 +39,13 @@ export function OverviewTab({ onGoTo }: { onGoTo: (tab: string) => void }) {
           tab: 'agencies',
         },
         {
+          done: o.checklist.agency_payments_to_review === 0,
+          text: o.checklist.agency_payments_to_review
+            ? `${o.checklist.agency_payments_to_review} agency payment(s) to review (Agencies)`
+            : 'No agency payment waiting for review',
+          tab: 'agencies',
+        },
+        {
           done: o.checklist.pending_rate_charges === 0,
           text: o.checklist.pending_rate_charges
             ? `${o.checklist.pending_rate_charges} approval(s) waiting for a rate (Agencies)`

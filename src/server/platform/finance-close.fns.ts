@@ -5,6 +5,8 @@ import { requirePlatformAdmin } from '@/server/auth/guards.server'
 import { dec } from '@/lib/money/money'
 import { inventoryRpcError } from '@/server/platform/usd-inventory.service'
 import { organizationId } from '@/schemas/organization'
+import { buildAgencyStatement } from '@/server/platform/agency-statement.service'
+import type { AgencyStatementRow } from '@/server/platform/agency-statement.service'
 
 /**
  * Finance v2 Milestone 5 (migration 000065): the overview, the profit report,
@@ -117,6 +119,7 @@ export interface FinanceOverview {
     pending_rate_charges: number
     open_meta_exceptions: number
     open_reconciliation_differences: number
+    agency_payments_to_review: number
   }
   last_reconciliation: Partial<Record<'USD_WALLETS' | 'BANK', { at: string; status: string; difference: string }>>
 }
@@ -126,7 +129,7 @@ export const getFinanceOverviewFn = createServerFn({ method: 'GET' }).handler(
     await requirePlatformAdmin()
     const admin = getSupabaseAdminClient()
     const monthStart = dhakaMonthStart()
-    const [fifo, agencies, meta, tb, opening, openingBank, sources, exceptions, recons, month, lots] = await Promise.all([
+    const [fifo, agencies, meta, tb, opening, openingBank, sources, exceptions, recons, month, lots, toReview] = await Promise.all([
       admin.from('usd_fifo_summary').select('left_usd, left_bdt').single(),
       admin.from('agency_billing_summary').select('name, current_rate, owed_bdt, advance_bdt, pending_rate, organization_id'),
       admin.from('meta_account_positions').select('owed_usd'),
@@ -138,8 +141,9 @@ export const getFinanceOverviewFn = createServerFn({ method: 'GET' }).handler(
       admin.from('reconciliation_records').select('scope, created_at, status, difference').order('created_at', { ascending: false }).limit(50),
       profitReport(monthStart.toISOString(), new Date(Date.now() + 60_000).toISOString()),
       admin.from('meta_prepaid_lot_balances').select('left_bdt').eq('status', 'POSTED'),
+      admin.from('agency_payment_submissions').select('id', { count: 'exact', head: true }).eq('status', 'PENDING'),
     ])
-    for (const r of [fifo, agencies, meta, tb, opening, openingBank, sources, exceptions, recons, lots]) {
+    for (const r of [fifo, agencies, meta, tb, opening, openingBank, sources, exceptions, recons, lots, toReview]) {
       if (r.error) throw new Error(r.error.message)
     }
     const f = fifo.data as { left_usd: number; left_bdt: number }
@@ -175,6 +179,7 @@ export const getFinanceOverviewFn = createServerFn({ method: 'GET' }).handler(
         pending_rate_charges: ag.reduce((s, a) => s + Number(a.pending_rate), 0),
         open_meta_exceptions: exceptions.count ?? 0,
         open_reconciliation_differences: recRows.filter((r) => r.status === 'DIFFERENCE').length,
+        agency_payments_to_review: toReview.count ?? 0,
       },
       last_reconciliation: last,
     }
@@ -461,78 +466,10 @@ export const listSupplierStockFn = createServerFn({ method: 'GET' }).handler(
 
 // ------------------------------------------------------- agency statement ---
 
-export interface AgencyStatementRow {
-  date: string
-  reference: string
-  description: string
-  usd: string | null
-  rate: string | null
-  billed_bdt: string | null
-  paid_bdt: string | null
-  balance_bdt: string
-}
-
-/**
- * Client-safe: what the agency was billed and paid, and the running balance —
- * its own rate, but no cost, margin, supplier or stock figure. Oldest first.
- */
+/** Client-safe statement of one agency (see agency-statement.service.ts). */
 export const getAgencyStatementFn = createServerFn({ method: 'GET' })
   .validator(z.object({ organization_id: organizationId }))
   .handler(async ({ data }): Promise<{ agency: string; rows: Array<AgencyStatementRow> }> => {
     await requirePlatformAdmin()
-    const admin = getSupabaseAdminClient()
-    const [org, charges, payments] = await Promise.all([
-      admin.from('organizations').select('name').eq('id', data.organization_id).single(),
-      admin
-        .from('agency_charges')
-        .select('reference_id, kind, usd_amount, rate, bdt_amount, event_at, notes, ad_account:ad_accounts(account_code)')
-        .eq('organization_id', data.organization_id)
-        .eq('status', 'POSTED'),
-      admin
-        .from('agency_payments')
-        .select('reference_id, bdt_amount, received_at, method')
-        .eq('organization_id', data.organization_id)
-        .eq('status', 'POSTED'),
-    ])
-    if (org.error) throw new Error(org.error.message)
-    if (charges.error) throw new Error(charges.error.message)
-    if (payments.error) throw new Error(payments.error.message)
-
-    type Ev = Omit<AgencyStatementRow, 'balance_bdt'> & { delta: ReturnType<typeof dec> }
-    const events: Array<Ev> = [
-      ...(charges.data ?? []).map((raw) => {
-        const c = raw as unknown as Record<string, unknown> & { ad_account: { account_code: string } | null }
-        const bdtAmt = dec(c.bdt_amount as number)
-        const opening = c.kind === 'OPENING_BALANCE'
-        return {
-          date: c.event_at as string,
-          reference: c.reference_id as string,
-          description: opening
-            ? bdtAmt.isNegative() ? 'Opening credit' : 'Opening balance'
-            : `Limit approved${c.ad_account ? ` on ${c.ad_account.account_code}` : ''}${c.notes ? ` (${String(c.notes)})` : ''}`,
-          usd: c.usd_amount == null ? null : money(c.usd_amount),
-          rate: c.rate == null ? null : dec(c.rate as number).toFixed(2),
-          billed_bdt: bdtAmt.isNegative() ? null : bdtAmt.toFixed(2),
-          paid_bdt: bdtAmt.isNegative() ? bdtAmt.abs().toFixed(2) : null,
-          delta: bdtAmt,
-        }
-      }),
-      ...(payments.data ?? []).map((p) => ({
-        date: p.received_at as string,
-        reference: p.reference_id as string,
-        description: `Payment received${p.method ? ` (${String(p.method)})` : ''}`,
-        usd: null,
-        rate: null,
-        billed_bdt: null,
-        paid_bdt: money(p.bdt_amount),
-        delta: dec(p.bdt_amount as number).neg(),
-      })),
-    ].sort((a, b) => a.date.localeCompare(b.date))
-
-    let running = dec(0)
-    const rows = events.map(({ delta, ...e }) => {
-      running = running.plus(delta)
-      return { ...e, balance_bdt: running.toFixed(2) }
-    })
-    return { agency: org.data.name as string, rows }
+    return buildAgencyStatement(getSupabaseAdminClient(), data.organization_id)
   })

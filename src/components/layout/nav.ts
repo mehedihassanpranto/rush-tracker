@@ -20,6 +20,7 @@ import {
   UserCog,
   Users,
   UserRound,
+  Receipt,
   Wallet,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -31,6 +32,9 @@ export interface NavItem {
   to?: string
   /** Development phase that delivers this screen (for disabled items). */
   phase?: number
+  /** Agency area: shown to the SUPER_ADMIN only (the page and its server fns
+   * enforce it too). */
+  superAdminOnly?: boolean
 }
 
 /** Admin navigation (spec §61). Items unlock as their phase is delivered. */
@@ -45,6 +49,7 @@ export const ADMIN_NAV: Array<NavItem> = [
   { label: 'Adjustments', icon: SlidersHorizontal, to: '/agency/adjustments' },
   { label: 'Reports', icon: BarChart3, to: '/agency/reports' },
   { label: 'Finance', icon: TrendingUp, to: '/agency/finance' },
+  { label: 'Platform Billing', icon: Receipt, to: '/agency/platform-billing', superAdminOnly: true },
   { label: 'Audit Log', icon: ScrollText, to: '/agency/audit' },
   { label: 'Users', icon: UserCog, to: '/agency/users' },
   { label: 'Settings', icon: Settings, to: '/agency/settings' },

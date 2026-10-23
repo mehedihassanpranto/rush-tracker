@@ -41,16 +41,19 @@ function label(status: string): string {
 export function StatusBadge({
   status,
   className,
+  label: text,
 }: {
   status: string
   className?: string
+  /** Override the wording; the colour still follows `status`. */
+  label?: string
 }) {
   return (
     <Badge
       variant="outline"
       className={cn(STATUS_STYLES[status] ?? '', className)}
     >
-      {label(status)}
+      {text ?? label(status)}
     </Badge>
   )
 }

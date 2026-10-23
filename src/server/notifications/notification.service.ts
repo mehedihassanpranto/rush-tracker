@@ -53,7 +53,10 @@ export async function notify(input: NotifyInput): Promise<void> {
  * agency would be notified about every other agency's activity — this was
  * a real cross-tenant leak found and fixed as part of the multi-tenant
  * conversion, not a pre-existing requirement. */
-async function adminUserIds(organizationId: string): Promise<Array<string>> {
+async function adminUserIds(
+  organizationId: string,
+  roles: Array<string> = ['ADMIN', 'SUPER_ADMIN'],
+): Promise<Array<string>> {
   const admin = getSupabaseAdminClient()
   const { data } = await admin
     .from('user_profiles')
@@ -64,7 +67,7 @@ async function adminUserIds(organizationId: string): Promise<Array<string>> {
     user_id: string
     role: { key: string } | null
   }>)
-    .filter((u) => u.role?.key === 'ADMIN' || u.role?.key === 'SUPER_ADMIN')
+    .filter((u) => !!u.role && roles.includes(u.role.key))
     .map((u) => u.user_id)
 }
 
@@ -86,6 +89,14 @@ export async function notifyAdmins(
   input: Omit<NotifyInput, 'userIds'>,
 ): Promise<void> {
   await notify({ ...input, userIds: await adminUserIds(input.organizationId) })
+}
+
+/** Notify only an organization's SUPER_ADMINs — for things regular admins
+ * must not see, such as what the agency pays the platform. */
+export async function notifySuperAdmins(
+  input: Omit<NotifyInput, 'userIds'>,
+): Promise<void> {
+  await notify({ ...input, userIds: await adminUserIds(input.organizationId, ['SUPER_ADMIN']) })
 }
 
 /** Notify every active platform admin (the vendor layer — e.g. an agency

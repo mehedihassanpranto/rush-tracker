@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/shared/page-header'
 import { IntegrationSettingsCard } from '@/components/shared/integration-settings/integration-settings-card'
 import { TelegramConnectCard } from '@/components/shared/telegram/telegram-connect-card'
 import { TelegramBotStatusCard } from '@/components/platform/telegram/telegram-bot-status-card'
+import { AgencyPaymentInstructionsCard } from '@/components/platform/finance/agency-payment-instructions-card'
 
 /**
  * Platform settings — Rush Tracker's own configuration, not any agency's.
@@ -32,6 +33,7 @@ function PlatformSettingsPage() {
         description="Rush Tracker's own platform configuration. These credentials serve the platform ad account pool and are never visible to an agency."
       />
       <IntegrationSettingsCard scope="platform" />
+      <AgencyPaymentInstructionsCard />
       <TelegramConnectCard scope="platform" />
       <TelegramBotStatusCard kind="platform" />
       <TelegramBotStatusCard kind="shared" />

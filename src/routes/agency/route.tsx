@@ -38,7 +38,11 @@ function AdminLayout() {
     ? `Admin · ${user.organizationName}`
     : 'Admin'
   return (
-    <AppShell user={user} navItems={ADMIN_NAV} areaLabel={areaLabel}>
+    <AppShell
+      user={user}
+      navItems={ADMIN_NAV.filter((i) => !i.superAdminOnly || user.role === 'SUPER_ADMIN')}
+      areaLabel={areaLabel}
+    >
       <Outlet />
     </AppShell>
   )

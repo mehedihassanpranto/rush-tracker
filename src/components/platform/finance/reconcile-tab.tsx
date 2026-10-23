@@ -120,7 +120,7 @@ export function ReconcileTab() {
   return (
     <>
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="space-y-3 p-4">
+        <Card className="gap-3 p-4">
           <div>
             <h2 className="font-semibold">USD in your wallets</h2>
             <p className="text-xs text-muted-foreground">Compared with the USD in stock (FIFO), right now.</p>
@@ -176,7 +176,7 @@ export function ReconcileTab() {
         </Card>
 
         <div className="space-y-4">
-          <Card className="space-y-3 p-4">
+          <Card className="gap-3 p-4">
             <div>
               <h2 className="font-semibold">Bank balance</h2>
               <p className="text-xs text-muted-foreground">
@@ -199,7 +199,7 @@ export function ReconcileTab() {
             </Button>
           </Card>
 
-          <Card className="space-y-3 p-4">
+          <Card className="gap-3 p-4">
             <div>
               <h2 className="font-semibold">Opening bank balance</h2>
               <p className="text-xs text-muted-foreground">
