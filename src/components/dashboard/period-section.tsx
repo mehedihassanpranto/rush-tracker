@@ -4,7 +4,12 @@ import { useServerFn } from '@tanstack/react-start'
 import { Loader2, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { agencyPeriodTotalsFn, refreshAgencySpendFn } from '@/server/dashboard/dashboard-period.fns'
+import {
+  agencyPeriodTotalsFn,
+  clientPeriodTotalsFn,
+  refreshAgencySpendFn,
+  refreshClientSpendFn,
+} from '@/server/dashboard/dashboard-period.fns'
 import { DASHBOARD_PERIODS, PERIOD_LABELS } from '@/lib/dashboard/periods'
 import { formatBdt, formatUsd } from '@/lib/money/money'
 import { relativeTime } from '@/components/dashboard/section'
@@ -26,31 +31,38 @@ const fmtDay = (d: string) =>
   new Date(`${d}T00:00:00Z`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
 
 /**
- * Agency dashboard (owner request, 2026-10-23): USD spent on Meta, limits
- * approved and client payments for today / this week (from Sunday) / this
- * month / last month — totals, then day by day. Spend is Meta's own daily
- * figure, cached; Refresh fetches it again (at most once a minute).
+ * Dashboards (owner request, 2026-10-23): USD spent on Meta, limits approved
+ * and payments for today / this week (from Sunday) / this month / last month
+ * — totals, then day by day. Spend is Meta's own daily figure, cached;
+ * Refresh fetches it again (at most once a minute). `agency` covers the
+ * agency's accounts and all its clients' payments; `client` only the client
+ * being viewed (its accounts while assigned to it, its own payments).
  */
-export function PeriodSection() {
+export function PeriodSection({ audience }: { audience: 'agency' | 'client' }) {
   const queryClient = useQueryClient()
-  const get = useServerFn(agencyPeriodTotalsFn)
-  const refresh = useServerFn(refreshAgencySpendFn)
+  const getAgency = useServerFn(agencyPeriodTotalsFn)
+  const getClient = useServerFn(clientPeriodTotalsFn)
+  const refreshAgency = useServerFn(refreshAgencySpendFn)
+  const refreshClient = useServerFn(refreshClientSpendFn)
   const [period, setPeriod] = useState<DashboardPeriod>('today')
+  const queryKey = [`${audience}-dashboard-period`, period]
 
   const q = useQuery({
-    queryKey: ['agency-dashboard-period', period],
-    queryFn: () => get({ data: { period } }),
+    queryKey,
+    queryFn: () => (audience === 'agency' ? getAgency({ data: { period } }) : getClient({ data: { period } })),
   })
   const r = q.data
   const refreshMut = useMutation({
-    mutationFn: () => refresh(),
+    mutationFn: () => (audience === 'agency' ? refreshAgency() : refreshClient()),
     onSuccess: (res) => {
       toast.success(
         res.refreshed > 0
           ? `Spend updated from Meta for ${res.refreshed} account${res.refreshed === 1 ? '' : 's'}${res.failed ? ` (${res.failed} couldn't be read)` : ''}`
-          : 'Meta could not be reached — showing the last saved figures',
+          : res.failed > 0
+            ? 'Meta could not be reached — showing the last saved figures'
+            : 'No ad accounts linked to Meta yet',
       )
-      void queryClient.invalidateQueries({ queryKey: ['agency-dashboard-period'] })
+      void queryClient.invalidateQueries({ queryKey: [`${audience}-dashboard-period`] })
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
   })
@@ -97,7 +109,12 @@ export function PeriodSection() {
           value={r ? formatUsd(r.totals.approved_limit_usd) : undefined}
           loading={q.isLoading}
         />
-        <StatCard label="Paid by clients" hint="Payments received" value={r ? formatBdt(r.totals.collection_bdt) : undefined} loading={q.isLoading} />
+        <StatCard
+          label={audience === 'agency' ? 'Paid by clients' : 'You paid'}
+          hint={audience === 'agency' ? 'Payments received' : 'Payments accepted'}
+          value={r ? formatBdt(r.totals.collection_bdt) : undefined}
+          loading={q.isLoading}
+        />
       </div>
       {r && r.spend.non_usd_accounts > 0 && (
         <p className="text-xs text-muted-foreground">
@@ -114,7 +131,7 @@ export function PeriodSection() {
                 <TableHead>Day</TableHead>
                 <TableHead className="text-right">USD spent</TableHead>
                 <TableHead className="text-right">Limit approved</TableHead>
-                <TableHead className="text-right">Paid by clients</TableHead>
+                <TableHead className="text-right">{audience === 'agency' ? 'Paid by clients' : 'You paid'}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

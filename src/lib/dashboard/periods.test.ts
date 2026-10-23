@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { daysBetween, dhakaDate, periodRange, spendCacheRange } from './periods'
+import { daysBetween, dhakaDate, heldOnDay, periodRange, spendCacheRange } from './periods'
 import { dailySpendFromInsights } from '@/lib/meta/insights'
 
 // 2026-10-23 is a Friday. 20:30 UTC on the 22nd is already 02:30 on the 23rd
@@ -67,5 +67,31 @@ describe('dailySpendFromInsights', () => {
       { date: '2026-10-22', spend: '0.00', currency: 'USD' },
       { date: '2026-10-23', spend: '0.00', currency: 'USD' },
     ])
+  })
+})
+
+describe('which days an account counts for a client', () => {
+  // Assigned 2026-10-10 00:30 Dhaka (still the 9th in UTC), released on a
+  // transfer 2026-10-20 15:00 Dhaka.
+  const held = [{ assigned_at: '2026-10-09T18:30:00Z', released_at: '2026-10-20T09:00:00Z' }]
+
+  it('from the Dhaka day assigned, not the UTC one', () => {
+    expect(heldOnDay(held, '2026-10-09', FRI)).toBe(false)
+    expect(heldOnDay(held, '2026-10-10', FRI)).toBe(true)
+  })
+
+  it('up to, not including, the day released — that day is the new client’s', () => {
+    expect(heldOnDay(held, '2026-10-19', FRI)).toBe(true)
+    expect(heldOnDay(held, '2026-10-20', FRI)).toBe(false)
+    const newClient = [{ assigned_at: '2026-10-20T09:00:00Z', released_at: null }]
+    expect(heldOnDay(newClient, '2026-10-20', FRI)).toBe(true)
+  })
+
+  it('still assigned → through today; never a day held by nobody in between', () => {
+    const back = [...held, { assigned_at: '2026-10-22T04:00:00Z', released_at: null }]
+    expect(heldOnDay(back, '2026-10-21', FRI)).toBe(false)
+    expect(heldOnDay(back, '2026-10-22', FRI)).toBe(true)
+    expect(heldOnDay(back, '2026-10-23', FRI)).toBe(true)
+    expect(heldOnDay([], '2026-10-23', FRI)).toBe(false)
   })
 })
