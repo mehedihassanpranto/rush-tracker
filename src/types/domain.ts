@@ -424,18 +424,6 @@ export interface Notification {
 // See supabase/migrations/20260723000030_finance_rates.sql.
 // ---------------------------------------------------------------------------
 
-export interface UsdMarginEntry {
-  id: string
-  transaction_date: string
-  usd_amount: string
-  buying_rate: string
-  buying_amount_bdt: string
-  selling_rate: string
-  selling_amount_bdt: string
-  margin_bdt: string
-  created_at: string
-}
-
 // ---------------------------------------------------------------------------
 // Organizations — multi-tenant subscription conversion, Phase 2.
 // See supabase/migrations/20260723000031_multi_tenant_foundation.sql.

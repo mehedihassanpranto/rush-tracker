@@ -238,6 +238,14 @@ Owner decisions of 2026-10-21:
    for the amount that actually arrived — or rejects it with a reason. The
    agency can withdraw a payment while it is still under review. Subscription
    fees stay separate (recorded by the platform).
+10. **The agency's Finance page** (2026-10-23) is this, from the agency's side,
+    SUPER_ADMIN only: per approval on a pool account, billed to the client
+    (its rate) − owed to the platform (the agency's rate) = the agency's
+    margin; per month, collected from clients vs paid to the platform; and
+    paying the platform. The agency owes the platform at approval, whether or
+    not its client has paid. Approvals from before 21 Oct 2026 or still waiting
+    for a rate are listed but left out of the margin. It replaced the manual
+    USD margin log (`usd_margin_entries`, never used; the empty table stays).
 8. **Periods:** calendar months (Asia/Dhaka). Only a month that has ended can
    be closed, and not while it holds charges waiting for a rate. Nothing can be
    posted dated in a closed month; corrections go into the open month.

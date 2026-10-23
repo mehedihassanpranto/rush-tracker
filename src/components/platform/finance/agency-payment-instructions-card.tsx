@@ -14,8 +14,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 
 /**
- * Where agencies should send what they owe the platform. Shown as-is on each
- * agency's Platform Billing page (its SUPER_ADMIN only).
+ * Where agencies should send what they owe the platform. Shown as-is under
+ * each agency's Finance → Pay the platform (its SUPER_ADMIN only).
  */
 export function AgencyPaymentInstructionsCard() {
   const queryClient = useQueryClient()
@@ -29,7 +29,7 @@ export function AgencyPaymentInstructionsCard() {
   const mutation = useMutation({
     mutationFn: () => save({ data: { value } }),
     onSuccess: () => {
-      toast.success('Saved — agencies see this on their Platform Billing page')
+      toast.success('Saved — agencies see this under Finance → Pay the platform')
       void queryClient.invalidateQueries({ queryKey: ['platform-usd', 'payment-instructions'] })
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
@@ -50,7 +50,7 @@ export function AgencyPaymentInstructionsCard() {
             onChange={(e) => setValue(e.target.value)}
           />
           <p className="text-xs text-muted-foreground">
-            Shown on each agency's Platform Billing page, above the "Pay the platform" button.
+            Shown to each agency's Super Admin under Finance → Pay the platform.
           </p>
         </div>
         <Button size="sm" disabled={mutation.isPending || q.isLoading || value === (q.data ?? '')} onClick={() => mutation.mutate()}>
