@@ -49,7 +49,13 @@ production Refresh is the live check. `npm test` 313/313, e2e 46/46 (new
 `agency-dashboard-period.spec.ts`), build clean. Production before/after
 (read-only): 2 purchases ৳110,010, 0 agency payments, 5 charges, 2 journal
 entries, 283 ledger rows net ৳111,821, 34 ad accounts — unchanged; 0 spend
-rows (filled by the first Refresh / nightly run).
+rows (filled by the first Refresh / nightly run). **Merged as PR #30 and
+live** — Hostinger deployed it ~30 s after the merge (`/login` → new
+`index-Cwv7Zl2_.js`; "Meta spend as of" in the agency chunk). Production
+check after (read-only): `supabase db push --dry-run` up to date;
+`meta_daily_spend` still empty and the last meta-sync ran 09:00 Dhaka, before
+the deploy — the next nightly run (or a Refresh) is the first real Insights
+read.
 
 **e2e: cold dev server broke the first test in CI.** PR #30's e2e failed on
 CI only: on a fresh Vite cache the first page load found
