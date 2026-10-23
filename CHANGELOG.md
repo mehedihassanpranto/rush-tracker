@@ -8,6 +8,52 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-23
 
+**Agency dashboard: period filter for spend, approvals and client payments —
+migration 000067 (staging: applied; production: applied 2026-10-23 via `supabase db push`).** Owner request:
+daily USD spending, approved limit and paid by clients — today, this week,
+this month, last month. Owner decisions: spend comes from **Meta's own daily
+spend (Insights)**, weeks start **Sunday**. New `meta_daily_spend` cache (one
+row per account per day, 0 for a fetched day without spend; display only)
+filled by `fetchMetaDailySpend()` (`act_…/insights`, `time_increment=1`, paged,
+8 accounts at a time like `fetchMetaAdAccounts`) through
+`refreshDailySpend()` — nightly for every account (new 5th meta-sync job,
+"daily spend", covering the 1st of last month → today) and the dashboard's
+Refresh (scoped to the agency's accounts, at most once a minute).
+`agency_daily_totals()` gives limits approved (USD + BDT billed) and client
+payments per Asia/Dhaka day from the ledger — the same rule as the old
+"today" cards. Dashboard: the three fixed "Today's …" tiles are replaced by a
+Today / This week / This month / Last month switch, USD spent / Limit approved
+/ Paid by clients cards, "Meta spend as of …" + Refresh, and a day-by-day
+table (not for Today). Only USD accounts are summed (others counted). Pure
+date logic in `src/lib/dashboard/periods.ts` (Dhaka days, Sunday weeks, year
+rollover, leap Feb) and Insights parsing in `src/lib/meta/insights.ts`, unit
+tested. Not testable against real Meta from staging (inert token): the first
+production Refresh is the live check. `npm test` 313/313, e2e 46/46 (new
+`agency-dashboard-period.spec.ts`), build clean. Production before/after
+(read-only): 2 purchases ৳110,010, 0 agency payments, 5 charges, 2 journal
+entries, 283 ledger rows net ৳111,821, 34 ad accounts — unchanged; 0 spend
+rows (filled by the first Refresh / nightly run).
+
+**e2e: cold dev server broke the first test in CI.** PR #30's e2e failed on
+CI only: on a fresh Vite cache the first page load found
+`@tanstack/router-core` (+ `/isServer`, `/ssr/client`) and `seroval`, which the
+startup scan misses, re-bundled React mid-render and crashed the page
+("reading 'useEffect'" / 504 Outdated Optimize Dep). Reproduced locally by
+clearing `node_modules/.vite`; fixed by pre-bundling them
+(`optimizeDeps.include` in `vite.config.ts`, dev only) — cold run then clean.
+The retry had failed too (same `external_account_id` seeded twice): the
+dashboard spec now seeds a unique id per attempt and checks figures read
+from the database instead of fixed amounts.
+
+**Dashboard spend read past 1,000 rows.** Found in review before merging:
+PostgREST returns at most 1,000 rows (`max_rows`, checked on staging and
+production), and the dashboard read `meta_daily_spend` in one query —
+production's 34 accounts × 31 days of "Last month" is 1,054 rows, so days
+would have gone missing silently. New `readDailySpend()`
+(`meta-daily-spend.service.ts`) pages and chunks the ids by 100;
+`allSpendAccounts()` (nightly refresh) pages too. Live test seeds 1,250 days
+and reads them all back through a 150-id list.
+
 **Agency Finance now connects clients and the platform (no migration).**
 Owner: "what's the need of Finance? … client payments are sent to the platform
 for platform-assigned accounts." Production facts (read-only): the agency

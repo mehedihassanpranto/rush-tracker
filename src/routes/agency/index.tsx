@@ -11,6 +11,7 @@ import { formatBdt, formatUsd } from '@/lib/money/money'
 import { StatCard } from '@/components/shared/stat-card'
 import { NetDueCards } from '@/components/shared/net-due-cards'
 import { agencyNetReceivableFn } from '@/server/finance/net-due.fns'
+import { PeriodSection } from '@/components/dashboard/period-section'
 import {
   EmptyState,
   SectionCard,
@@ -31,9 +32,6 @@ const SUMMARY_CARDS: Array<{ label: string; stat: StatKey; money?: Money }> = [
   { label: 'Available Ad Accounts', stat: 'availableAccounts' },
   { label: 'Pending Limit Requests', stat: 'pendingLimitRequests' },
   { label: 'Pending Payment Verifications', stat: 'pendingPaymentVerifications' },
-  { label: "Today's Approved Limit (USD)", stat: 'todayApprovedLimitUsd', money: 'usd' },
-  { label: "Today's Approved Billing (BDT)", stat: 'todayApprovedBillingBdt', money: 'bdt' },
-  { label: "Today's Collection (BDT)", stat: 'todayCollectionBdt', money: 'bdt' },
 ]
 
 function AdminDashboard() {
@@ -69,8 +67,12 @@ function AdminDashboard() {
 
       <NetDueCards audience="agency" figures={net?.totals} loading={netLoading} />
 
-      {/* 8 tiles: 2x4 at xl — never an orphan card on its own row. */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Spent / approved / paid for a chosen period (replaces the three fixed
+          "Today's …" tiles). */}
+      <PeriodSection />
+
+      {/* 5 tiles: one row at xl. */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {SUMMARY_CARDS.map((card) => {
           const raw = stats?.[card.stat]
           const display =

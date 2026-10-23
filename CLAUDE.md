@@ -184,6 +184,9 @@ short; detail belongs in the changelog.
   `proofs` bucket, served by 60-second signed URLs (`storage.service.ts`).
   Writes go through the server layer with `writeAudit()` after (best-effort) or
   inside the RPC. Pure logic lives in `src/lib/**` so it's unit-testable.
+- **A Supabase read stops at 1,000 rows** (`max_rows`, both projects) with no
+  error — page with `.order().range()` any read that can grow past it
+  (days × accounts does), e.g. `readDailySpend()`.
 - **Supabase numerics arrive as JS numbers** at runtime even though the types
   say `string` — wrap with `String(...)` when seeding form defaults (this bug
   broke edit dialogs twice).
@@ -205,6 +208,9 @@ short; detail belongs in the changelog.
     `currency === 'USD'` (`LOW_BALANCE_THRESHOLD` ≤ 60, `META_DUE_THRESHOLD`
     100, `src/lib/meta/thresholds.ts`). Format Meta money with
     `formatCurrencyAmount()`, not `formatUsd`/`formatBdt`.
+  - Dashboard spend is Meta Insights per day (`meta_daily_spend`, 000067,
+    `fetchMetaDailySpend`: spend in MAJOR units, account timezone), refreshed
+    nightly + on demand — display only, never a limit or the platform's books.
   - Meta's `account_status` is display-only; our `ad_accounts.status` stays
     admin-controlled. Bulk import never sets a limit from Meta's spend cap.
   - Manual spend-cap push/pull/retry on a pool account is platform-only
@@ -231,6 +237,10 @@ short; detail belongs in the changelog.
 - Dev only: `noStaleWorkerSockets()` in `vite.config.ts` stops Vite pooling
   connections to the Nitro dev worker (the worker closes them after ~5 s idle
   → random "socket hang up" overlay). Don't remove it.
+- Dev only: a dep Vite's startup scan misses re-bundles React on a cold
+  server's first page ("reading 'useEffect'", 504 Outdated Optimize Dep —
+  CI's first e2e test). Add it to `optimizeDeps.include`; `DEBUG=vite:deps`
+  names it.
 - `createServerFn().validator(schema)` (`.inputValidator()` is deprecated).
   Request helpers come from `@tanstack/react-start/server`.
 - HTTP endpoints (cron, webhooks) are files under `src/routes/api/**` with
