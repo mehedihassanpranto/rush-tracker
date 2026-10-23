@@ -9,7 +9,7 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 ## 2026-10-23
 
 **Agency dashboard: period filter for spend, approvals and client payments —
-migration 000067 (staging: applied; production: NOT YET).** Owner request:
+migration 000067 (staging: applied; production: applied 2026-10-23 via `supabase db push`).** Owner request:
 daily USD spending, approved limit and paid by clients — today, this week,
 this month, last month. Owner decisions: spend comes from **Meta's own daily
 spend (Insights)**, weeks start **Sunday**. New `meta_daily_spend` cache (one
@@ -29,7 +29,10 @@ date logic in `src/lib/dashboard/periods.ts` (Dhaka days, Sunday weeks, year
 rollover, leap Feb) and Insights parsing in `src/lib/meta/insights.ts`, unit
 tested. Not testable against real Meta from staging (inert token): the first
 production Refresh is the live check. `npm test` 313/313, e2e 46/46 (new
-`agency-dashboard-period.spec.ts`), build clean.
+`agency-dashboard-period.spec.ts`), build clean. Production before/after
+(read-only): 2 purchases ৳110,010, 0 agency payments, 5 charges, 2 journal
+entries, 283 ledger rows net ৳111,821, 34 ad accounts — unchanged; 0 spend
+rows (filled by the first Refresh / nightly run).
 
 **Agency Finance now connects clients and the platform (no migration).**
 Owner: "what's the need of Finance? … client payments are sent to the platform
