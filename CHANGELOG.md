@@ -8,6 +8,23 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-23
 
+**Client dashboard: the same period filter (no migration).** Owner: "i need
+this also client dashboard too." `/client` gets Today / This week / This
+month / Last month with USD spent, Limit approved (+ BDT billed) and **You
+paid**, a day-by-day table and Refresh — the shared `PeriodSection` now takes
+`audience: 'agency' | 'client'`. Server: `clientPeriodTotalsFn` /
+`refreshClientSpendFn` (`dashboard-period.fns.ts`), scoped to the client the
+login is viewing (`requireClientMembership`, so multi-client logins follow
+`rt_active_client`) and to its organization. Spend counts an account only
+while it was assigned to THIS client — from the Dhaka day assigned up to,
+not including, the day released, so a transfer day belongs to the new client
+(`heldOnDay()` in `src/lib/dashboard/periods.ts`, unit tested); spend before
+an account was theirs never shows. Approvals and payments come from the
+client's own ledger by Dhaka day, read in pages. Refresh fetches only the
+client's current accounts, at most once a minute. No Meta Due or other
+agency figures reach the client. e2e `client-dashboard-period.spec.ts`: a
+$100 day before the assignment is excluded, $7.50 after counts.
+
 **Agency dashboard: period filter for spend, approvals and client payments —
 migration 000067 (staging: applied; production: applied 2026-10-23 via `supabase db push`).** Owner request:
 daily USD spending, approved limit and paid by clients — today, this week,

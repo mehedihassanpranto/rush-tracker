@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { StatCard } from '@/components/shared/stat-card'
 import { NetDueCards } from '@/components/shared/net-due-cards'
+import { PeriodSection } from '@/components/dashboard/period-section'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, SectionCard } from '@/components/dashboard/section'
 
@@ -125,6 +126,9 @@ function ClientDashboard() {
       </div>
 
       <NetDueCards audience="client" figures={netPayable} loading={netLoading} />
+
+      {/* Spent / approved / paid for a chosen period. */}
+      <PeriodSection audience="client" />
 
       {/* 3 columns: 6 ledger tiles fill two full rows. */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
