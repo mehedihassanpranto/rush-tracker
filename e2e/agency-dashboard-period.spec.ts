@@ -12,13 +12,49 @@ import { adminClient } from './support/seed'
 test.use(auth('agencyA'))
 
 const dhakaToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' })
+const dhakaStart = (day: string) => new Date(`${day}T00:00:00+06:00`).toISOString()
+const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const bdt = (n: number) => `৳${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+
+/**
+ * What org A's dashboard should show for [from, to], read straight from the
+ * database — other specs (and a retry of this one) add to the same books.
+ */
+async function expected(from: string, to: string) {
+  const admin = adminClient(loadE2EEnv())
+  const { orgA } = fixtures()
+  const { data: accts } = await admin.from('ad_accounts').select('id').eq('organization_id', orgA)
+  const { data: spend } = await admin
+    .from('meta_daily_spend')
+    .select('spend')
+    .in('ad_account_id', (accts ?? []).map((a) => a.id))
+    .eq('currency', 'USD')
+    .gte('spend_date', from)
+    .lte('spend_date', to)
+  const next = new Date(`${to}T00:00:00Z`)
+  next.setUTCDate(next.getUTCDate() + 1)
+  const { data: rows } = await admin
+    .from('ledger_entries')
+    .select('type, usd_amount, debit_bdt, credit_bdt')
+    .eq('organization_id', orgA)
+    .gte('created_at', dhakaStart(from))
+    .lt('created_at', dhakaStart(next.toISOString().slice(0, 10)))
+  const sum = (type: string, k: 'usd_amount' | 'debit_bdt' | 'credit_bdt') =>
+    (rows ?? []).filter((r) => r.type === type).reduce((s, r) => s + Number(r[k] ?? 0), 0)
+  return {
+    spend: (spend ?? []).reduce((s, r) => s + Number(r.spend), 0),
+    approved: sum('LIMIT_APPROVAL', 'usd_amount'),
+    billed: sum('LIMIT_APPROVAL', 'debit_bdt'),
+    paid: sum('PAYMENT', 'credit_bdt'),
+  }
+}
 
 test.beforeAll(async () => {
   const admin = adminClient(loadE2EEnv())
   const f = fixtures()
   const { data: acct, error } = await admin
     .from('ad_accounts')
-    .insert({ name: `ZZ E2E spend ${f.run}`, platform: 'META', status: 'ACTIVE', organization_id: f.orgA, is_platform: false, external_account_id: `act_e2e_${f.run}`, meta_currency: 'USD' })
+    .insert({ name: `ZZ E2E spend ${f.run}`, platform: 'META', status: 'ACTIVE', organization_id: f.orgA, is_platform: false, external_account_id: `act_e2e_${f.run}_${Date.now()}`, meta_currency: 'USD' })
     .select('id')
     .single()
   if (error) throw new Error(error.message)
@@ -53,25 +89,32 @@ test('spent, approved and paid by period, day by day', async ({ page }) => {
   const periods = page.getByRole('group', { name: 'Period' })
 
   // Today (the default).
+  const today = dhakaToday()
+  const t = await expected(today, today)
+  expect(t.spend, 'seeded spend').toBeGreaterThanOrEqual(12.34)
   await expect(periods.getByRole('button', { name: 'Today' })).toHaveAttribute('aria-pressed', 'true')
-  await expect(card('USD spent')).toContainText('$12.34')
-  await expect(card('Limit approved')).toContainText('$50.00')
-  await expect(card('Limit approved')).toContainText('Billed ৳6,500')
-  await expect(card('Paid by clients')).toContainText('৳3,000')
+  await expect(card('USD spent')).toContainText(usd(t.spend))
+  await expect(card('Limit approved')).toContainText(usd(t.approved))
+  await expect(card('Limit approved')).toContainText(`Billed ${bdt(t.billed)}`)
+  await expect(card('Paid by clients')).toContainText(bdt(t.paid))
   await expect(page.getByText(/Meta spend as of/)).toBeVisible()
 
-  // This month: same totals so far, and a row for today.
+  // This month, and its row for today.
+  const m = await expected(`${today.slice(0, 8)}01`, today)
   await periods.getByRole('button', { name: 'This month' }).click()
-  await expect(card('USD spent')).toContainText('$12.34')
-  const today = new Date(`${dhakaToday()}T00:00:00Z`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
-  const row = page.getByRole('row').filter({ hasText: today })
-  await expect(row).toContainText('$12.34')
-  await expect(row).toContainText('$50.00')
-  await expect(row).toContainText('৳3,000')
+  await expect(card('USD spent')).toContainText(usd(m.spend))
+  const todayLabel = new Date(`${today}T00:00:00Z`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
+  const row = page.getByRole('row').filter({ hasText: todayLabel })
+  await expect(row).toContainText(usd(t.spend))
+  await expect(row).toContainText(usd(t.approved))
+  await expect(row).toContainText(bdt(t.paid))
 
-  // Last month: nothing seeded there.
+  // Last month.
+  const first = new Date(`${today.slice(0, 8)}01T00:00:00Z`)
+  const lastDay = new Date(first.getTime() - 86_400_000).toISOString().slice(0, 10)
+  const l = await expected(`${lastDay.slice(0, 8)}01`, lastDay)
   await periods.getByRole('button', { name: 'Last month' }).click()
-  await expect(card('USD spent')).toContainText('$0.00')
+  await expect(card('USD spent')).toContainText(usd(l.spend))
 
   // Refresh: e2e's Meta token is inert, so it reports that and keeps the figures.
   await page.getByRole('button', { name: 'Refresh' }).click()

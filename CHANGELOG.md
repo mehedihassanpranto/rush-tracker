@@ -34,6 +34,17 @@ production Refresh is the live check. `npm test` 313/313, e2e 46/46 (new
 entries, 283 ledger rows net ৳111,821, 34 ad accounts — unchanged; 0 spend
 rows (filled by the first Refresh / nightly run).
 
+**e2e: cold dev server broke the first test in CI.** PR #30's e2e failed on
+CI only: on a fresh Vite cache the first page load found
+`@tanstack/router-core` (+ `/isServer`, `/ssr/client`) and `seroval`, which the
+startup scan misses, re-bundled React mid-render and crashed the page
+("reading 'useEffect'" / 504 Outdated Optimize Dep). Reproduced locally by
+clearing `node_modules/.vite`; fixed by pre-bundling them
+(`optimizeDeps.include` in `vite.config.ts`, dev only) — cold run then clean.
+The retry had failed too (same `external_account_id` seeded twice): the
+dashboard spec now seeds a unique id per attempt and checks figures read
+from the database instead of fixed amounts.
+
 **Agency Finance now connects clients and the platform (no migration).**
 Owner: "what's the need of Finance? … client payments are sent to the platform
 for platform-assigned accounts." Production facts (read-only): the agency

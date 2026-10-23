@@ -234,6 +234,10 @@ short; detail belongs in the changelog.
 - Dev only: `noStaleWorkerSockets()` in `vite.config.ts` stops Vite pooling
   connections to the Nitro dev worker (the worker closes them after ~5 s idle
   → random "socket hang up" overlay). Don't remove it.
+- Dev only: a dep Vite's startup scan misses re-bundles React on a cold
+  server's first page ("reading 'useEffect'", 504 Outdated Optimize Dep —
+  CI's first e2e test). Add it to `optimizeDeps.include`; `DEBUG=vite:deps`
+  names it.
 - `createServerFn().validator(schema)` (`.inputValidator()` is deprecated).
   Request helpers come from `@tanstack/react-start/server`.
 - HTTP endpoints (cron, webhooks) are files under `src/routes/api/**` with

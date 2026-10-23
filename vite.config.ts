@@ -53,6 +53,13 @@ function noStaleWorkerSockets(): Plugin {
 
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
+  // Dev only: the startup scan misses these (TanStack Start imports them from
+  // generated code), so a cold server found them on the first page load,
+  // re-bundled React mid-render and broke that page ("reading 'useEffect'" /
+  // 504 Outdated Optimize Dep) — the first e2e test on a fresh CI cache.
+  optimizeDeps: {
+    include: ['@tanstack/router-core', '@tanstack/router-core/isServer', '@tanstack/router-core/ssr/client', 'seroval'],
+  },
   plugins: [
     noStaleWorkerSockets(),
     devtools(),
