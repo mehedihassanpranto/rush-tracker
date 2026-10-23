@@ -45,6 +45,15 @@ The retry had failed too (same `external_account_id` seeded twice): the
 dashboard spec now seeds a unique id per attempt and checks figures read
 from the database instead of fixed amounts.
 
+**Dashboard spend read past 1,000 rows.** Found in review before merging:
+PostgREST returns at most 1,000 rows (`max_rows`, checked on staging and
+production), and the dashboard read `meta_daily_spend` in one query —
+production's 34 accounts × 31 days of "Last month" is 1,054 rows, so days
+would have gone missing silently. New `readDailySpend()`
+(`meta-daily-spend.service.ts`) pages and chunks the ids by 100;
+`allSpendAccounts()` (nightly refresh) pages too. Live test seeds 1,250 days
+and reads them all back through a 150-id list.
+
 **Agency Finance now connects clients and the platform (no migration).**
 Owner: "what's the need of Finance? … client payments are sent to the platform
 for platform-assigned accounts." Production facts (read-only): the agency

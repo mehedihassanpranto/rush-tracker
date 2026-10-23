@@ -184,6 +184,9 @@ short; detail belongs in the changelog.
   `proofs` bucket, served by 60-second signed URLs (`storage.service.ts`).
   Writes go through the server layer with `writeAudit()` after (best-effort) or
   inside the RPC. Pure logic lives in `src/lib/**` so it's unit-testable.
+- **A Supabase read stops at 1,000 rows** (`max_rows`, both projects) with no
+  error — page with `.order().range()` any read that can grow past it
+  (days × accounts does), e.g. `readDailySpend()`.
 - **Supabase numerics arrive as JS numbers** at runtime even though the types
   say `string` — wrap with `String(...)` when seeding form defaults (this bug
   broke edit dialogs twice).

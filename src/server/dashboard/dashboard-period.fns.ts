@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { requireAdmin } from '@/server/auth/guards.server'
 import { adAccountScope, applyAdAccountScope } from '@/server/ad-accounts/scope.server'
-import { refreshDailySpend } from '@/server/meta/meta-daily-spend.service'
+import { readDailySpend, refreshDailySpend } from '@/server/meta/meta-daily-spend.service'
 import { UserError } from '@/lib/errors/user-error'
 import { dec } from '@/lib/money/money'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
@@ -83,12 +83,9 @@ export const agencyPeriodTotalsFn = createServerFn({ method: 'GET' })
     const ids = accounts.map((a) => a.id)
     const [ledger, spend] = await Promise.all([
       admin.rpc('agency_daily_totals', { p_organization_id: org, p_from: from, p_to: to }),
-      ids.length
-        ? admin.from('meta_daily_spend').select('ad_account_id, spend_date, spend, currency, fetched_at').in('ad_account_id', ids).gte('spend_date', from).lte('spend_date', to)
-        : Promise.resolve({ data: [], error: null }),
+      readDailySpend(ids, from, to),
     ])
     if (ledger.error) throw new Error(ledger.error.message)
-    if (spend.error) throw new Error(spend.error.message)
 
     const ledgerBy = new Map(
       ((ledger.data ?? []) as Array<Record<string, unknown>>).map((r) => [r.day as string, r]),
@@ -96,7 +93,7 @@ export const agencyPeriodTotalsFn = createServerFn({ method: 'GET' })
     const spendBy = new Map<string, ReturnType<typeof dec>>()
     const nonUsd = new Set<string>()
     let asOf: string | null = null
-    for (const r of (spend.data ?? []) as Array<{ ad_account_id: string; spend_date: string; spend: number; currency: string | null; fetched_at: string }>) {
+    for (const r of spend) {
       if (!asOf || r.fetched_at > asOf) asOf = r.fetched_at
       if (r.currency && r.currency !== 'USD') {
         if (dec(r.spend).gt(0)) nonUsd.add(r.ad_account_id)

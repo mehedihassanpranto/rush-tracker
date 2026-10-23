@@ -66,12 +66,57 @@ export async function refreshDailySpend(
   return { refreshed, failed: rows.length - refreshed }
 }
 
+export interface DailySpendRow {
+  ad_account_id: string
+  spend_date: string
+  spend: number
+  currency: string | null
+  fetched_at: string
+}
+
+// PostgREST returns at most 1000 rows (max_rows, staging and production), and
+// a month of days × an agency's accounts passes that (34 accounts × 31 days):
+// read in pages, and the ids in chunks so the URL stays short.
+const PAGE = 1000
+const ID_CHUNK = 100
+
+/** Cached daily spend of some accounts over [from, to], every row. */
+export async function readDailySpend(ids: Array<string>, from: string, to: string): Promise<Array<DailySpendRow>> {
+  const admin = getSupabaseAdminClient()
+  const out: Array<DailySpendRow> = []
+  for (let i = 0; i < ids.length; i += ID_CHUNK) {
+    for (let at = 0; ; at += PAGE) {
+      const { data, error } = await admin
+        .from('meta_daily_spend')
+        .select('ad_account_id, spend_date, spend, currency, fetched_at')
+        .in('ad_account_id', ids.slice(i, i + ID_CHUNK))
+        .gte('spend_date', from)
+        .lte('spend_date', to)
+        .order('ad_account_id')
+        .order('spend_date')
+        .range(at, at + PAGE - 1)
+      if (error) throw new Error(error.message)
+      out.push(...((data ?? []) as Array<DailySpendRow>))
+      if ((data ?? []).length < PAGE) break
+    }
+  }
+  return out
+}
+
 /** Every ad account Meta can be asked about, for the nightly refresh. */
 export async function allSpendAccounts(): Promise<Array<SpendAccountRow>> {
-  const { data, error } = await getSupabaseAdminClient()
-    .from('ad_accounts')
-    .select('id, external_account_id, is_platform, organization_id, meta_currency')
-    .not('external_account_id', 'is', null)
-  if (error) throw new Error(error.message)
-  return (data ?? []) as Array<SpendAccountRow>
+  const admin = getSupabaseAdminClient()
+  const out: Array<SpendAccountRow> = []
+  for (let at = 0; ; at += PAGE) {
+    const { data, error } = await admin
+      .from('ad_accounts')
+      .select('id, external_account_id, is_platform, organization_id, meta_currency')
+      .not('external_account_id', 'is', null)
+      .order('id')
+      .range(at, at + PAGE - 1)
+    if (error) throw new Error(error.message)
+    out.push(...((data ?? []) as Array<SpendAccountRow>))
+    if ((data ?? []).length < PAGE) break
+  }
+  return out
 }
