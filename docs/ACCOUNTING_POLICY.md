@@ -230,6 +230,14 @@ Owner decisions of 2026-10-21:
    used.
 7. **"Record agency sale" is retired**; agencies pay through "Record agency
    payment". The old `usd_sales` table stays for history.
+9. **Agencies pay through the app** (migration 000066, owner decisions of
+   2026-10-23). The agency's **SUPER_ADMIN only** sees "Platform Billing" (what
+   it owes, its rate, every charge and payment, the platform's payment
+   instructions) and submits a payment with proof. A platform admin approves
+   it — booked through `record_agency_payment`, dated when the agency paid,
+   for the amount that actually arrived — or rejects it with a reason. The
+   agency can withdraw a payment while it is still under review. Subscription
+   fees stay separate (recorded by the platform).
 8. **Periods:** calendar months (Asia/Dhaka). Only a month that has ended can
    be closed, and not while it holds charges waiting for a rate. Nothing can be
    posted dated in a closed month; corrections go into the open month.

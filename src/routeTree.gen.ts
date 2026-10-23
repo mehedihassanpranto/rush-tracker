@@ -38,6 +38,7 @@ import { Route as AgencyLimitRequestsRequestIdRouteImport } from './routes/agenc
 import { Route as AgencyPaymentRequestsIndexRouteImport } from './routes/agency/payment-requests/index'
 import { Route as AgencyPaymentsIndexRouteImport } from './routes/agency/payments/index'
 import { Route as AgencyPaymentsPaymentIdRouteImport } from './routes/agency/payments/$paymentId'
+import { Route as AgencyPlatformBillingIndexRouteImport } from './routes/agency/platform-billing/index'
 import { Route as AgencyReportsIndexRouteImport } from './routes/agency/reports/index'
 import { Route as AgencySearchIndexRouteImport } from './routes/agency/search/index'
 import { Route as AgencySettingsIndexRouteImport } from './routes/agency/settings/index'
@@ -216,6 +217,12 @@ const AgencyPaymentsPaymentIdRoute = AgencyPaymentsPaymentIdRouteImport.update({
   path: '/payments/$paymentId',
   getParentRoute: () => AgencyRouteRoute,
 } as any)
+const AgencyPlatformBillingIndexRoute =
+  AgencyPlatformBillingIndexRouteImport.update({
+    id: '/platform-billing/',
+    path: '/platform-billing/',
+    getParentRoute: () => AgencyRouteRoute,
+  } as any)
 const AgencyReportsIndexRoute = AgencyReportsIndexRouteImport.update({
   id: '/reports/',
   path: '/reports/',
@@ -408,6 +415,7 @@ export interface FileRoutesByFullPath {
   '/agency/limit-requests/': typeof AgencyLimitRequestsIndexRoute
   '/agency/payment-requests/': typeof AgencyPaymentRequestsIndexRoute
   '/agency/payments/': typeof AgencyPaymentsIndexRoute
+  '/agency/platform-billing/': typeof AgencyPlatformBillingIndexRoute
   '/agency/reports/': typeof AgencyReportsIndexRoute
   '/agency/search/': typeof AgencySearchIndexRoute
   '/agency/settings/': typeof AgencySettingsIndexRoute
@@ -464,6 +472,7 @@ export interface FileRoutesByTo {
   '/agency/limit-requests': typeof AgencyLimitRequestsIndexRoute
   '/agency/payment-requests': typeof AgencyPaymentRequestsIndexRoute
   '/agency/payments': typeof AgencyPaymentsIndexRoute
+  '/agency/platform-billing': typeof AgencyPlatformBillingIndexRoute
   '/agency/reports': typeof AgencyReportsIndexRoute
   '/agency/search': typeof AgencySearchIndexRoute
   '/agency/settings': typeof AgencySettingsIndexRoute
@@ -525,6 +534,7 @@ export interface FileRoutesById {
   '/agency/limit-requests/': typeof AgencyLimitRequestsIndexRoute
   '/agency/payment-requests/': typeof AgencyPaymentRequestsIndexRoute
   '/agency/payments/': typeof AgencyPaymentsIndexRoute
+  '/agency/platform-billing/': typeof AgencyPlatformBillingIndexRoute
   '/agency/reports/': typeof AgencyReportsIndexRoute
   '/agency/search/': typeof AgencySearchIndexRoute
   '/agency/settings/': typeof AgencySettingsIndexRoute
@@ -586,6 +596,7 @@ export interface FileRouteTypes {
     | '/agency/limit-requests/'
     | '/agency/payment-requests/'
     | '/agency/payments/'
+    | '/agency/platform-billing/'
     | '/agency/reports/'
     | '/agency/search/'
     | '/agency/settings/'
@@ -642,6 +653,7 @@ export interface FileRouteTypes {
     | '/agency/limit-requests'
     | '/agency/payment-requests'
     | '/agency/payments'
+    | '/agency/platform-billing'
     | '/agency/reports'
     | '/agency/search'
     | '/agency/settings'
@@ -702,6 +714,7 @@ export interface FileRouteTypes {
     | '/agency/limit-requests/'
     | '/agency/payment-requests/'
     | '/agency/payments/'
+    | '/agency/platform-billing/'
     | '/agency/reports/'
     | '/agency/search/'
     | '/agency/settings/'
@@ -950,6 +963,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgencyPaymentsPaymentIdRouteImport
       parentRoute: typeof AgencyRouteRoute
     }
+    '/agency/platform-billing/': {
+      id: '/agency/platform-billing/'
+      path: '/platform-billing'
+      fullPath: '/agency/platform-billing/'
+      preLoaderRoute: typeof AgencyPlatformBillingIndexRouteImport
+      parentRoute: typeof AgencyRouteRoute
+    }
     '/agency/reports/': {
       id: '/agency/reports/'
       path: '/reports'
@@ -1185,6 +1205,7 @@ interface AgencyRouteRouteChildren {
   AgencyLimitRequestsIndexRoute: typeof AgencyLimitRequestsIndexRoute
   AgencyPaymentRequestsIndexRoute: typeof AgencyPaymentRequestsIndexRoute
   AgencyPaymentsIndexRoute: typeof AgencyPaymentsIndexRoute
+  AgencyPlatformBillingIndexRoute: typeof AgencyPlatformBillingIndexRoute
   AgencyReportsIndexRoute: typeof AgencyReportsIndexRoute
   AgencySearchIndexRoute: typeof AgencySearchIndexRoute
   AgencySettingsIndexRoute: typeof AgencySettingsIndexRoute
@@ -1206,6 +1227,7 @@ const AgencyRouteRouteChildren: AgencyRouteRouteChildren = {
   AgencyLimitRequestsIndexRoute: AgencyLimitRequestsIndexRoute,
   AgencyPaymentRequestsIndexRoute: AgencyPaymentRequestsIndexRoute,
   AgencyPaymentsIndexRoute: AgencyPaymentsIndexRoute,
+  AgencyPlatformBillingIndexRoute: AgencyPlatformBillingIndexRoute,
   AgencyReportsIndexRoute: AgencyReportsIndexRoute,
   AgencySearchIndexRoute: AgencySearchIndexRoute,
   AgencySettingsIndexRoute: AgencySettingsIndexRoute,

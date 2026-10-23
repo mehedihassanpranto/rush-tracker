@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import { Loader2, TriangleAlert } from 'lucide-react'
+import { Loader2, Paperclip, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { getAgencyStatementFn } from '@/server/platform/finance-close.fns'
 import { downloadCsv } from '@/lib/csv/csv'
 import {
+  approveAgencyPaymentSubmissionFn,
+  getAgencyPaymentProofUrlFn,
+  listPendingAgencyPaymentsFn,
+  rejectAgencyPaymentSubmissionFn,
   getEarliestPendingChargeFn,
   listAgencyBillingFn,
   listAgencyLedgerFn,
@@ -17,10 +21,11 @@ import {
   reverseAgencyPaymentFn,
   setAgencyRateFn,
 } from '@/server/platform/agency-billing.fns'
+import Decimal from 'decimal.js'
 import { dec, formatBdt, formatUsd } from '@/lib/money/money'
 import { fmtDateTime, fmtRate, localInputToIso, nowLocalInput } from '@/components/platform/finance/format'
 import { ReverseDialog } from '@/components/platform/finance/inventory-dialogs'
-import type { AgencyBillingRow, AgencyLedgerRow } from '@/server/platform/agency-billing.fns'
+import type { AgencyBillingRow, AgencyLedgerRow, AgencyPaymentSubmissionRow } from '@/server/platform/agency-billing.fns'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -78,6 +83,8 @@ export function AgencyBillingTab({ onRecordPayment }: { onRecordPayment: (orgId?
 
   return (
     <>
+      <PaymentsToReview />
+
       {waiting.length > 0 && (
         <Alert>
           <TriangleAlert className="size-4" />
@@ -675,3 +682,156 @@ function AgencyLedgerDialog({
     </Dialog>
   )
 }
+
+/**
+ * Payments agencies submitted with proof (migration 000066). Approving books
+ * it like "Record agency payment" — it settles what is owed, the rest becomes
+ * the agency's credit — dated when the agency paid. The agency's SUPER_ADMIN
+ * is told the outcome either way.
+ */
+function PaymentsToReview() {
+  const queryClient = useQueryClient()
+  const list = useServerFn(listPendingAgencyPaymentsFn)
+  const getProof = useServerFn(getAgencyPaymentProofUrlFn)
+  const approve = useServerFn(approveAgencyPaymentSubmissionFn)
+  const reject = useServerFn(rejectAgencyPaymentSubmissionFn)
+  const [approving, setApproving] = useState<AgencyPaymentSubmissionRow | null>(null)
+  const [rejecting, setRejecting] = useState<AgencyPaymentSubmissionRow | null>(null)
+  const [amount, setAmount] = useState('')
+
+  const pending = useQuery({ queryKey: ['platform-usd', 'agency-payments-pending'], queryFn: () => list() })
+  useEffect(() => {
+    if (approving) setAmount(approving.bdt_amount)
+  }, [approving])
+  const done = (msg: string) => {
+    toast.success(msg)
+    void queryClient.invalidateQueries({ queryKey: ['platform-usd'] })
+  }
+  const proof = useMutation({
+    mutationFn: (id: string) => getProof({ data: { id } }),
+    onSuccess: (url) => window.open(url, '_blank', 'noopener,noreferrer'),
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
+  })
+  const approveMut = useMutation({
+    mutationFn: () => approve({ data: { id: approving!.id, bdt_amount: Number(amount) } }),
+    onSuccess: (r) => {
+      setApproving(null)
+      done(dec(r.advance_bdt).gt(0) ? `Approved — ${formatBdt(r.advance_bdt)} kept as the agency's credit` : 'Approved')
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
+  })
+  const rejectMut = useMutation({
+    mutationFn: (reason: string) => reject({ data: { id: rejecting!.id, reason } }),
+    onSuccess: () => {
+      setRejecting(null)
+      done('Rejected — the agency has been told why')
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
+  })
+
+  const rows = pending.data ?? []
+  if (rows.length === 0) return null
+  const n = Number(amount)
+  const owedNow = approving ? dec(approving.owed_bdt) : dec(0)
+  const extra = approving && amount !== '' && n > 0 ? dec(n).minus(Decimal.max(owedNow, 0)) : null
+
+  return (
+    <div>
+      <h2 className="mb-3 text-lg font-semibold">Payments to review ({rows.length})</h2>
+      <Card className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Agency</TableHead>
+              <TableHead>Paid</TableHead>
+              <TableHead className="text-right">Amount</TableHead>
+              <TableHead className="text-right">Owes now</TableHead>
+              <TableHead className="text-right">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell className="whitespace-normal">
+                  <div className="font-medium">{r.agency_name}</div>
+                  <div className="text-xs text-muted-foreground">
+                    <span className="num">{r.reference_id}</span> · {[r.method, r.external_reference].filter(Boolean).join(' · ')}
+                    {r.note && ` · ${r.note}`}
+                  </div>
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-muted-foreground">{fmtDateTime(r.paid_at)}</TableCell>
+                <TableCell className="num text-right font-medium">{formatBdt(r.bdt_amount)}</TableCell>
+                <TableCell className="num text-right text-muted-foreground">{formatBdt(r.owed_bdt)}</TableCell>
+                <TableCell className="text-right">
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button size="sm" variant="ghost" disabled={!r.has_proof || proof.isPending} onClick={() => proof.mutate(r.id)}>
+                      <Paperclip className="size-4" />
+                      {r.has_proof ? 'Proof' : 'No proof'}
+                    </Button>
+                    <Button size="sm" onClick={() => setApproving(r)}>
+                      Approve
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setRejecting(r)}>
+                      Reject
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+      <p className="mt-2 text-xs text-muted-foreground">
+        Check the proof against your bank or wallet before approving. If a different amount arrived, approve
+        the amount that arrived.
+      </p>
+
+      <Dialog open={!!approving} onOpenChange={(o) => !o && setApproving(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Approve {approving?.reference_id}</DialogTitle>
+            <DialogDescription>
+              {approving?.agency_name} says it paid {approving ? formatBdt(approving.bdt_amount) : ''} by {approving?.method}
+              {approving ? ` on ${fmtDateTime(approving.paid_at)}` : ''}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="approve-amount">Amount that arrived (BDT)</Label>
+            <Input id="approve-amount" type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            {extra && (
+              <p className="text-sm text-muted-foreground">
+                {extra.gt(0)
+                  ? `${formatBdt(Decimal.max(owedNow, 0).toFixed(2))} settles what it owes; ${formatBdt(extra.toFixed(2))} becomes its credit.`
+                  : 'All of it settles what the agency owes.'}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setApproving(null)}>
+              Cancel
+            </Button>
+            <Button disabled={amount === '' || n <= 0 || approveMut.isPending} onClick={() => approveMut.mutate()}>
+              {approveMut.isPending && <Loader2 className="size-4 animate-spin" />}
+              Approve
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <ReverseDialog
+        target={
+          rejecting
+            ? {
+                title: `Reject ${rejecting.reference_id}`,
+                description: `${rejecting.agency_name}'s ${formatBdt(rejecting.bdt_amount)} payment. The agency's Super Admin sees your reason.`,
+                confirmLabel: 'Reject',
+              }
+            : null
+        }
+        onOpenChange={(o) => !o && setRejecting(null)}
+        onConfirm={(reason) => rejectMut.mutate(reason)}
+        pending={rejectMut.isPending}
+      />
+    </div>
+  )
+}
+

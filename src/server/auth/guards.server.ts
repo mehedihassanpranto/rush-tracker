@@ -112,6 +112,16 @@ export async function requireAdmin(
   return user
 }
 
+/** The agency's top admin only — e.g. what the agency owes the platform
+ * (owner's rule, 2026-10-23: regular admins don't see it). */
+export async function requireSuperAdmin(): Promise<SessionUser> {
+  const user = await requireAdmin()
+  if (user.role !== 'SUPER_ADMIN') {
+    throw new AuthError('FORBIDDEN', 'Super Admin access required')
+  }
+  return user
+}
+
 /**
  * CLIENT user with at least one ACTIVE membership of an ACTIVE client.
  * When `clientId` is given, the user must be an active member of that exact

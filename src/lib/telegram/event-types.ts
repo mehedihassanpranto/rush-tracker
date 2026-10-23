@@ -54,6 +54,11 @@ export const TELEGRAM_EVENT_TYPES: Array<TelegramEventType> = [
     recipientTypes: ['agency'],
   },
   {
+    id: 'agency_payment.submitted',
+    label: 'Agency submitted a payment to the platform',
+    recipientTypes: ['platform_admin'],
+  },
+  {
     id: 'credit_transfer.sent_to_platform',
     label: 'Credit transfer sent for platform review',
     recipientTypes: ['platform_admin'],

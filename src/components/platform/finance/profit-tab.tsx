@@ -128,7 +128,7 @@ export function ProfitTab() {
       </Card>
 
       {r && (
-        <Card className="space-y-1 p-4 text-sm">
+        <Card className="gap-1 p-4 text-sm">
           <div className="font-medium">Costs still to come (as of now)</div>
           <p className="text-muted-foreground">
             {formatUsd(r.unpaid_meta_usd)} of Meta spend whose bill isn't paid yet, and {formatUsd(r.billed_unspent_usd)}{' '}

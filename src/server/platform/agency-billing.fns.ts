@@ -2,7 +2,10 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { requirePlatformAdmin } from '@/server/auth/guards.server'
-import { dec } from '@/lib/money/money'
+import { dec, formatBdt } from '@/lib/money/money'
+import { UserError } from '@/lib/errors/user-error'
+import { signProofUrl } from '@/server/storage/storage.service'
+import { notifySuperAdmins } from '@/server/notifications/notification.service'
 import { inventoryRpcError } from '@/server/platform/usd-inventory.service'
 import { organizationId } from '@/schemas/organization'
 import { reversalSchema } from '@/schemas/usd-inventory'
@@ -342,5 +345,147 @@ export const reopenFinancePeriodFn = createServerFn({ method: 'POST' })
       p_reason: data.reason,
     })
     if (error) throw inventoryRpcError(error.message)
+    return { ok: true }
+  })
+
+// ------------------------------------------------- payments from agencies ---
+// Agencies submit what they paid, with proof (migration 000066); a platform
+// admin approves it into agency_payments or rejects it with a reason.
+
+const PROOF_ENTITY_AGENCY_PAYMENT = 'AGENCY_PAYMENT_SUBMISSION'
+const INSTRUCTIONS_KEY = 'agency_payment_instructions'
+
+export interface AgencyPaymentSubmissionRow {
+  id: string
+  reference_id: string
+  organization_id: string
+  agency_name: string
+  bdt_amount: string
+  method: string
+  external_reference: string | null
+  paid_at: string
+  note: string | null
+  submitted_at: string
+  has_proof: boolean
+  /** What the agency owes right now (before this payment). */
+  owed_bdt: string
+}
+
+export const listPendingAgencyPaymentsFn = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<Array<AgencyPaymentSubmissionRow>> => {
+    await requirePlatformAdmin()
+    const admin = getSupabaseAdminClient()
+    const { data, error } = await admin
+      .from('agency_payment_submissions')
+      .select('id, reference_id, organization_id, bdt_amount, method, external_reference, paid_at, note, submitted_at, organization:organizations(name)')
+      .eq('status', 'PENDING')
+      .order('submitted_at')
+      .limit(200)
+    if (error) throw new Error(error.message)
+    const rows = (data ?? []) as unknown as Array<Record<string, unknown> & { organization: { name: string } | null }>
+    if (rows.length === 0) return []
+    const ids = rows.map((r) => r.id as string)
+    const orgs = [...new Set(rows.map((r) => r.organization_id as string))]
+    const [proofs, owed] = await Promise.all([
+      admin.from('attachments').select('entity_id').eq('entity_type', PROOF_ENTITY_AGENCY_PAYMENT).in('entity_id', ids),
+      admin.from('agency_billing_summary').select('organization_id, owed_bdt').in('organization_id', orgs),
+    ])
+    const withProof = new Set((proofs.data ?? []).map((a) => a.entity_id as string))
+    const owedBy = new Map((owed.data ?? []).map((o) => [o.organization_id as string, bdt(o.owed_bdt)]))
+    return rows.map((r) => ({
+      id: r.id as string,
+      reference_id: r.reference_id as string,
+      organization_id: r.organization_id as string,
+      agency_name: r.organization?.name ?? 'Agency',
+      bdt_amount: bdt(r.bdt_amount),
+      method: r.method as string,
+      external_reference: (r.external_reference as string | null) ?? null,
+      paid_at: r.paid_at as string,
+      note: (r.note as string | null) ?? null,
+      submitted_at: r.submitted_at as string,
+      has_proof: withProof.has(r.id as string),
+      owed_bdt: owedBy.get(r.organization_id as string) ?? '0.00',
+    }))
+  },
+)
+
+export const getAgencyPaymentProofUrlFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ id: z.uuid() }))
+  .handler(async ({ data }): Promise<string> => {
+    await requirePlatformAdmin()
+    const { data: att } = await getSupabaseAdminClient()
+      .from('attachments')
+      .select('storage_path')
+      .eq('entity_type', PROOF_ENTITY_AGENCY_PAYMENT)
+      .eq('entity_id', data.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (!att) throw new UserError('No proof was attached to that payment')
+    return signProofUrl(att.storage_path as string)
+  })
+
+export const approveAgencyPaymentSubmissionFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ id: z.uuid(), bdt_amount: z.coerce.number().positive().max(1_000_000_000_000).optional() }))
+  .handler(async ({ data }): Promise<{ applied_bdt: string; advance_bdt: string }> => {
+    const actor = await requirePlatformAdmin()
+    const { data: r, error } = await getSupabaseAdminClient().rpc('approve_agency_payment_submission', {
+      p_actor: actor.id,
+      p_id: data.id,
+      p_bdt: data.bdt_amount == null ? null : dec(data.bdt_amount).toDecimalPlaces(2).toNumber(),
+    })
+    if (error) throw inventoryRpcError(error.message)
+    const row = r as Record<string, unknown>
+    const amount = bdt(row.approved_bdt ?? row.bdt_amount)
+    await notifySuperAdmins({
+      organizationId: row.organization_id as string,
+      type: 'AGENCY_PAYMENT_APPROVED',
+      title: 'Payment to the platform approved',
+      message: `${row.reference_id as string}: ${formatBdt(amount)} was accepted${dec(bdt(row.advance_bdt)).gt(0) ? `; ${formatBdt(bdt(row.advance_bdt))} is kept as credit for your next approvals` : ''}.`,
+      entityType: 'AGENCY_PAYMENT_SUBMISSION',
+      entityId: data.id,
+    })
+    return { applied_bdt: bdt(row.applied_bdt), advance_bdt: bdt(row.advance_bdt) }
+  })
+
+export const rejectAgencyPaymentSubmissionFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ id: z.uuid(), reason }))
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const actor = await requirePlatformAdmin()
+    const { data: r, error } = await getSupabaseAdminClient().rpc('reject_agency_payment_submission', {
+      p_actor: actor.id,
+      p_id: data.id,
+      p_reason: data.reason,
+    })
+    if (error) throw inventoryRpcError(error.message)
+    const row = r as Record<string, unknown>
+    await notifySuperAdmins({
+      organizationId: row.organization_id as string,
+      type: 'AGENCY_PAYMENT_REJECTED',
+      title: 'Payment to the platform not accepted',
+      message: `${row.reference_id as string} (${formatBdt(bdt(row.bdt_amount))}) was not accepted: ${data.reason}`,
+      entityType: 'AGENCY_PAYMENT_SUBMISSION',
+      entityId: data.id,
+    })
+    return { ok: true }
+  })
+
+/** Where agencies should send money — shown on their Platform Billing page. */
+export const getAgencyPaymentInstructionsFn = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<string> => {
+    await requirePlatformAdmin()
+    const { data } = await getSupabaseAdminClient().from('platform_settings').select('value').eq('key', INSTRUCTIONS_KEY).maybeSingle()
+    return (data?.value as string | null) ?? ''
+  },
+)
+
+export const setAgencyPaymentInstructionsFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ value: z.string().trim().max(2000) }))
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const actor = await requirePlatformAdmin()
+    const { error } = await getSupabaseAdminClient()
+      .from('platform_settings')
+      .upsert({ key: INSTRUCTIONS_KEY, value: data.value || null, updated_by: actor.id })
+    if (error) throw new Error(error.message)
     return { ok: true }
   })

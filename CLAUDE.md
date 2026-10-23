@@ -172,6 +172,9 @@ short; detail belongs in the changelog.
   accounts only, 000064); it must never block an approval. Journal lines for
   receivables/advances carry `party_org_id`; closed months refuse postings.
   `toCsv()` escapes formula cells (`= + - @`) — keep every export on it.
+  What an agency owes/pays the platform is SUPER_ADMIN-only on the agency side
+  (`requireSuperAdmin()`, `notifySuperAdmins()`, nav `superAdminOnly`) — never
+  the agency's shared Telegram chat (000066).
 - **Client segments**: `prepaid` (pays full cost up front), `partial` (pays
   part, rest becomes due), `postpaid` (all due). Segment is read server-side and
   snapshotted on each request.

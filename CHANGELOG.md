@@ -6,6 +6,43 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-10-23
+
+**Agencies can now pay the platform — migration 000066 (staging: applied;
+production: applied 2026-10-23 via `supabase db push`).** Gap reported by the owner: the platform could bill
+agencies (000064) but an agency could neither see what it owed nor pay. Owner
+decisions: the agency submits, the platform approves; SUPER_ADMIN only;
+subscription fees stay separate. New **/agency/platform-billing** ("Platform
+Billing", nav item shown to the SUPER_ADMIN only, the route redirects other
+admins, every server fn calls the new `requireSuperAdmin()`): what the agency
+owes, its credit, its rate, charges waiting for a rate, the platform's payment
+instructions, its payments (with proof link and withdraw while under review),
+every charge, and a client-safe statement CSV (same builder as the platform's,
+moved to `agency-statement.service.ts`). **Pay the platform** submits amount,
+method, transaction id, date paid and a required proof (private `proofs`
+bucket; the submission is withdrawn if the proof can't be stored;
+`agency_payment_submissions`, idempotent by key). Platform: **Payments to
+review** at the top of Finance → Agencies (view proof, approve the amount that
+arrived, or reject with a reason) — approval books it through
+`record_agency_payment` dated when the agency paid; the agency's SUPER_ADMINs
+are told the outcome in-app (`notifySuperAdmins()`, new), platform admins get
+in-app + Telegram (`agency_payment.submitted`). Overview checklist counts
+payments to review. **Platform → Settings → "How agencies pay you"**
+(`platform_settings.agency_payment_instructions`). Submissions go with their
+agency on deletion (like `subscription_payments`); a booked payment survives
+as platform history. Also fixed: six finance cards used `space-y-*` inside the
+Card's own `gap-6` flex column, doubling the spacing — now `gap-*`.
+`StatusBadge` takes an optional `label`. `npm test` 302/302 (new live suite:
+settle-then-credit split, dated when paid, approve once, corrected amount,
+reject needs a reason, can't withdraw another agency's, idempotent, public key
+locked out), e2e 44/44 (new spec: a regular admin can't see it; SUPER_ADMIN
+submits with proof; platform approves; instructions round-trip; the agency sees
+it accepted as credit), build clean. Production before/after (read-only): 2 purchases ৳110,010, 0
+agency payments, 5 charges (all waiting for a rate), 2 journal entries, 283
+ledger rows net ৳111,821, 3 agencies — unchanged; 0 submissions.
+
+---
+
 ## 2026-10-21
 
 **Deploys: verify, don't assume.** Finance v2 went live only on 2026-10-21
