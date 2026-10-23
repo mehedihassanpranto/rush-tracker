@@ -9,7 +9,7 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 ## 2026-10-23
 
 **Agencies can now pay the platform — migration 000066 (staging: applied;
-production: NOT YET).** Gap reported by the owner: the platform could bill
+production: applied 2026-10-23 via `supabase db push`).** Gap reported by the owner: the platform could bill
 agencies (000064) but an agency could neither see what it owed nor pay. Owner
 decisions: the agency submits, the platform approves; SUPER_ADMIN only;
 subscription fees stay separate. New **/agency/platform-billing** ("Platform
@@ -37,7 +37,9 @@ settle-then-credit split, dated when paid, approve once, corrected amount,
 reject needs a reason, can't withdraw another agency's, idempotent, public key
 locked out), e2e 44/44 (new spec: a regular admin can't see it; SUPER_ADMIN
 submits with proof; platform approves; instructions round-trip; the agency sees
-it accepted as credit), build clean.
+it accepted as credit), build clean. Production before/after (read-only): 2 purchases ৳110,010, 0
+agency payments, 5 charges (all waiting for a rate), 2 journal entries, 283
+ledger rows net ৳111,821, 3 agencies — unchanged; 0 submissions.
 
 ---
 
