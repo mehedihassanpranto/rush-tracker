@@ -65,3 +65,21 @@ export function daysBetween(from: string, to: string): Array<string> {
 export function spendCacheRange(now: Date): { from: string; to: string } {
   return { from: periodRange('last_month', now).from, to: dhakaDate(now) }
 }
+
+/**
+ * Whether a client held an ad account on a Dhaka day, given its assignments of
+ * that account: from the day assigned up to (not including) the day released,
+ * so on a transfer day the account counts for its new client only. Still
+ * assigned → held through today.
+ */
+export function heldOnDay(
+  assignments: Array<{ assigned_at: string; released_at: string | null }>,
+  day: string,
+  now: Date,
+): boolean {
+  return assignments.some((a) => {
+    const start = dhakaDate(new Date(a.assigned_at))
+    const end = a.released_at ? dhakaDate(new Date(a.released_at)) : addDays(dhakaDate(now), 1)
+    return day >= start && day < end
+  })
+}

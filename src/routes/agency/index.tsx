@@ -69,7 +69,7 @@ function AdminDashboard() {
 
       {/* Spent / approved / paid for a chosen period (replaces the three fixed
           "Today's …" tiles). */}
-      <PeriodSection />
+      <PeriodSection audience="agency" />
 
       {/* 5 tiles: one row at xl. */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
