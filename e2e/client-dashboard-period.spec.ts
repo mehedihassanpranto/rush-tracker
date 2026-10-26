@@ -83,8 +83,12 @@ test('a client sees its own spend, approvals and payments by period', async ({ p
   await expect(card('You paid')).toContainText(bdt(sum('PAYMENT', 'credit_bdt')))
 
   // The $100 from the day before the account was this client's never counts:
-  // today's $7.50 is all of this week and this month, and last month is $0.
+  // yesterday is $0, today's $7.50 is all of this week and this month, and
+  // last month is $0.
   const spent = card('USD spent')
+  await periods.getByRole('button', { name: 'Yesterday' }).click()
+  await expect(spent.getByText('$0.00', { exact: true })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Day' })).toHaveCount(0)
   for (const [p, value] of [['This week', '$7.50'], ['This month', '$7.50'], ['Last month', '$0.00']]) {
     await periods.getByRole('button', { name: p }).click()
     await expect(spent.getByText(value, { exact: true }), p).toBeVisible()

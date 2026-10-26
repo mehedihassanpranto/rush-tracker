@@ -6,6 +6,31 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-10-26
+
+**Dashboards: "Yesterday" period (no migration).** Owner: "i need
+'yesterday' after today." Agency and client dashboards now offer Today /
+Yesterday / This week / This month / Last month — `DASHBOARD_PERIODS` in
+`src/lib/dashboard/periods.ts` (the Dhaka day before today; unit tested across
+a month, a year and 29 Feb; a new test keeps every period inside the spend
+cache). Like Today it's a single day, so it shows the cards without the
+day-by-day table (now hidden for any one-day range). On phones the five
+buttons sit in an even 3 + 2 grid instead of wrapping "Last month" alone. e2e:
+the agency's Yesterday matches the database; a client's Yesterday is $0.00
+when the account's $100 that day was spent before it was assigned to them.
+
+**Production: PR #31 (client dashboard) needed a manual deploy.** Merged
+2026-10-25 08:17 UTC, but Hostinger's auto-deploy didn't pick it up (12 min
+later the site still served PR #30's `index-Cwv7Zl2_.js`; GitHub shows no
+Hostinger record). The owner deployed from hPanel; live bundle →
+`index-AmuEfdF0.js` with the client period section, zero errors after.
+Production read-only the same day: the nightly meta-sync's daily-spend job
+read **34/34 accounts from real Meta Insights** (1,870 rows, Sep 1 → today,
+all USD) — the first live check of `fetchMetaDailySpend` — and day totals
+track the cron's own amount-spent deltas ($204.83 on 10-24 vs $214.13 for
+its 09:00→09:00 window). The cron still runs at 09:00 Dhaka (the 1 AM change
+hasn't been made in hPanel).
+
 ## 2026-10-23
 
 **Client dashboard: the same period filter (no migration).** Owner: "i need

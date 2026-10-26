@@ -25,6 +25,24 @@ describe('dashboard periods (Asia/Dhaka, weeks from Sunday)', () => {
     expect(periodRange('last_month', FRI)).toEqual({ from: '2026-09-01', to: '2026-09-30' })
   })
 
+  it('yesterday is the Dhaka day before, across a month and a year', () => {
+    // FRI is 20:30 UTC on the 22nd — already the 23rd in Dhaka.
+    expect(periodRange('yesterday', FRI)).toEqual({ from: '2026-10-22', to: '2026-10-22' })
+    expect(periodRange('yesterday', new Date('2026-11-01T06:00:00Z'))).toEqual({ from: '2026-10-31', to: '2026-10-31' })
+    expect(periodRange('yesterday', new Date('2027-01-01T06:00:00Z'))).toEqual({ from: '2026-12-31', to: '2026-12-31' })
+    expect(periodRange('yesterday', new Date('2028-03-01T06:00:00Z'))).toEqual({ from: '2028-02-29', to: '2028-02-29' })
+  })
+
+  it('every period sits inside the spend cache', () => {
+    for (const now of [FRI, new Date('2027-01-01T06:00:00Z'), new Date('2026-11-01T06:00:00Z')]) {
+      const cache = spendCacheRange(now)
+      for (const p of ['today', 'yesterday', 'week', 'month', 'last_month'] as const) {
+        const r = periodRange(p, now)
+        expect(r.from >= cache.from && r.to <= cache.to, `${p} at ${now.toISOString()}`).toBe(true)
+      }
+    }
+  })
+
   it('last month crosses the year and knows February', () => {
     const jan = new Date('2027-01-15T06:00:00Z')
     expect(periodRange('last_month', jan)).toEqual({ from: '2026-12-01', to: '2026-12-31' })

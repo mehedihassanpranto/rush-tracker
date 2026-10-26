@@ -32,9 +32,10 @@ const fmtDay = (d: string) =>
 
 /**
  * Dashboards (owner request, 2026-10-23): USD spent on Meta, limits approved
- * and payments for today / this week (from Sunday) / this month / last month
- * — totals, then day by day. Spend is Meta's own daily figure, cached;
- * Refresh fetches it again (at most once a minute). `agency` covers the
+ * and payments for today / yesterday (added 2026-10-26) / this week (from
+ * Sunday) / this month / last month — totals, then day by day (for periods
+ * longer than a day). Spend is Meta's own daily figure, cached; Refresh
+ * fetches it again (at most once a minute). `agency` covers the
  * agency's accounts and all its clients' payments; `client` only the client
  * being viewed (its accounts while assigned to it, its own payments).
  */
@@ -70,7 +71,9 @@ export function PeriodSection({ audience }: { audience: 'agency' | 'client' }) {
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex flex-wrap rounded-lg bg-muted p-1" role="group" aria-label="Period">
+        {/* Five periods don't fit one row on a phone: an even 3 + 2 grid there,
+            one row from sm up. */}
+        <div className="grid w-full grid-cols-3 rounded-lg bg-muted p-1 sm:inline-flex sm:w-auto" role="group" aria-label="Period">
           {DASHBOARD_PERIODS.map((p) => (
             <button
               key={p}
@@ -78,7 +81,7 @@ export function PeriodSection({ audience }: { audience: 'agency' | 'client' }) {
               aria-pressed={period === p}
               onClick={() => setPeriod(p)}
               className={cn(
-                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                'whitespace-nowrap rounded-md px-3 py-1.5 text-center text-sm font-medium transition-colors',
                 period === p ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
               )}
             >
@@ -123,7 +126,7 @@ export function PeriodSection({ audience }: { audience: 'agency' | 'client' }) {
         </p>
       )}
 
-      {r && period !== 'today' && (
+      {r && r.from !== r.to && (
         <Card className="p-0">
           <Table>
             <TableHeader>
