@@ -33,6 +33,7 @@ short; detail belongs in the changelog.
 - **A merge should deploy, but verify it did** — Hostinger builds `main`
   (hPanel → Deployments). Auto-deploy silently stopped after PR #21 and
   #22–#25 never went live until a deploy was started by hand (2026-10-21);
+  it missed #31 too (2026-10-25) — a stuck deploy is the owner's step;
   hPanel's "Redeploy" rebuilds the OLD snapshot, not `main`. After a merge,
   confirm the live bundle changed (`docs/DEPLOYMENT-HOSTINGER.md` §6). A
   migration the new code depends on must be applied to production BEFORE

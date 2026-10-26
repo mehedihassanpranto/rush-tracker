@@ -235,7 +235,12 @@ Run `docs/DEPLOYMENT.md` §6's full checklist. The Hostinger-specific additions:
       a route chunk contains text the change added. (On 2026-10-21 PRs #22–#25
       had been merged for a day with no deployment row at all — auto-deploy
       from GitHub had stopped after PR #21 — and the site kept serving the old
-      build while returning 200 everywhere.)
+      build while returning 200 everywhere. It missed PR #31 too, on
+      2026-10-25, until a deploy was started by hand.) Search for the bare
+      text: the minifier writes strings in backticks (`` `Paid by client` ``),
+      so a quoted search finds nothing. Pick text only this change added — a
+      CSS class or label shared with other pages proves nothing. Allow ~10 min
+      (deploys have taken 30 s to 5 min) before calling one stuck.
 - [ ] **"Redeploy" is not "deploy `main`".** Its build log says "Source:
       previous deployment source — Restoring source files from the last
       successful deployment": it rebuilds the current snapshot. To ship new

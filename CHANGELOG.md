@@ -24,6 +24,9 @@ on that page: its six tabs overflowed a phone by 225px — the tab bar now
 scrolls on its own. e2e: agency A sees the client's $7.50 / $0.00-yesterday
 figures; agency B replaying its own request with agency A's client id gets
 "Client not found" and no figures. `npm test` 320/320, e2e 49/49, build clean.
+**Merged as PR #33 and live** (2026-10-26 18:03 UTC; live bundle
+`index-B5kUFD03.js`, the period-section chunk carries the one-client
+`Paid by client` branch; zero production errors after).
 
 **Dashboards: "Yesterday" period (no migration).** Owner: "i need
 'yesterday' after today." Agency and client dashboards now offer Today /
@@ -35,6 +38,8 @@ day-by-day table (now hidden for any one-day range). On phones the five
 buttons sit in an even 3 + 2 grid instead of wrapping "Last month" alone. e2e:
 the agency's Yesterday matches the database; a client's Yesterday is $0.00
 when the account's $100 that day was spent before it was assigned to them.
+**Merged as PR #32 and live** (2026-10-26 07:51 UTC; auto-deployed in ~5 min,
+`index-C_gDePBr.js`; zero production errors after).
 
 **Production: PR #31 (client dashboard) needed a manual deploy.** Merged
 2026-10-25 08:17 UTC, but Hostinger's auto-deploy didn't pick it up (12 min
