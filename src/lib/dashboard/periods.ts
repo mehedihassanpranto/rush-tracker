@@ -5,11 +5,12 @@
  * Dates are YYYY-MM-DD strings, `to` inclusive.
  */
 
-export const DASHBOARD_PERIODS = ['today', 'week', 'month', 'last_month'] as const
+export const DASHBOARD_PERIODS = ['today', 'yesterday', 'week', 'month', 'last_month'] as const
 export type DashboardPeriod = (typeof DASHBOARD_PERIODS)[number]
 
 export const PERIOD_LABELS: Record<DashboardPeriod, string> = {
   today: 'Today',
+  yesterday: 'Yesterday',
   week: 'This week',
   month: 'This month',
   last_month: 'Last month',
@@ -42,6 +43,10 @@ export function periodRange(period: DashboardPeriod, now: Date): { from: string;
   switch (period) {
     case 'today':
       return { from: today, to: today }
+    case 'yesterday': {
+      const day = addDays(today, -1)
+      return { from: day, to: day }
+    }
     case 'week': {
       const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay() // 0 = Sunday
       return { from: addDays(today, -weekday), to: today }

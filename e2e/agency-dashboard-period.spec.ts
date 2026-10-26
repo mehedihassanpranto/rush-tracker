@@ -5,13 +5,14 @@ import { adminClient } from './support/seed'
 
 /**
  * Agency dashboard period filter (migration 000067): USD spent (Meta's daily
- * spend, cached), limit approved and paid by clients — Today, then This month
+ * spend, cached), limit approved and paid by clients — Today, Yesterday, then This month
  * with its day-by-day table. Seeds org A's own data; global teardown deletes
  * org A's ledger and ad accounts (and so the cached spend with them).
  */
 test.use(auth('agencyA'))
 
 const dhakaToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' })
+const dhakaYesterday = () => new Date(Date.now() - 86_400_000).toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' })
 const dhakaStart = (day: string) => new Date(`${day}T00:00:00+06:00`).toISOString()
 const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const bdt = (n: number) => `৳${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
@@ -60,9 +61,10 @@ test.beforeAll(async () => {
   if (error) throw new Error(error.message)
   // Fetched two minutes ago, so Refresh isn't throttled.
   const fetchedAt = new Date(Date.now() - 2 * 60_000).toISOString()
-  const { error: sErr } = await admin.from('meta_daily_spend').upsert({
-    ad_account_id: acct.id, spend_date: dhakaToday(), spend: 12.34, currency: 'USD', fetched_at: fetchedAt,
-  })
+  const { error: sErr } = await admin.from('meta_daily_spend').upsert([
+    { ad_account_id: acct.id, spend_date: dhakaToday(), spend: 12.34, currency: 'USD', fetched_at: fetchedAt },
+    { ad_account_id: acct.id, spend_date: dhakaYesterday(), spend: 3.21, currency: 'USD', fetched_at: fetchedAt },
+  ])
   if (sErr) throw new Error(sErr.message)
   const now = new Date().toISOString()
   const { error: lErr } = await admin.from('ledger_entries').insert([
@@ -98,6 +100,17 @@ test('spent, approved and paid by period, day by day', async ({ page }) => {
   await expect(card('Limit approved')).toContainText(`Billed ${bdt(t.billed)}`)
   await expect(card('Paid by clients')).toContainText(bdt(t.paid))
   await expect(page.getByText(/Meta spend as of/)).toBeVisible()
+
+  // Yesterday: one day, so cards only — no day-by-day table.
+  const yesterday = dhakaYesterday()
+  const y = await expected(yesterday, yesterday)
+  expect(y.spend, 'seeded spend').toBeGreaterThanOrEqual(3.21)
+  await periods.getByRole('button', { name: 'Yesterday' }).click()
+  await expect(periods.getByRole('button', { name: 'Yesterday' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(card('USD spent').getByText(usd(y.spend), { exact: true })).toBeVisible()
+  await expect(card('Limit approved')).toContainText(usd(y.approved))
+  await expect(card('Paid by clients')).toContainText(bdt(y.paid))
+  await expect(page.getByRole('columnheader', { name: 'Day' })).toHaveCount(0)
 
   // This month, and its row for today.
   const m = await expected(`${today.slice(0, 8)}01`, today)
