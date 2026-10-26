@@ -7,8 +7,9 @@ import { adminClient } from './support/seed'
  * Client dashboard period filter (2026-10-23): a client sees spend only on
  * accounts while they were assigned to IT — $100 spent the day before the
  * assignment is not theirs, $7.50 spent after is — plus its own approvals and
- * payments by Dhaka day. Org A's ad accounts and ledger are removed by global
- * teardown.
+ * payments by Dhaka day. Its agency sees the same figures on the client's
+ * page (2026-10-26); another agency can't read them by id. Org A's ad
+ * accounts and ledger are removed by global teardown.
  */
 test.use(auth('client'))
 
@@ -112,4 +113,98 @@ test('a client sees its own spend, approvals and payments by period', async ({ p
   expect(overflow, 'horizontal page scroll at 390px').toBeLessThanOrEqual(0)
   await page.screenshot({ path: 'test-results/client-dashboard-period-phone.png', fullPage: true })
   expect(errors).toEqual([])
+})
+
+/** What the ledger holds for client A today (other specs add to it too). */
+async function clientAToday() {
+  const { data: rows } = await adminClient(loadE2EEnv())
+    .from('ledger_entries')
+    .select('type, usd_amount, debit_bdt, credit_bdt')
+    .eq('client_id', fixtures().clientA)
+    .gte('created_at', new Date(`${dhakaDate()}T00:00:00+06:00`).toISOString())
+  const sum = (type: string, k: 'usd_amount' | 'debit_bdt' | 'credit_bdt') =>
+    (rows ?? []).filter((r) => r.type === type).reduce((s, r) => s + Number(r[k] ?? 0), 0)
+  return { approved: sum('LIMIT_APPROVAL', 'usd_amount'), billed: sum('LIMIT_APPROVAL', 'debit_bdt'), paid: sum('PAYMENT', 'credit_bdt') }
+}
+
+test.describe('the agency, on this client’s page', () => {
+  test.use(auth('agencyA'))
+
+  test('sees the same figures the client sees', async ({ page }) => {
+    const errors: Array<string> = []
+    const THIRD_PARTY = /^https:\/\/fonts\.(googleapis|gstatic)\.com\//
+    page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`))
+    page.on('requestfailed', (r) => {
+      if (!THIRD_PARTY.test(r.url())) errors.push(`requestfailed: ${r.url()}`)
+    })
+    page.on('console', (m) => {
+      if (m.type() === 'error' && !/^Failed to load resource: net::/.test(m.text())) errors.push(`console: ${m.text()}`)
+    })
+    const t = await clientAToday()
+
+    await page.goto(`/agency/clients/${fixtures().clientA}`)
+    await page.waitForLoadState('networkidle')
+    const card = (label: string) => page.locator('[data-slot="card"]').filter({ hasText: label }).first()
+    const periods = page.getByRole('group', { name: 'Period' })
+    const spent = card('USD spent')
+
+    // Overview is the default tab, and the period section leads it.
+    await expect(spent.getByText('$7.50', { exact: true })).toBeVisible()
+    await expect(card('Limit approved')).toContainText(usd(t.approved))
+    await expect(card('Limit approved')).toContainText(`Billed ${bdt(t.billed)}`)
+    await expect(card('Paid by client')).toContainText(bdt(t.paid))
+    await expect(page.getByText('Client information')).toBeVisible()
+
+    // The $100 spent before the account was this client's stays out here too.
+    await periods.getByRole('button', { name: 'Yesterday' }).click()
+    await expect(spent.getByText('$0.00', { exact: true })).toBeVisible()
+    await periods.getByRole('button', { name: 'This month' }).click()
+    await expect(spent.getByText('$7.50', { exact: true })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'Paid by client' })).toBeVisible()
+
+    // Refresh asks Meta about this client's accounts; e2e's token is inert.
+    await page.getByRole('button', { name: 'Refresh' }).click()
+    await expect(page.getByText(/Meta could not be reached/)).toBeVisible()
+
+    await page.screenshot({ path: 'test-results/agency-client-period-light.png', fullPage: true })
+    await page.getByRole('button', { name: /Switch to dark mode/ }).click()
+    await page.waitForTimeout(600)
+    await page.screenshot({ path: 'test-results/agency-client-period-dark.png', fullPage: true })
+    await page.getByRole('button', { name: /Switch to light mode/ }).click()
+    await page.waitForTimeout(600)
+    await page.setViewportSize({ width: 390, height: 844 })
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+    expect(overflow, 'horizontal page scroll at 390px').toBeLessThanOrEqual(0)
+    await page.screenshot({ path: 'test-results/agency-client-period-phone.png', fullPage: true })
+    expect(errors).toEqual([])
+  })
+})
+
+test.describe('another agency', () => {
+  test.use(auth('agencyB'))
+
+  test('cannot read this client’s figures by id', async ({ page }) => {
+    const f = fixtures()
+    // Agency B's own client page asks for its figures; replay that request
+    // with agency A's client swapped in, on B's session.
+    const isPeriodFn = (url: string) => {
+      const m = /\/_serverFn\/([^?]+)/.exec(url)
+      return !!m && Buffer.from(m[1], 'base64url').toString().includes('agencyClientPeriodTotalsFn')
+    }
+    const captured = page.waitForRequest((r) => isPeriodFn(r.url()) && r.url().includes(f.clientB))
+    await page.goto(`/agency/clients/${f.clientB}`)
+    const req = await captured
+    const headers = await req.allHeaders()
+
+    const own = await page.request.get(req.url(), { headers })
+    expect(own.ok(), 'its own client').toBe(true)
+    expect(await own.text()).toContain('spend_usd')
+
+    // A server function reports a refusal inside a 200 response: the body
+    // must be the error, with none of the figures.
+    const other = await page.request.get(req.url().replaceAll(f.clientB, f.clientA), { headers })
+    const body = await other.text()
+    expect(body).toContain('Client not found')
+    expect(body).not.toContain('spend_usd')
+  })
 })

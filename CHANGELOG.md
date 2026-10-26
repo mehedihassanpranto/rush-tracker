@@ -8,6 +8,23 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-26
 
+**Agency → client page: the period filter for one client (no migration).**
+Owner: "this spending filtering option is also need in client overview in
+agency." `/agency/clients/$clientId` → Overview now opens with Today /
+Yesterday / This week / This month / Last month: USD spent, Limit approved
+(+ BDT billed), **Paid by client**, the day-by-day table and Refresh — the
+same figures that client sees on its own dashboard (spend only while an
+account was assigned to them). The client computation moved out of
+`dashboard-period.fns.ts` into `src/server/dashboard/client-period.service.ts`
+(`clientPeriodTotals()`, `refreshClientSpend()`), shared by the client's fns
+and the new `agencyClientPeriodTotalsFn` / `refreshAgencyClientSpendFn`
+(`requireAdmin(CLIENTS_VIEW)`, client must belong to the caller's agency, every
+read scoped to it). `PeriodSection` takes an optional `clientId`. Also fixed
+on that page: its six tabs overflowed a phone by 225px — the tab bar now
+scrolls on its own. e2e: agency A sees the client's $7.50 / $0.00-yesterday
+figures; agency B replaying its own request with agency A's client id gets
+"Client not found" and no figures. `npm test` 320/320, e2e 49/49, build clean.
+
 **Dashboards: "Yesterday" period (no migration).** Owner: "i need
 'yesterday' after today." Agency and client dashboards now offer Today /
 Yesterday / This week / This month / Last month — `DASHBOARD_PERIODS` in
