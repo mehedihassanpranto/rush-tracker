@@ -5,8 +5,10 @@ import { Loader2, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
+  agencyClientPeriodTotalsFn,
   agencyPeriodTotalsFn,
   clientPeriodTotalsFn,
+  refreshAgencyClientSpendFn,
   refreshAgencySpendFn,
   refreshClientSpendFn,
 } from '@/server/dashboard/dashboard-period.fns'
@@ -37,24 +39,40 @@ const fmtDay = (d: string) =>
  * longer than a day). Spend is Meta's own daily figure, cached; Refresh
  * fetches it again (at most once a minute). `agency` covers the
  * agency's accounts and all its clients' payments; `client` only the client
- * being viewed (its accounts while assigned to it, its own payments).
+ * being viewed (its accounts while assigned to it, its own payments). With a
+ * `clientId`, the agency sees that one client's figures — the same ones the
+ * client sees (its client page, 2026-10-26).
  */
-export function PeriodSection({ audience }: { audience: 'agency' | 'client' }) {
+export function PeriodSection({ audience, clientId }: { audience: 'agency' | 'client'; clientId?: string }) {
   const queryClient = useQueryClient()
   const getAgency = useServerFn(agencyPeriodTotalsFn)
+  const getAgencyClient = useServerFn(agencyClientPeriodTotalsFn)
   const getClient = useServerFn(clientPeriodTotalsFn)
   const refreshAgency = useServerFn(refreshAgencySpendFn)
+  const refreshAgencyClient = useServerFn(refreshAgencyClientSpendFn)
   const refreshClient = useServerFn(refreshClientSpendFn)
   const [period, setPeriod] = useState<DashboardPeriod>('today')
-  const queryKey = [`${audience}-dashboard-period`, period]
+  const oneClient = audience === 'agency' && clientId ? clientId : null
+  const keyBase = oneClient ? ['agency-client-period', oneClient] : [`${audience}-dashboard-period`]
+  const paidLabel = audience === 'client' ? 'You paid' : oneClient ? 'Paid by client' : 'Paid by clients'
 
   const q = useQuery({
-    queryKey,
-    queryFn: () => (audience === 'agency' ? getAgency({ data: { period } }) : getClient({ data: { period } })),
+    queryKey: [...keyBase, period],
+    queryFn: () =>
+      oneClient
+        ? getAgencyClient({ data: { client_id: oneClient, period } })
+        : audience === 'agency'
+          ? getAgency({ data: { period } })
+          : getClient({ data: { period } }),
   })
   const r = q.data
   const refreshMut = useMutation({
-    mutationFn: () => (audience === 'agency' ? refreshAgency() : refreshClient()),
+    mutationFn: () =>
+      oneClient
+        ? refreshAgencyClient({ data: { client_id: oneClient } })
+        : audience === 'agency'
+          ? refreshAgency()
+          : refreshClient(),
     onSuccess: (res) => {
       toast.success(
         res.refreshed > 0
@@ -63,7 +81,7 @@ export function PeriodSection({ audience }: { audience: 'agency' | 'client' }) {
             ? 'Meta could not be reached — showing the last saved figures'
             : 'No ad accounts linked to Meta yet',
       )
-      void queryClient.invalidateQueries({ queryKey: [`${audience}-dashboard-period`] })
+      void queryClient.invalidateQueries({ queryKey: keyBase })
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
   })
@@ -113,7 +131,7 @@ export function PeriodSection({ audience }: { audience: 'agency' | 'client' }) {
           loading={q.isLoading}
         />
         <StatCard
-          label={audience === 'agency' ? 'Paid by clients' : 'You paid'}
+          label={paidLabel}
           hint={audience === 'agency' ? 'Payments received' : 'Payments accepted'}
           value={r ? formatBdt(r.totals.collection_bdt) : undefined}
           loading={q.isLoading}
@@ -134,7 +152,7 @@ export function PeriodSection({ audience }: { audience: 'agency' | 'client' }) {
                 <TableHead>Day</TableHead>
                 <TableHead className="text-right">USD spent</TableHead>
                 <TableHead className="text-right">Limit approved</TableHead>
-                <TableHead className="text-right">{audience === 'agency' ? 'Paid by clients' : 'You paid'}</TableHead>
+                <TableHead className="text-right">{paidLabel}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

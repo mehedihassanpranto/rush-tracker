@@ -242,7 +242,9 @@ short; detail belongs in the changelog.
   CI's first e2e test). Add it to `optimizeDeps.include`; `DEBUG=vite:deps`
   names it.
 - `createServerFn().validator(schema)` (`.inputValidator()` is deprecated).
-  Request helpers come from `@tanstack/react-start/server`.
+  Request helpers come from `@tanstack/react-start/server`. A thrown error
+  comes back as HTTP **200** with a serialized `$TSR/Error` body — an
+  IDOR test checks the body, not the status (`client-dashboard-period.spec.ts`).
 - HTTP endpoints (cron, webhooks) are files under `src/routes/api/**` with
   `server.handlers`; a top-level `server/` dir is NOT wired in.
 - A child route next to a flat leaf turns the leaf into a layout: rename the

@@ -35,6 +35,7 @@ import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { FinancialSummary } from '@/components/shared/financial-summary'
+import { PeriodSection } from '@/components/dashboard/period-section'
 import { LedgerTable } from '@/components/shared/ledger-table'
 import { ClientFormDialog } from '@/components/admin/client/client-form-dialog'
 import { AssignAccountDialog } from '@/components/admin/client/assign-account-dialog'
@@ -275,7 +276,9 @@ function ClientDetailPage() {
       )}
 
       <Tabs defaultValue="overview">
-        <TabsList>
+        {/* Six tabs don't fit a phone: the bar scrolls on its own instead of
+            widening the page. */}
+        <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="accounts">
             Ad Accounts ({accounts?.length ?? 0})
@@ -290,7 +293,11 @@ function ClientDetailPage() {
           <TabsTrigger value="logins">Logins ({users?.length ?? 0})</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview">
+        <TabsContent value="overview" className="flex flex-col gap-6 pt-4">
+          {/* Spent / approved / paid for a chosen period — the same figures
+              this client sees on its own dashboard. */}
+          <PeriodSection audience="agency" clientId={clientId} />
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Client information</CardTitle>
