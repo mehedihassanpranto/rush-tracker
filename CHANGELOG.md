@@ -8,6 +8,23 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-10-27
 
+**Client panel: an ad account page (no migration).** Owner: "make details
+in also client panel, and add overview and limit requests history there."
+New `/client/ad-accounts/$accountId`, opened from the account name on My Ad
+Accounts and the dashboard's My Ad Accounts card. **Overview**: Current
+limit, Remaining (Meta, best-effort, red when low), Approved for you (this
+client's approvals on the account, all time), and the account details —
+code, status, assigned since, limit when assigned, the rate a new request
+bills at ("Not set" for 0), payment terms. **Limit Requests (n)**: this
+client's own requests on the account, with Proof and Cancel. Request limit
+sits in the header. `getMyAdAccountFn` only answers for an account currently
+assigned to the active client (a released account's limit belongs to its
+new holder) and refuses with a `UserError` otherwise;
+`listMyLimitRequestsFn` takes an optional `ad_account_id`. The client's
+request table moved into `src/components/client/my-limit-requests-table.tsx`,
+shared with the Limit Requests page. e2e: the client's page (light/dark/
+phone) and a client opening another agency's account.
+
 **Ad account page: full limit-request history (no migration).** Owner:
 "need limit request history in account details page." The approved-only
 "Usage" tab on `/agency/ad-accounts/$accountId` and

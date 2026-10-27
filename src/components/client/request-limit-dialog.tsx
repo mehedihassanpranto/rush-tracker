@@ -158,6 +158,7 @@ export function RequestLimitDialog({
       toast.success(`Request ${req.request_number} submitted`)
       void queryClient.invalidateQueries({ queryKey: ['my-limit-requests'] })
       void queryClient.invalidateQueries({ queryKey: ['my-requestable-accounts'] })
+      void queryClient.invalidateQueries({ queryKey: ['my-ad-account'] })
       void queryClient.invalidateQueries({ queryKey: ['client-dashboard-stats'] })
       onOpenChange(false)
     },

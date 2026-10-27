@@ -8,8 +8,9 @@ import type { Page } from '@playwright/test'
  * An ad account's Limit Requests tab (2026-10-27): every request on the
  * account, any status, newest first, each linking to its request — on the
  * agency's account page and, for a pool account, the platform's (with the
- * agency, without the agency's BDT charge). Another agency can't read an
- * account's history by id. Org A's account and requests go with global
+ * agency, without the agency's BDT charge), and the client's own account
+ * page (Overview + its Limit Requests). Another agency can't read an
+ * account's history by id, nor a client an account that isn't theirs. Org A's account and requests go with global
  * teardown; the pool account is removed in afterAll.
  */
 
@@ -202,5 +203,53 @@ test.describe('another agency', () => {
     const body = await other.text()
     for (const n of [numbers.PENDING, numbers.REJECTED, numbers.APPROVED]) expect(body).not.toContain(n)
     expect(body).not.toContain('e2e too much')
+  })
+})
+
+test.describe('the client', () => {
+  test.use(auth('client'))
+
+  test('opens its account: overview and its own requests', async ({ page }) => {
+    const errors = watchErrors(page)
+    const f = fixtures()
+    await page.goto('/client/ad-accounts')
+    await page.waitForLoadState('networkidle')
+    await page.getByRole('link', { name: `ZZ E2E LR history ${f.run}` }).click()
+    await expect(page).toHaveURL(new RegExp(`/client/ad-accounts/${ownAccount}$`))
+    await page.waitForLoadState('networkidle')
+
+    const card = (label: string) => page.locator('[data-slot="card"]').filter({ hasText: label }).first()
+    await expect(card('Approved for you')).toContainText('$50.00')
+    await expect(card('Approved for you')).toContainText('1 approved request')
+    await expect(card('Account details')).toContainText('Limit when assigned')
+    await expect(card('Account details')).toContainText('Postpaid')
+    await expect(card('Account details')).toContainText('Not set')
+    // One request is still pending, so another can't be raised yet.
+    await expect(page.getByRole('button', { name: 'Request pending' })).toBeDisabled()
+
+    await page.getByRole('tab', { name: 'Limit Requests (3)' }).click()
+    const body = page.locator('tbody tr')
+    await expect(body).toHaveCount(3)
+    await expect(body.nth(0)).toContainText(numbers.PENDING)
+    await expect(body.nth(0).getByRole('button', { name: 'Cancel' })).toBeVisible()
+    await expect(body.nth(1)).toContainText(numbers.REJECTED)
+    await expect(body.nth(2)).toContainText(numbers.APPROVED)
+    await expect(page.getByRole('columnheader', { name: 'Account' })).toHaveCount(0)
+
+    await page.getByRole('tab', { name: 'Overview' }).click()
+    await shoot(page, 'client-account')
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await page.getByRole('tab', { name: 'Limit Requests (3)' }).click()
+    await page.setViewportSize({ width: 390, height: 844 })
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+    expect(overflow, 'horizontal page scroll at 390px (requests tab)').toBeLessThanOrEqual(0)
+    expect(errors).toEqual([])
+  })
+
+  test('cannot open an account that isn’t theirs', async ({ page }) => {
+    const { data: acct } = await adminClient(loadE2EEnv()).from('ad_accounts').select('id').eq('name', fixtures().accountBName).single()
+    await page.goto(`/client/ad-accounts/${acct!.id}`)
+    await expect(page.getByText('This ad account isn’t assigned to you.')).toBeVisible()
+    await expect(page.locator('tbody tr')).toHaveCount(0)
   })
 })

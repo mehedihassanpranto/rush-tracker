@@ -19,6 +19,7 @@ import {
 } from '@/server/limit-requests/limit-request-approval.service'
 import { uploadProof, signProofUrl } from '@/server/storage/storage.service'
 import { adAccountUsdRate } from '@/server/exchange-rates/rate.service'
+import { UserError } from '@/lib/errors/user-error'
 import { addUsd, dec, formatBdt, formatUsd, multiplyUsdByRate } from '@/lib/money/money'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import {
@@ -297,24 +298,99 @@ export const createLimitRequestFn = createServerFn({ method: 'POST' })
     return created as LimitRequest
   })
 
-export const listMyLimitRequestsFn = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<Array<LimitRequestWithRefs>> => {
+/** The signed-in client's limit requests, newest first — all of them, or one
+ * ad account's (its page's Limit Requests tab). */
+export const listMyLimitRequestsFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ ad_account_id: z.uuid().optional() }).optional())
+  .handler(async ({ data }): Promise<Array<LimitRequestWithRefs>> => {
     const { membership } = await requireClientMembership()
     const admin = getSupabaseAdminClient()
-    const { data, error } = await admin
+    let query = admin
       .from('limit_requests')
       .select(
         '*, ad_account:ad_accounts(id, account_code, name, is_platform)',
       )
       .eq('client_id', membership.clientId)
       .order('created_at', { ascending: false })
+    if (data?.ad_account_id) query = query.eq('ad_account_id', data.ad_account_id)
+    const { data: rows, error } = await query
     if (error) throw new Error(error.message)
-    return (data ?? []).map((r) => ({
+    return (rows ?? []).map((r) => ({
       ...(r as unknown as LimitRequestWithRefs),
       client: null,
     }))
-  },
-)
+  })
+
+export interface MyAdAccountDetail {
+  id: string
+  account_code: string
+  name: string
+  status: AdAccountStatus
+  current_limit_usd: string
+  /** When this client's current assignment began, and the limit then. */
+  assigned_at: string
+  opening_limit_usd: string
+  /** The rate a new request on this account bills at (adAccountUsdRate()). */
+  usd_rate: string
+  segment: 'prepaid' | 'partial' | 'postpaid'
+  has_pending: boolean
+  /** This client's approved requests on the account, all time. */
+  approved_usd: string
+  approved_count: number
+}
+
+/** One ad account's overview for the client's account page (owner request,
+ * 2026-10-27). Only an account currently assigned to the signed-in client —
+ * a released account now belongs to someone else, and its limit with it. */
+export const getMyAdAccountFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ ad_account_id: z.uuid() }))
+  .handler(async ({ data }): Promise<MyAdAccountDetail> => {
+    const { membership } = await requireClientMembership()
+    const admin = getSupabaseAdminClient()
+    const { data: assignment, error } = await admin
+      .from('ad_account_assignments')
+      .select('assigned_at, opening_limit_usd, account:ad_accounts(id, account_code, name, status, current_limit_usd)')
+      .eq('client_id', membership.clientId)
+      .eq('ad_account_id', data.ad_account_id)
+      .eq('status', 'ACTIVE')
+      .maybeSingle()
+    if (error) throw new Error(error.message)
+    const row = assignment as unknown as {
+      assigned_at: string
+      opening_limit_usd: number
+      account: { id: string; account_code: string; name: string; status: AdAccountStatus; current_limit_usd: number } | null
+    } | null
+    if (!row?.account) throw new UserError('This ad account isn’t assigned to you')
+
+    const [{ data: requests, error: rErr }, { data: clientRow }, usdRate] = await Promise.all([
+      admin
+        .from('limit_requests')
+        .select('status, approved_amount_usd')
+        .eq('client_id', membership.clientId)
+        .eq('ad_account_id', data.ad_account_id)
+        .in('status', ['APPROVED', 'PENDING', 'PENDING_PLATFORM_REVIEW']),
+      admin.from('clients').select('segment').eq('id', membership.clientId).single(),
+      adAccountUsdRate(data.ad_account_id, membership.clientId),
+    ])
+    if (rErr) throw new Error(rErr.message)
+    const rows = (requests ?? []) as Array<{ status: string; approved_amount_usd: number | null }>
+    const approved = rows.filter((r) => r.status === 'APPROVED')
+
+    return {
+      id: row.account.id,
+      account_code: row.account.account_code,
+      name: row.account.name,
+      status: row.account.status,
+      current_limit_usd: String(row.account.current_limit_usd),
+      assigned_at: row.assigned_at,
+      opening_limit_usd: String(row.opening_limit_usd),
+      usd_rate: usdRate,
+      segment: (clientRow as { segment: MyAdAccountDetail['segment'] } | null)?.segment ?? 'postpaid',
+      has_pending: rows.some((r) => r.status !== 'APPROVED'),
+      approved_usd: approved.reduce((s, r) => s.plus(r.approved_amount_usd ?? 0), dec(0)).toFixed(2),
+      approved_count: approved.length,
+    }
+  })
 
 export const cancelMyLimitRequestFn = createServerFn({ method: 'POST' })
   .validator(limitRequestIdSchema)
