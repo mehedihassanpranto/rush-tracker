@@ -6,6 +6,31 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-10-27
+
+**Security: dependency upgrades (no migration, no code change).** Owner:
+"find if there any upgrade needs." `npm audit` found 13 advisories, 7
+critical; the ones that reach production were:
+- **TanStack Start ≤ 1.168.59 — unauthenticated reflected XSS in
+  server-function responses** (GHSA-qx66-fv34-fjm8, published 2026-10-15). A
+  crafted link to panel.xrush.online could run an attacker's script with the
+  visitor's session. Production ran 1.168.32. Now `@tanstack/react-start`
+  1.169.4 (`start-server-core` 1.169.45; patched ≥ 1.169.39), with the rest of
+  the TanStack family moved in step.
+- **seroval ≤ 1.6.2** (the server-function payload decoder): thenable
+  callable invocation (critical) and memory exhaustion from one tiny payload
+  (GHSA-p6vx-979v-rg4c, GHSA-jp82-f5mq-hwhp) → 1.7.2 via TanStack.
+- **zod < 4.6.6**: memory exhaustion validating oversized arrays
+  (GHSA-mrhx-c7xc-m3w5) → 4.6.7. **vite** 8.1.5 → 8.3.5; `npm audit fix` for
+  js-yaml, nanoid, source-map-js, postcss, launch-editor, shell-quote.
+
+`npm audit --omit=dev` is now 0. `package.json` no longer says `"latest"` for
+the TanStack packages — they're `^` ranges, so an install can't jump a major
+untested. Left on purpose (dev/test only, never shipped): vitest 3 → 5
+(tinypool/mocker advisories, a major upgrade) and `@tailwindcss/typography`
+(npm's "fix" is a downgrade). Verified: typecheck, build, 320 unit + live
+tests, the full e2e suite (49) from a cold Vite cache.
+
 ## 2026-10-26
 
 **Agency → client page: the period filter for one client (no migration).**
