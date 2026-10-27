@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { toast } from 'sonner'
@@ -168,7 +168,13 @@ function ClientDashboard() {
             <ul className="divide-y text-sm">
               {sections?.accounts.map((a) => (
                 <li key={a.id} className="flex items-center justify-between py-2">
-                  <span className="font-medium">{a.name}</span>
+                  <Link
+                    to="/client/ad-accounts/$accountId"
+                    params={{ accountId: a.id }}
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    {a.name}
+                  </Link>
                   <span className="flex items-center gap-2">
                     {formatUsd(a.current_limit_usd)}
                     <StatusBadge status={a.status} />

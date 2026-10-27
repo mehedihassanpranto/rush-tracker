@@ -19,7 +19,7 @@ import {
   getPoolAccountFn,
   grantPoolAccountFn,
   listPoolAccountHistoryFn,
-  listPoolAccountUsageFn,
+  listPoolAccountLimitRequestsFn,
   retryPoolAccountSpendCapSyncFn,
   setPoolAccountStatusFn,
   syncPoolAccountNameFn,
@@ -54,6 +54,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AccountLimitRequestsTable } from '@/components/shared/account-limit-requests-table'
 import {
   Table,
   TableBody,
@@ -90,7 +91,7 @@ function PoolAccountDetailPage() {
   const queryClient = useQueryClient()
   const getAccount = useServerFn(getPoolAccountFn)
   const listHistory = useServerFn(listPoolAccountHistoryFn)
-  const listUsage = useServerFn(listPoolAccountUsageFn)
+  const listLimitRequests = useServerFn(listPoolAccountLimitRequestsFn)
   const listOrganizations = useServerFn(listOrganizationsFn)
   const setStatus = useServerFn(setPoolAccountStatusFn)
   const fetchMetaAccount = useServerFn(fetchPoolAccountMetaFn)
@@ -133,17 +134,16 @@ function PoolAccountDetailPage() {
   })
 
   const {
-    data: usage,
-    refetch: refetchUsage,
-    isFetching: usageFetching,
+    data: limitRequests,
+    refetch: refetchLimitRequests,
+    isFetching: limitRequestsFetching,
   } = useQuery({
-    queryKey: ['pool-account-usage', accountId],
-    queryFn: () => listUsage({ data: { ad_account_id: accountId } }),
+    queryKey: ['pool-account-limit-requests', accountId],
+    queryFn: () => listLimitRequests({ data: { ad_account_id: accountId } }),
   })
-  const totalUsage = (usage ?? []).reduce(
-    (sum, r) => sum.plus(dec(r.approved_amount_usd ?? 0)),
-    dec(0),
-  )
+  const totalUsage = (limitRequests ?? [])
+    .filter((r) => r.status === 'APPROVED')
+    .reduce((sum, r) => sum.plus(dec(r.approved_amount_usd ?? 0)), dec(0))
 
   const externalAccountId = account?.external_account_id ?? null
   const {
@@ -160,7 +160,7 @@ function PoolAccountDetailPage() {
   })
 
   const fetchingAll =
-    accountFetching || historyFetching || usageFetching || metaFetching
+    accountFetching || historyFetching || limitRequestsFetching || metaFetching
 
   // Also applies a rename made in Meta, so it shows here at once instead of
   // after the daily sync (same as the agency page's Fetch).
@@ -168,7 +168,7 @@ function PoolAccountDetailPage() {
     const [accountResult, , , metaResult] = await Promise.all([
       refetchAccount(),
       refetchHistory(),
-      refetchUsage(),
+      refetchLimitRequests(),
       externalAccountId ? refetchMetaLive() : Promise.resolve(null),
     ])
     if (metaResult && metaResult.isError) {
@@ -351,12 +351,14 @@ function PoolAccountDetailPage() {
       )}
 
       <Tabs defaultValue="overview">
-        <TabsList>
+        <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="history">
             Assignment History ({history?.length ?? 0})
           </TabsTrigger>
-          <TabsTrigger value="usage">Usage ({usage?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="limit-requests">
+            Limit Requests ({limitRequests?.length ?? 0})
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -567,7 +569,7 @@ function PoolAccountDetailPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="usage">
+        <TabsContent value="limit-requests">
           <Card className="mb-4">
             <CardHeader>
               <CardTitle className="text-base">Total USD used</CardTitle>
@@ -583,48 +585,8 @@ function PoolAccountDetailPage() {
             </CardContent>
           </Card>
 
-          <Card className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Approved</TableHead>
-                  <TableHead className="text-right">Opening balance</TableHead>
-                  <TableHead className="text-right">Requested</TableHead>
-                  <TableHead className="text-right">Approved amount</TableHead>
-                  <TableHead className="text-right">New limit</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(usage?.length ?? 0) === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6}>
-                      <div className="py-8 text-center text-sm text-muted-foreground">
-                        No approved limit requests yet.
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )}
-                {usage?.map((u) => (
-                  <TableRow key={u.id}>
-                    <TableCell>{u.client?.name ?? '—'}</TableCell>
-                    <TableCell>{fmtDate(u.approved_at)}</TableCell>
-                    <TableCell className="num text-right">
-                      {formatUsd(u.opening_balance_usd)}
-                    </TableCell>
-                    <TableCell className="num text-right">
-                      {formatUsd(u.requested_amount_usd)}
-                    </TableCell>
-                    <TableCell className="num text-right font-medium">
-                      {formatUsd(u.approved_amount_usd ?? 0)}
-                    </TableCell>
-                    <TableCell className="num text-right">
-                      {u.approved_new_limit_usd ? formatUsd(u.approved_new_limit_usd) : '—'}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          <Card className="overflow-x-auto p-0">
+            <AccountLimitRequestsTable rows={limitRequests ?? []} area="platform" />
           </Card>
         </TabsContent>
       </Tabs>

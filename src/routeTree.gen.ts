@@ -46,6 +46,7 @@ import { Route as AgencyUsersIndexRouteImport } from './routes/agency/users/inde
 import { Route as ApiCronMetaSyncRouteImport } from './routes/api/cron/meta-sync'
 import { Route as ApiTelegramWebhookRouteImport } from './routes/api/telegram/webhook'
 import { Route as ClientAdAccountsIndexRouteImport } from './routes/client/ad-accounts/index'
+import { Route as ClientAdAccountsAccountIdRouteImport } from './routes/client/ad-accounts/$accountId'
 import { Route as ClientDueIndexRouteImport } from './routes/client/due/index'
 import { Route as ClientLimitRequestsIndexRouteImport } from './routes/client/limit-requests/index'
 import { Route as ClientNotificationsIndexRouteImport } from './routes/client/notifications/index'
@@ -258,6 +259,12 @@ const ClientAdAccountsIndexRoute = ClientAdAccountsIndexRouteImport.update({
   path: '/ad-accounts/',
   getParentRoute: () => ClientRouteRoute,
 } as any)
+const ClientAdAccountsAccountIdRoute =
+  ClientAdAccountsAccountIdRouteImport.update({
+    id: '/ad-accounts/$accountId',
+    path: '/ad-accounts/$accountId',
+    getParentRoute: () => ClientRouteRoute,
+  } as any)
 const ClientDueIndexRoute = ClientDueIndexRouteImport.update({
   id: '/due/',
   path: '/due/',
@@ -404,6 +411,7 @@ export interface FileRoutesByFullPath {
   '/agency/payments/$paymentId': typeof AgencyPaymentsPaymentIdRoute
   '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
   '/api/telegram/webhook': typeof ApiTelegramWebhookRouteWithChildren
+  '/client/ad-accounts/$accountId': typeof ClientAdAccountsAccountIdRoute
   '/platform/ad-accounts/$accountId': typeof PlatformAdAccountsAccountIdRoute
   '/platform/limit-requests/$requestId': typeof PlatformLimitRequestsRequestIdRoute
   '/agency/ad-accounts/': typeof AgencyAdAccountsIndexRoute
@@ -461,6 +469,7 @@ export interface FileRoutesByTo {
   '/agency/payments/$paymentId': typeof AgencyPaymentsPaymentIdRoute
   '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
   '/api/telegram/webhook': typeof ApiTelegramWebhookRouteWithChildren
+  '/client/ad-accounts/$accountId': typeof ClientAdAccountsAccountIdRoute
   '/platform/ad-accounts/$accountId': typeof PlatformAdAccountsAccountIdRoute
   '/platform/limit-requests/$requestId': typeof PlatformLimitRequestsRequestIdRoute
   '/agency/ad-accounts': typeof AgencyAdAccountsIndexRoute
@@ -523,6 +532,7 @@ export interface FileRoutesById {
   '/agency/payments/$paymentId': typeof AgencyPaymentsPaymentIdRoute
   '/api/cron/meta-sync': typeof ApiCronMetaSyncRoute
   '/api/telegram/webhook': typeof ApiTelegramWebhookRouteWithChildren
+  '/client/ad-accounts/$accountId': typeof ClientAdAccountsAccountIdRoute
   '/platform/ad-accounts/$accountId': typeof PlatformAdAccountsAccountIdRoute
   '/platform/limit-requests/$requestId': typeof PlatformLimitRequestsRequestIdRoute
   '/agency/ad-accounts/': typeof AgencyAdAccountsIndexRoute
@@ -585,6 +595,7 @@ export interface FileRouteTypes {
     | '/agency/payments/$paymentId'
     | '/api/cron/meta-sync'
     | '/api/telegram/webhook'
+    | '/client/ad-accounts/$accountId'
     | '/platform/ad-accounts/$accountId'
     | '/platform/limit-requests/$requestId'
     | '/agency/ad-accounts/'
@@ -642,6 +653,7 @@ export interface FileRouteTypes {
     | '/agency/payments/$paymentId'
     | '/api/cron/meta-sync'
     | '/api/telegram/webhook'
+    | '/client/ad-accounts/$accountId'
     | '/platform/ad-accounts/$accountId'
     | '/platform/limit-requests/$requestId'
     | '/agency/ad-accounts'
@@ -703,6 +715,7 @@ export interface FileRouteTypes {
     | '/agency/payments/$paymentId'
     | '/api/cron/meta-sync'
     | '/api/telegram/webhook'
+    | '/client/ad-accounts/$accountId'
     | '/platform/ad-accounts/$accountId'
     | '/platform/limit-requests/$requestId'
     | '/agency/ad-accounts/'
@@ -1019,6 +1032,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClientAdAccountsIndexRouteImport
       parentRoute: typeof ClientRouteRoute
     }
+    '/client/ad-accounts/$accountId': {
+      id: '/client/ad-accounts/$accountId'
+      path: '/ad-accounts/$accountId'
+      fullPath: '/client/ad-accounts/$accountId'
+      preLoaderRoute: typeof ClientAdAccountsAccountIdRouteImport
+      parentRoute: typeof ClientRouteRoute
+    }
     '/client/due/': {
       id: '/client/due/'
       path: '/due'
@@ -1240,6 +1260,7 @@ const AgencyRouteRouteWithChildren = AgencyRouteRoute._addFileChildren(
 
 interface ClientRouteRouteChildren {
   ClientIndexRoute: typeof ClientIndexRoute
+  ClientAdAccountsAccountIdRoute: typeof ClientAdAccountsAccountIdRoute
   ClientAdAccountsIndexRoute: typeof ClientAdAccountsIndexRoute
   ClientDueIndexRoute: typeof ClientDueIndexRoute
   ClientLimitRequestsIndexRoute: typeof ClientLimitRequestsIndexRoute
@@ -1252,6 +1273,7 @@ interface ClientRouteRouteChildren {
 
 const ClientRouteRouteChildren: ClientRouteRouteChildren = {
   ClientIndexRoute: ClientIndexRoute,
+  ClientAdAccountsAccountIdRoute: ClientAdAccountsAccountIdRoute,
   ClientAdAccountsIndexRoute: ClientAdAccountsIndexRoute,
   ClientDueIndexRoute: ClientDueIndexRoute,
   ClientLimitRequestsIndexRoute: ClientLimitRequestsIndexRoute,

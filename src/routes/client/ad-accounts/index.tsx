@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { Bell, Megaphone } from 'lucide-react'
@@ -116,7 +116,13 @@ function MyAdAccountsPage() {
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1.5">
-                    <span className="font-medium">{account.name}</span>
+                    <Link
+                      to="/client/ad-accounts/$accountId"
+                      params={{ accountId: account.id }}
+                      className="font-medium text-primary underline-offset-4 hover:underline"
+                    >
+                      {account.name}
+                    </Link>
                     {low && (
                       <span
                         title={`Low remaining balance: ${formatCurrencyAmount(r!.remaining, r!.currency)}`}
