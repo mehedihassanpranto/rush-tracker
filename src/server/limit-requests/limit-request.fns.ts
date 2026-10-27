@@ -388,13 +388,14 @@ export const listLimitRequestsFn = createServerFn({ method: 'GET' })
   })
 
 /**
- * Usage history for one ad account (spec §28's additive model, surfaced as
- * a running trail): every APPROVED limit request against this account,
- * most-recent-approval-first, across every client that has ever held it —
- * each row is already a complete opening-balance -> +approved -> new-limit
- * record, so no separate tracking table is needed.
+ * Every limit request against one ad account, any status, newest first —
+ * the account page's Limit Requests tab (owner request, 2026-10-27; it was
+ * approved-only "Usage" before). Only this agency's own requests: a pool
+ * account another agency held before keeps that agency's history private.
+ * Approved rows still carry the spec §28 opening -> +approved -> new-limit
+ * trail, so the tab's "Total USD used" sums them.
  */
-export const listAdAccountUsageFn = createServerFn({ method: 'GET' })
+export const listAdAccountLimitRequestsFn = createServerFn({ method: 'GET' })
   .validator(z.object({ ad_account_id: z.uuid() }))
   .handler(async ({ data }): Promise<Array<LimitRequestWithRefs>> => {
     const actor = await requireAdmin(PERMISSIONS.LIMIT_REQUESTS_VIEW)
@@ -405,9 +406,8 @@ export const listAdAccountUsageFn = createServerFn({ method: 'GET' })
         '*, client:clients(id, client_code, name), ad_account:ad_accounts(id, account_code, name, is_platform)',
       )
       .eq('ad_account_id', data.ad_account_id)
-      .eq('status', 'APPROVED')
       .eq('organization_id', actor.organizationId)
-      .order('approved_at', { ascending: false })
+      .order('requested_at', { ascending: false })
     if (error) throw new Error(error.message)
     return rows as unknown as Array<LimitRequestWithRefs>
   })

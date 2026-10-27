@@ -22,7 +22,7 @@ import {
   listAssignmentHistoryFn,
   setAdAccountStatusFn,
 } from '@/server/ad-accounts/ad-account.fns'
-import { listAdAccountUsageFn } from '@/server/limit-requests/limit-request.fns'
+import { listAdAccountLimitRequestsFn } from '@/server/limit-requests/limit-request.fns'
 import { listAccountCreditTransfersFn } from '@/server/credit-transfers/credit-transfer.fns'
 import { MoveCreditDialog } from '@/components/admin/ad-account/move-credit-dialog'
 import { CreditTransfersTable } from '@/components/shared/credit-transfers-table'
@@ -67,6 +67,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AccountLimitRequestsTable } from '@/components/shared/account-limit-requests-table'
 import {
   Table,
   TableBody,
@@ -105,7 +106,7 @@ function AccountDetailPage() {
   const queryClient = useQueryClient()
   const getAccount = useServerFn(getAdAccountFn)
   const listHistory = useServerFn(listAssignmentHistoryFn)
-  const listUsage = useServerFn(listAdAccountUsageFn)
+  const listLimitRequests = useServerFn(listAdAccountLimitRequestsFn)
   const listCreditMoves = useServerFn(listAccountCreditTransfersFn)
   const setStatus = useServerFn(setAdAccountStatusFn)
   const fetchMetaAccount = useServerFn(fetchMetaAdAccountFn)
@@ -141,21 +142,20 @@ function AccountDetailPage() {
   })
 
   const {
-    data: usage,
-    refetch: refetchUsage,
-    isFetching: usageFetching,
+    data: limitRequests,
+    refetch: refetchLimitRequests,
+    isFetching: limitRequestsFetching,
   } = useQuery({
-    queryKey: ['ad-account-usage', accountId],
-    queryFn: () => listUsage({ data: { ad_account_id: accountId } }),
+    queryKey: ['ad-account-limit-requests', accountId],
+    queryFn: () => listLimitRequests({ data: { ad_account_id: accountId } }),
   })
   const { data: creditMoves } = useQuery({
     queryKey: ['credit-transfers', accountId],
     queryFn: () => listCreditMoves({ data: { ad_account_id: accountId } }),
   })
-  const totalUsage = (usage ?? []).reduce(
-    (sum, r) => sum.plus(dec(r.approved_amount_usd ?? 0)),
-    dec(0),
-  )
+  const totalUsage = (limitRequests ?? [])
+    .filter((r) => r.status === 'APPROVED')
+    .reduce((sum, r) => sum.plus(dec(r.approved_amount_usd ?? 0)), dec(0))
 
   const externalAccountId = account?.external_account_id ?? null
   const {
@@ -173,7 +173,7 @@ function AccountDetailPage() {
   })
 
   const fetchingAll =
-    accountFetching || historyFetching || usageFetching || metaFetching
+    accountFetching || historyFetching || limitRequestsFetching || metaFetching
 
   // Force-refetches everything shown on this page in one click — our own
   // stored fields, assignment history, usage history, and live Meta data
@@ -187,7 +187,7 @@ function AccountDetailPage() {
     const results = await Promise.all([
       refetchAccount(),
       refetchHistory(),
-      refetchUsage(),
+      refetchLimitRequests(),
       canManageMeta && externalAccountId
         ? refetchMetaLive()
         : Promise.resolve(null),
@@ -391,7 +391,9 @@ function AccountDetailPage() {
           <TabsTrigger value="history">
             Assignment History ({history?.length ?? 0})
           </TabsTrigger>
-          <TabsTrigger value="usage">Usage ({usage?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="limit-requests">
+            Limit Requests ({limitRequests?.length ?? 0})
+          </TabsTrigger>
           <TabsTrigger value="credit">Credit moves ({creditMoves?.length ?? 0})</TabsTrigger>
         </TabsList>
 
@@ -641,7 +643,7 @@ function AccountDetailPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="usage">
+        <TabsContent value="limit-requests">
           <Card className="mb-4">
             <CardHeader>
               <CardTitle className="text-base">Total USD used</CardTitle>
@@ -657,50 +659,8 @@ function AccountDetailPage() {
             </CardContent>
           </Card>
 
-          <Card className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Approved</TableHead>
-                  <TableHead className="text-right">Opening balance</TableHead>
-                  <TableHead className="text-right">Requested</TableHead>
-                  <TableHead className="text-right">Approved amount</TableHead>
-                  <TableHead className="text-right">New limit</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(usage?.length ?? 0) === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6}>
-                      <div className="py-8 text-center text-sm text-muted-foreground">
-                        No approved limit requests yet.
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )}
-                {usage?.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>{row.client?.name ?? '—'}</TableCell>
-                    <TableCell>{fmtDate(row.approved_at)}</TableCell>
-                    <TableCell className="num text-right">
-                      {formatUsd(row.opening_balance_usd)}
-                    </TableCell>
-                    <TableCell className="num text-right">
-                      {formatUsd(row.requested_amount_usd)}
-                    </TableCell>
-                    <TableCell className="num text-right font-medium">
-                      {formatUsd(row.approved_amount_usd ?? 0)}
-                    </TableCell>
-                    <TableCell className="num text-right">
-                      {row.approved_new_limit_usd
-                        ? formatUsd(row.approved_new_limit_usd)
-                        : '—'}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          <Card className="overflow-x-auto p-0">
+            <AccountLimitRequestsTable rows={limitRequests ?? []} area="agency" />
           </Card>
         </TabsContent>
 

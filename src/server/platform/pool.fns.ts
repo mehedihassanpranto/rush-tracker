@@ -603,7 +603,7 @@ export const retryPoolAccountSpendCapSyncFn = createServerFn({ method: 'POST' })
 // Detail page — rename, edit details, activate/deactivate, history, usage
 //
 // Platform counterparts of renameAdAccountFn / updateAdAccountFn /
-// setAdAccountStatusFn / listAssignmentHistoryFn / listAdAccountUsageFn
+// setAdAccountStatusFn / listAssignmentHistoryFn / listAdAccountLimitRequestsFn
 // (ad-account.fns.ts / limit-request.fns.ts). Same split as the spend-cap
 // block above: is_platform=true only, no organization check — a platform
 // admin manages the whole pool account, not just what's currently granted.
@@ -778,23 +778,23 @@ export const listPoolAccountHistoryFn = createServerFn({ method: 'GET' })
     }))
   })
 
-/** Usage (approved limit requests) for one pool account, across every
- * agency/client that has ever held it — the platform counterpart of
- * listAdAccountUsageFn, same not-organization-scoped reasoning as the
- * history fn above. */
-export const listPoolAccountUsageFn = createServerFn({ method: 'GET' })
+/** Every limit request (any status) against one pool account, across every
+ * agency/client that has ever held it, newest first — the platform
+ * counterpart of listAdAccountLimitRequestsFn, same not-organization-scoped
+ * reasoning as the history fn above. Refuses a non-pool account (loadPoolAccount). */
+export const listPoolAccountLimitRequestsFn = createServerFn({ method: 'GET' })
   .validator(z.object({ ad_account_id: z.uuid() }))
-  .handler(async ({ data }): Promise<Array<LimitRequestWithRefs>> => {
+  .handler(async ({ data }): Promise<Array<LimitRequestWithRefs & { organization: { id: string; name: string } | null }>> => {
     await requirePlatformAdmin()
     const admin = getSupabaseAdminClient()
+    await loadPoolAccount(admin, data.ad_account_id)
     const { data: rows, error } = await admin
       .from('limit_requests')
       .select(
-        '*, client:clients(id, client_code, name), ad_account:ad_accounts(id, account_code, name, is_platform)',
+        '*, client:clients(id, client_code, name), ad_account:ad_accounts(id, account_code, name, is_platform), organization:organizations(id, name)',
       )
       .eq('ad_account_id', data.ad_account_id)
-      .eq('status', 'APPROVED')
-      .order('approved_at', { ascending: false })
+      .order('requested_at', { ascending: false })
     if (error) throw new Error(error.message)
-    return rows as unknown as Array<LimitRequestWithRefs>
+    return rows as unknown as Array<LimitRequestWithRefs & { organization: { id: string; name: string } | null }>
   })

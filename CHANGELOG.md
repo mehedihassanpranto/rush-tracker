@@ -6,6 +6,25 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-10-27
+
+**Ad account page: full limit-request history (no migration).** Owner:
+"need limit request history in account details page." The approved-only
+"Usage" tab on `/agency/ad-accounts/$accountId` and
+`/platform/ad-accounts/$accountId` is now **Limit Requests (n)**: every
+request on the account in any status (pending, sent to platform, approved,
+rejected with its reason, cancelled), newest first, each number linking to
+the request's page. "Total USD used" stays and still sums approved requests
+only. Shared table: `src/components/shared/account-limit-requests-table.tsx`.
+`listAdAccountUsageFn` → `listAdAccountLimitRequestsFn` (agency: only its own
+org's requests, so a pool account's earlier holder stays private) and
+`listPoolAccountUsageFn` → `listPoolAccountLimitRequestsFn` (platform: every
+agency, adds the Agency column, leaves out the agency's BDT charge to its
+client, refuses a non-pool account). The platform page's tab bar now scrolls
+on a phone like the agency's. e2e `account-limit-requests.spec.ts`: both
+pages (light/dark/phone), links, and agency B replaying the fn with agency
+A's account id gets none of its requests.
+
 ## 2026-10-26
 
 **Agency → client page: the period filter for one client (no migration).**
