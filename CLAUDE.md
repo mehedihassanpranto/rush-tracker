@@ -223,12 +223,15 @@ short; detail belongs in the changelog.
 
 ## Framework conventions that bit us already
 
-- Stack (don't downgrade or swap): TanStack Start 1.168 as a **Vite plugin**
+- Stack (don't downgrade or swap): TanStack Start 1.169 as a **Vite plugin**
   (no `app.config.ts`/vinxi), TanStack Router file routes in `src/routes`, Vite
   8, Nitro v3 (`node-server` build on Hostinger), React 19, TS strict,
   Tailwind v4 (CSS-first, `src/styles.css`), shadcn/ui, Supabase
   (`supabase-js` + `@supabase/ssr`), Zod v4 (`z.email()`, not
   `z.string().email()`), React Hook Form, decimal.js.
+- Dependencies use `^` ranges, never `"latest"`. Keep `npm audit --omit=dev`
+  at 0 — a TanStack Start XSS (GHSA-qx66-fv34-fjm8) sat in production until
+  2026-10-27.
 - **Import protection** (enforced at build): `*.fns.ts` = `createServerFn`
   endpoints, safe to import anywhere; `*.server.ts` = server-only. Shared
   server helpers live in plain `*.service.ts` modules used only inside handler
