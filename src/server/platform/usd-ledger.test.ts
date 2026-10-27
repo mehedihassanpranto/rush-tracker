@@ -1139,7 +1139,12 @@ describe.skipIf(!creds)('Finance v2 agency billing (000064)', () => {
     const { data: s } = await admin.from('agency_billing_summary').select('*').eq('organization_id', org).single()
     const b = await balance()
     expect([dec(s!.owed_bdt).toFixed(2), dec(s!.advance_bdt).toFixed(2)]).toEqual([b.owed, b.advance])
-    expect(dec(s!.current_rate).toFixed(2)).toBe('130.00') // 135 starts in the future
+    // 135 starts in the future. 130 starts on the Dhaka day of base + 10 min,
+    // and base is 4 h ahead — after ~19:50 Dhaka that is tomorrow, so no rate
+    // is in effect yet today.
+    const today = dhakaDay(new Date().toISOString())
+    const expected = dhakaDay(at(10)) <= today ? '130.00' : null
+    expect(s!.current_rate == null ? null : dec(s!.current_rate).toFixed(2)).toBe(expected)
   })
 
   it('a closed month refuses postings dated in it; the current month can’t be closed; reopening needs a reason', async () => {

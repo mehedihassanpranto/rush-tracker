@@ -31,6 +31,13 @@ untested. Left on purpose (dev/test only, never shipped): vitest 3 → 5
 (npm's "fix" is a downgrade). Verified: typecheck, build, 320 unit + live
 tests, the full e2e suite (49) from a cold Vite cache.
 
+**Test fix: agency billing summary after 19:50 Dhaka.** CI failed on
+`usd-ledger.test.ts` › "the billing summary agrees with the journal"
+(`current_rate` null). The suite's clock runs 4 h ahead, so its ৳130 rate
+starts on the Dhaka day of now + 4 h — after ~19:50 Dhaka that's tomorrow and
+the view rightly has no rate yet. The test now expects the rate in effect
+today. A test bug, not the upgrade.
+
 ## 2026-10-26
 
 **Agency → client page: the period filter for one client (no migration).**
