@@ -9,9 +9,8 @@ import type { Page } from '@playwright/test'
  * (2026-11-23). An account's own rate wins over the client's, so before this
  * a new client rate (130 → 134) never reached accounts that already had one.
  * Only that client's ACTIVE accounts change; another client's account at the
- * old rate stays put, and unticking the box leaves the accounts alone. The
- * client and its own account go with global teardown; the pool accounts are
- * removed in afterAll.
+ * old rate stays put, and unticking the box leaves the accounts alone. All of
+ * it is removed in afterAll.
  */
 
 let clientId = ''
@@ -79,12 +78,18 @@ test.beforeAll(async () => {
   otherClientAccount = await account('other client', 130, false, f.clientA)
 })
 
+// Remove everything here rather than leave it to global teardown: an extra
+// active client or account in agency A changes the plan usage that
+// subscription.spec.ts checks ("1 / 5").
 test.afterAll(async () => {
-  if (poolAccounts.length === 0) return
   const admin = adminClient(loadE2EEnv())
-  await admin.from('ad_account_assignments').delete().in('ad_account_id', poolAccounts)
-  await admin.from('platform_account_grants').delete().in('ad_account_id', poolAccounts)
-  await admin.from('ad_accounts').delete().in('id', poolAccounts)
+  const accounts = [...poolAccounts, ownAccount, otherClientAccount].filter(Boolean)
+  if (accounts.length > 0) {
+    await admin.from('ad_account_assignments').delete().in('ad_account_id', accounts)
+    await admin.from('platform_account_grants').delete().in('ad_account_id', accounts)
+    await admin.from('ad_accounts').delete().in('id', accounts)
+  }
+  if (clientId) await admin.from('clients').delete().eq('id', clientId)
 })
 
 async function rates() {
