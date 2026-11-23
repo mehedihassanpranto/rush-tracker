@@ -32,6 +32,9 @@ export const clientCreateSchema = z.object({
 
 export const clientUpdateSchema = clientCreateSchema.extend({
   id: z.uuid(),
+  // Also set usd_rate on the client's active ad accounts — their own rate
+  // wins over the client's, so a new client rate alone doesn't reach them.
+  apply_rate_to_accounts: z.boolean().optional(),
 })
 
 export const clientStatusSchema = z.object({

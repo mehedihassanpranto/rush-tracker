@@ -626,6 +626,7 @@ function ClientDetailPage() {
         open={editOpen}
         onOpenChange={setEditOpen}
         client={client}
+        accounts={accounts}
       />
       <AssignAccountDialog
         open={assignOpen}

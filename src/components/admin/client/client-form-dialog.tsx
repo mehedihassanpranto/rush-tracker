@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { useForm } from 'react-hook-form'
@@ -8,7 +8,9 @@ import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { createClientFn, updateClientFn } from '@/server/clients/client.fns'
+import { accountsOffRate } from '@/lib/money/usd-rate'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -26,6 +28,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
@@ -34,7 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { Client } from '@/types/domain'
+import type { AdAccount, Client } from '@/types/domain'
 
 const formSchema = z.object({
   name: z.string().trim().min(1, 'Name is required'),
@@ -57,15 +60,20 @@ export function ClientFormDialog({
   open,
   onOpenChange,
   client,
+  accounts,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   client?: Client
+  /** The client's active ad accounts — editing the rate offers to set it on
+   * them too, since an account's own rate wins over the client's. */
+  accounts?: ReadonlyArray<Pick<AdAccount, 'id' | 'account_code' | 'usd_rate'>>
 }) {
   const isEdit = Boolean(client)
   const queryClient = useQueryClient()
   const createClient = useServerFn(createClientFn)
   const updateClient = useServerFn(updateClientFn)
+  const [applyToAccounts, setApplyToAccounts] = useState(true)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -93,20 +101,46 @@ export function ClientFormDialog({
         status: client?.status ?? 'ACTIVE',
         segment: client?.segment ?? 'postpaid',
       })
+      setApplyToAccounts(true)
     }
   }, [open, client, form])
+
+  const rate = form.watch('usd_rate')
+  const offRate = isEdit ? accountsOffRate(accounts ?? [], rate) : []
+  const offRates = [...new Set(offRate.map((a) => Number(a.usd_rate)))]
+    .sort((x, y) => x - y)
+    .map((r) => `৳${r}`)
 
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
       if (isEdit && client) {
-        return updateClient({ data: { id: client.id, ...values } })
+        return updateClient({
+          data: {
+            id: client.id,
+            ...values,
+            apply_rate_to_accounts: applyToAccounts && offRate.length > 0,
+          },
+        })
       }
       return createClient({ data: values })
     },
     onSuccess: (saved) => {
-      toast.success(isEdit ? 'Client updated' : `Client created (${saved.client_code})`)
+      const updatedAccounts =
+        (saved as { accounts_rate_updated?: number }).accounts_rate_updated ?? 0
+      toast.success(
+        !isEdit
+          ? `Client created (${saved.client_code})`
+          : updatedAccounts > 0
+            ? `Client updated · rate set on ${updatedAccounts} ad account${updatedAccounts === 1 ? '' : 's'}`
+            : 'Client updated',
+      )
       void queryClient.invalidateQueries({ queryKey: ['clients'] })
       void queryClient.invalidateQueries({ queryKey: ['client', saved.id] })
+      if (updatedAccounts > 0) {
+        void queryClient.invalidateQueries({ queryKey: ['client-accounts', saved.id] })
+        void queryClient.invalidateQueries({ queryKey: ['ad-accounts'] })
+        void queryClient.invalidateQueries({ queryKey: ['ad-account'] })
+      }
       onOpenChange(false)
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to save'),
@@ -114,7 +148,7 @@ export function ClientFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit client' : 'New client'}</DialogTitle>
           <DialogDescription>
@@ -217,6 +251,30 @@ export function ClientFormDialog({
                     approved limits and to show due in USD.
                   </p>
                   <FormMessage />
+                  {offRate.length > 0 && (
+                    <div className="flex items-start gap-2 rounded-md border bg-muted/40 p-3">
+                      <Checkbox
+                        id="apply-rate-to-accounts"
+                        checked={applyToAccounts}
+                        onCheckedChange={(v) => setApplyToAccounts(v === true)}
+                        className="mt-0.5"
+                      />
+                      <div className="space-y-1">
+                        <Label
+                          htmlFor="apply-rate-to-accounts"
+                          className="text-sm leading-snug font-normal"
+                        >
+                          Also use ৳{Number(rate)} on {offRate.length} ad account
+                          {offRate.length === 1 ? '' : 's'} (now {offRates.join(', ')})
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Each account bills at its own rate. Unticked, new
+                          requests on them keep the old rate. Past requests never
+                          change.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </FormItem>
               )}
             />
