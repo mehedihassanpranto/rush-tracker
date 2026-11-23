@@ -6,6 +6,7 @@ import { requireAdmin } from '@/server/auth/guards.server'
 import { writeAudit } from '@/server/audit/audit.service'
 import { assertPlanAllows } from '@/server/subscription/plan-limits.service'
 import { bdtToUsd } from '@/server/exchange-rates/rate.service'
+import { applyRateToClientAccounts } from '@/server/clients/client-rate.service'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import {
   clientCreateSchema,
@@ -129,8 +130,13 @@ export const createClientFn = createServerFn({ method: 'POST' })
 
 export const updateClientFn = createServerFn({ method: 'POST' })
   .validator(clientUpdateSchema)
-  .handler(async ({ data }): Promise<Client> => {
+  .handler(async ({ data }): Promise<Client & { accounts_rate_updated: number }> => {
     const actor = await requireAdmin(PERMISSIONS.CLIENTS_MANAGE)
+    // Rewriting the accounts' rates is an ad-account edit — check it up
+    // front so a missing permission never leaves the client half-saved.
+    if (data.apply_rate_to_accounts) {
+      await requireAdmin(PERMISSIONS.AD_ACCOUNTS_MANAGE)
+    }
     const admin = getSupabaseAdminClient()
 
     const { data: before } = await admin
@@ -171,7 +177,11 @@ export const updateClientFn = createServerFn({ method: 'POST' })
       oldValues: before ?? null,
       newValues: client,
     })
-    return client as Client
+
+    const accountsRateUpdated = data.apply_rate_to_accounts
+      ? await applyRateToClientAccounts(admin, actor, data.id, data.usd_rate)
+      : 0
+    return { ...(client as Client), accounts_rate_updated: accountsRateUpdated }
   })
 
 export const setClientStatusFn = createServerFn({ method: 'POST' })

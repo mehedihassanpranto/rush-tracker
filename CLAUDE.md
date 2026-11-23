@@ -151,7 +151,8 @@ short; detail belongs in the changelog.
   a credit balance; agency sees "Net Credit". Clients never see Meta Due.
 - **USD rate**: `adAccountUsdRate()` (`src/server/exchange-rates/rate.service.ts`)
   — the account's `usd_rate` wins; `0` means inherit the client's rate.
-  Assign/transfer copy the client's rate onto the account (000057). The
+  Assign/transfer copy the client's rate onto the account (000057), so a
+  client rate edit reaches accounts only via `apply_rate_to_accounts`. The
   `exchange_rates` table is history only.
 - **Credit transfers** ("Move credit", 000058): same client only; move
   `current_limit_usd` between accounts, never the ledger. A pool account →

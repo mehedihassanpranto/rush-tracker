@@ -6,6 +6,32 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-11-23
+
+**Client rate → their ad accounts.** Owner: "till yesterday 130 taka per
+dollar, from today 134." DF IT Solutions was edited to ৳134, but new limit
+requests on its 13 accounts would still have billed at ৳130/131: an
+account's own `usd_rate` wins over the client's (`adAccountUsdRate()`), and
+assign/transfer copy the client's rate onto the account (000057), so a client
+rate edit never reached existing accounts. The Edit client dialog now offers
+"Also use ৳X on N ad accounts (now ৳…)", ticked by default, whenever the
+client's active accounts have their own, different rate.
+`updateClientFn({ apply_rate_to_accounts })` sets it on them
+(`src/server/clients/client-rate.service.ts`; owned-or-granted scope; needs
+`AD_ACCOUNTS_MANAGE` too, checked before anything is written) and writes an
+`AD_ACCOUNT_UPDATED` audit row per account (`source: CLIENT_RATE_APPLIED`).
+Unset (0) accounts already follow the client and are left alone
+(`accountsOffRate()`, `src/lib/money/usd-rate.ts`). Approved requests keep
+their `approved_usd_rate`. Pending ones are approved at the new rate (the
+review page pre-fills the account's current rate). The dialog also scrolls
+now; on a 720px-tall screen its Save button was off-screen.
+The owner also wanted LR-000260 onward at ৳134. Those are approved, so they're
+corrected with adjustments, not edited: Ahad Bhai +৳400 (LR-000260, $200 at
+132), DF IT +৳1,960 (LR-000261–269, $490 at 130). The owner adds these in the
+app. Tests: `usd-rate.test.ts`, e2e `client-rate-to-accounts.spec.ts`.
+
+---
+
 ## 2026-10-27
 
 **Security: dependency upgrades (no migration, no code change).** Owner:
