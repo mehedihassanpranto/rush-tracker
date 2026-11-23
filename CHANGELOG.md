@@ -25,10 +25,12 @@ Unset (0) accounts already follow the client and are left alone
 their `approved_usd_rate`. Pending ones are approved at the new rate (the
 review page pre-fills the account's current rate). The dialog also scrolls
 now; on a 720px-tall screen its Save button was off-screen.
-The owner also wanted LR-000260 onward at ৳134. Those are approved, so they're
-corrected with adjustments, not edited: Ahad Bhai +৳400 (LR-000260, $200 at
-132), DF IT +৳1,960 (LR-000261–269, $490 at 130). The owner adds these in the
-app. Tests: `usd-rate.test.ts`, e2e `client-rate-to-accounts.spec.ts`.
+The owner first asked for LR-000260 onward at ৳134. Those requests are
+approved, so the only correction would be adjustments (Ahad Bhai +৳400, DF IT
++৳1,960). The owner then decided to leave them as billed. Applied in
+production the same evening: DF IT Solutions (12 accounts) and Ahad Bhai (1
+account) at ৳134, one audit row per account. Tests: `usd-rate.test.ts`, e2e
+`client-rate-to-accounts.spec.ts`.
 
 ---
 
