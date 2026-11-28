@@ -12,6 +12,8 @@ import {
   rejectPaymentFn,
 } from '@/server/payments/payment.fns'
 import { formatBdt } from '@/lib/money/money'
+import { hasPermission } from '@/lib/auth/types'
+import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { ProofViewerDialog } from '@/components/shared/proof-viewer'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
@@ -45,6 +47,8 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 function PaymentDetailPage() {
   const { paymentId } = Route.useParams()
+  const { user } = Route.useRouteContext()
+  const canApprove = hasPermission(user, PERMISSIONS.PAYMENTS_APPROVE)
   const queryClient = useQueryClient()
   const getDetail = useServerFn(getPaymentDetailFn)
   const getProofUrl = useServerFn(getPaymentProofUrlFn)
@@ -115,7 +119,8 @@ function PaymentDetailPage() {
     return <Skeleton className="h-80 w-full" />
   }
 
-  const isPending = payment.status === 'PENDING'
+  // Only a role that approves payments gets the controls (the fns agree).
+  const canDecide = payment.status === 'PENDING' && canApprove
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -174,7 +179,7 @@ function PaymentDetailPage() {
           </CardContent>
         </Card>
 
-        {isPending && (
+        {canDecide && (
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Verify</CardTitle>

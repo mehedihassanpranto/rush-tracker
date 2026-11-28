@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { getSupabaseServerClient } from '@/lib/supabase/server'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import { clientIpFrom } from '@/lib/auth/rate-limit'
+import { loadAgencyRole } from '@/server/users/agency-role.service'
 import {
   checkRateLimit,
   rateLimitMessage,
@@ -59,6 +60,7 @@ interface ProfileRow {
   role_id: string
   organization_id: string
   is_platform_admin: boolean
+  agency_role_id: string | null
   role: { key: RoleKey } | null
 }
 
@@ -76,7 +78,7 @@ async function loadSessionUser(
   const { data: profile } = (await supabase
     .from('user_profiles')
     .select(
-      'user_id, full_name, status, role_id, organization_id, is_platform_admin, role:roles(key)',
+      'user_id, full_name, status, role_id, organization_id, is_platform_admin, agency_role_id, role:roles(key)',
     )
     .eq('user_id', user.id)
     .single()) as { data: ProfileRow | null }
@@ -87,9 +89,23 @@ async function loadSessionUser(
   const role = profile.role.key
 
   let permissions: Array<string> = []
+  let agencyRoleName: string | null = null
   if (role === 'SUPER_ADMIN') {
     const { data } = await supabase.from('permissions').select('key')
     permissions = (data ?? []).map((p: { key: string }) => p.key)
+  } else if (role === 'ADMIN' && profile.agency_role_id) {
+    // The agency's own role (000068) replaces the system defaults. Its tables
+    // have no RLS policies, so read them with the service role — scoped to
+    // this login's role in its own organization.
+    const agencyRole = await loadAgencyRole(
+      getSupabaseAdminClient(),
+      profile.agency_role_id,
+      profile.organization_id,
+    )
+    if (agencyRole) {
+      agencyRoleName = agencyRole.name
+      permissions = agencyRole.permissions
+    }
   } else if (role === 'ADMIN') {
     const [{ data: rolePerms }, { data: userPerms }] = await Promise.all([
       supabase
@@ -198,6 +214,7 @@ async function loadSessionUser(
     role,
     status: profile.status,
     permissions,
+    agencyRoleName,
     memberships,
     activeClientId,
     organizationId: profile.organization_id,

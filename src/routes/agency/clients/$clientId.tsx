@@ -110,6 +110,12 @@ function ClientDetailPage() {
     PERMISSIONS.PAYMENT_REQUESTS_CREATE,
   )
   const canManageMeta = hasPermission(user, PERMISSIONS.AD_ACCOUNTS_MANAGE)
+  // What this admin's role reaches here (each fn below checks it too).
+  const canManageClient = hasPermission(user, PERMISSIONS.CLIENTS_MANAGE)
+  const canAssign = hasPermission(user, PERMISSIONS.AD_ACCOUNTS_ASSIGN)
+  const canSeeLedger = hasPermission(user, PERMISSIONS.LEDGER_VIEW)
+  const canSeeAdjustments = hasPermission(user, PERMISSIONS.ADJUSTMENTS_VIEW)
+  const canSeeRequests = hasPermission(user, PERMISSIONS.LIMIT_REQUESTS_VIEW)
 
   const queryClient = useQueryClient()
   const getClient = useServerFn(getClientFn)
@@ -215,14 +221,17 @@ function ClientDetailPage() {
   const { data: ledger } = useQuery({
     queryKey: ['client-ledger', clientId],
     queryFn: () => listLedger({ data: { client_id: clientId } }),
+    enabled: canSeeLedger,
   })
   const { data: adjustments } = useQuery({
     queryKey: ['adjustments', clientId],
     queryFn: () => listAdjustments({ data: { client_id: clientId } }),
+    enabled: canSeeAdjustments,
   })
   const { data: limitRequests } = useQuery({
     queryKey: ['client-limit-requests', clientId],
     queryFn: () => listLimitRequests({ data: { client_id: clientId } }),
+    enabled: canSeeRequests,
   })
 
   if (isLoading || !client) {
@@ -252,10 +261,12 @@ function ClientDetailPage() {
             Adjustment
           </Button>
         )}
-        <Button variant="outline" onClick={() => setEditOpen(true)}>
-          <Pencil className="size-4" />
-          Edit
-        </Button>
+        {canManageClient && (
+          <Button variant="outline" onClick={() => setEditOpen(true)}>
+            <Pencil className="size-4" />
+            Edit
+          </Button>
+        )}
       </PageHeader>
 
       <div className="mb-4 flex items-center gap-3">
@@ -283,13 +294,17 @@ function ClientDetailPage() {
           <TabsTrigger value="accounts">
             Ad Accounts ({accounts?.length ?? 0})
           </TabsTrigger>
-          <TabsTrigger value="ledger">Ledger</TabsTrigger>
-          <TabsTrigger value="adjustments">
-            Adjustments ({adjustments?.length ?? 0})
-          </TabsTrigger>
-          <TabsTrigger value="limit-requests">
-            Limit Requests ({limitRequests?.length ?? 0})
-          </TabsTrigger>
+          {canSeeLedger && <TabsTrigger value="ledger">Ledger</TabsTrigger>}
+          {canSeeAdjustments && (
+            <TabsTrigger value="adjustments">
+              Adjustments ({adjustments?.length ?? 0})
+            </TabsTrigger>
+          )}
+          {canSeeRequests && (
+            <TabsTrigger value="limit-requests">
+              Limit Requests ({limitRequests?.length ?? 0})
+            </TabsTrigger>
+          )}
           <TabsTrigger value="logins">Logins ({users?.length ?? 0})</TabsTrigger>
         </TabsList>
 
@@ -322,12 +337,14 @@ function ClientDetailPage() {
         </TabsContent>
 
         <TabsContent value="accounts">
-          <div className="mb-3 flex justify-end">
-            <Button size="sm" onClick={() => setAssignOpen(true)}>
-              <Plus className="size-4" />
-              Assign account
-            </Button>
-          </div>
+          {canAssign && (
+            <div className="mb-3 flex justify-end">
+              <Button size="sm" onClick={() => setAssignOpen(true)}>
+                <Plus className="size-4" />
+                Assign account
+              </Button>
+            </div>
+          )}
           <Card className="p-0">
             <Table>
               <TableHeader>
@@ -533,12 +550,14 @@ function ClientDetailPage() {
         </TabsContent>
 
         <TabsContent value="logins">
-          <div className="mb-3 flex justify-end">
-            <Button size="sm" onClick={() => setLoginOpen(true)}>
-              <Plus className="size-4" />
-              Add login
-            </Button>
-          </div>
+          {canManageClient && (
+            <div className="mb-3 flex justify-end">
+              <Button size="sm" onClick={() => setLoginOpen(true)}>
+                <Plus className="size-4" />
+                Add login
+              </Button>
+            </div>
+          )}
           <Card className="p-0">
             <Table>
               <TableHeader>
@@ -570,6 +589,7 @@ function ClientDetailPage() {
                       <StatusBadge status={u.membership_status} />
                     </TableCell>
                     <TableCell className="text-right">
+                      {canManageClient && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon">
@@ -612,6 +632,7 @@ function ClientDetailPage() {
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

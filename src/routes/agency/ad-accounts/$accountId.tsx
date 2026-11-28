@@ -103,6 +103,11 @@ function AccountDetailPage() {
   const { accountId } = Route.useParams()
   const { user } = Route.useRouteContext()
   const canManageMeta = hasPermission(user, PERMISSIONS.AD_ACCOUNTS_MANAGE)
+  // The rest of what this admin's role reaches here (the fns check it too).
+  const canManage = canManageMeta
+  const canAssign = hasPermission(user, PERMISSIONS.AD_ACCOUNTS_ASSIGN)
+  const canTransfer = hasPermission(user, PERMISSIONS.AD_ACCOUNTS_TRANSFER)
+  const canSeeRequests = hasPermission(user, PERMISSIONS.LIMIT_REQUESTS_VIEW)
   const queryClient = useQueryClient()
   const getAccount = useServerFn(getAdAccountFn)
   const listHistory = useServerFn(listAssignmentHistoryFn)
@@ -148,6 +153,7 @@ function AccountDetailPage() {
   } = useQuery({
     queryKey: ['ad-account-limit-requests', accountId],
     queryFn: () => listLimitRequests({ data: { ad_account_id: accountId } }),
+    enabled: canSeeRequests,
   })
   const { data: creditMoves } = useQuery({
     queryKey: ['credit-transfers', accountId],
@@ -187,7 +193,8 @@ function AccountDetailPage() {
     const results = await Promise.all([
       refetchAccount(),
       refetchHistory(),
-      refetchLimitRequests(),
+      // refetch() runs even a disabled query.
+      canSeeRequests ? refetchLimitRequests() : Promise.resolve(null),
       canManageMeta && externalAccountId
         ? refetchMetaLive()
         : Promise.resolve(null),
@@ -278,18 +285,19 @@ function AccountDetailPage() {
           <RefreshCw className={`size-4 ${fetchingAll ? 'animate-spin' : ''}`} />
           Fetch
         </Button>
-        {account.status === 'AVAILABLE' && (
+        {canAssign && account.status === 'AVAILABLE' && (
           <Button onClick={() => setAssignOpen(true)}>
             <UserPlus className="size-4" />
             Assign
           </Button>
         )}
-        {isAssigned && (
+        {canTransfer && isAssigned && (
           <Button variant="outline" onClick={() => setTransferOpen(true)}>
             <ArrowLeftRight className="size-4" />
             Transfer
           </Button>
         )}
+        {(canManage || (canAssign && isAssigned)) && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="icon">
@@ -297,14 +305,18 @@ function AccountDetailPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
-              <Tag className="size-4" />
-              Rename
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setEditOpen(true)}>
-              <Pencil className="size-4" />
-              Edit details
-            </DropdownMenuItem>
+            {canManage && (
+              <>
+                <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
+                  <Tag className="size-4" />
+                  Rename
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+                  <Pencil className="size-4" />
+                  Edit details
+                </DropdownMenuItem>
+              </>
+            )}
             {canManageMeta && account.external_account_id && (
               <DropdownMenuItem onSelect={() => setMetaFetchOpen(true)}>
                 <RefreshCw className="size-4" />
@@ -317,21 +329,21 @@ function AccountDetailPage() {
                 Move credit
               </DropdownMenuItem>
             )}
-            {isAssigned && account.status === 'ACTIVE' && (
+            {canManage && isAssigned && account.status === 'ACTIVE' && (
               <DropdownMenuItem onSelect={() => statusMutation.mutate('INACTIVE')}>
                 <PowerOff className="size-4" />
                 Deactivate
               </DropdownMenuItem>
             )}
-            {isAssigned && account.status === 'INACTIVE' && (
+            {canManage && isAssigned && account.status === 'INACTIVE' && (
               <DropdownMenuItem onSelect={() => statusMutation.mutate('ACTIVE')}>
                 <Power className="size-4" />
                 Activate
               </DropdownMenuItem>
             )}
-            {isAssigned && (
+            {canAssign && isAssigned && (
               <>
-                <DropdownMenuSeparator />
+                {canManage && <DropdownMenuSeparator />}
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
                   onSelect={() => setReleaseOpen(true)}
@@ -343,6 +355,7 @@ function AccountDetailPage() {
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+        )}
       </PageHeader>
 
       <div className="mb-4 flex items-center gap-3">
@@ -391,9 +404,11 @@ function AccountDetailPage() {
           <TabsTrigger value="history">
             Assignment History ({history?.length ?? 0})
           </TabsTrigger>
-          <TabsTrigger value="limit-requests">
-            Limit Requests ({limitRequests?.length ?? 0})
-          </TabsTrigger>
+          {canSeeRequests && (
+            <TabsTrigger value="limit-requests">
+              Limit Requests ({limitRequests?.length ?? 0})
+            </TabsTrigger>
+          )}
           <TabsTrigger value="credit">Credit moves ({creditMoves?.length ?? 0})</TabsTrigger>
         </TabsList>
 

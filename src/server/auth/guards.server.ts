@@ -112,6 +112,19 @@ export async function requireAdmin(
   return user
 }
 
+/** An admin holding at least one of `permissions` — for a small lookup that
+ * several features share (the active-clients picker), so each role that
+ * needs it gets it without granting a whole area. */
+export async function requireAdminWithAny(
+  ...permissions: Array<PermissionKey>
+): Promise<SessionUser> {
+  const user = await requireAdmin()
+  if (!permissions.some((p) => hasPermission(user, p))) {
+    throw new AuthError('FORBIDDEN', `Missing permission: one of ${permissions.join(', ')}`)
+  }
+  return user
+}
+
 /** The agency's top admin only — e.g. what the agency owes the platform
  * (owner's rule, 2026-10-23: regular admins don't see it). */
 export async function requireSuperAdmin(): Promise<SessionUser> {

@@ -20,6 +20,8 @@ import {
   sendLimitRequestToPlatformFn,
 } from '@/server/limit-requests/limit-request.fns'
 import { addUsd, formatBdt, formatUsd, multiplyUsdByRate } from '@/lib/money/money'
+import { hasPermission } from '@/lib/auth/types'
+import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { ProofViewerDialog } from '@/components/shared/proof-viewer'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
@@ -54,6 +56,8 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 function ApprovalPage() {
   const { requestId } = Route.useParams()
+  const { user } = Route.useRouteContext()
+  const canApprove = hasPermission(user, PERMISSIONS.LIMIT_REQUESTS_APPROVE)
   const queryClient = useQueryClient()
 
   const getDetail = useServerFn(getLimitRequestDetailFn)
@@ -149,7 +153,9 @@ function ApprovalPage() {
     return <Skeleton className="h-96 w-full" />
   }
 
-  const isPending = detail.status === 'PENDING'
+  // Deciding is the approver's job; a role that can only view sees the
+  // request without the controls (the fns refuse it too).
+  const canDecide = detail.status === 'PENDING' && canApprove
   const isSentToPlatform = detail.status === 'PENDING_PLATFORM_REVIEW'
   // A platform-assigned account's requests are the platform's decision, not
   // the agency's (see canMutateSpendCap()'s doc comment for the direct-edit
@@ -272,7 +278,7 @@ function ApprovalPage() {
           </CardContent>
         </Card>
 
-        {detail.is_stale && (
+        {detail.is_stale && canApprove && (
           <Alert variant="destructive">
             <AlertTriangle className="size-4" />
             <AlertTitle>The account limit changed since this request</AlertTitle>
@@ -300,7 +306,7 @@ function ApprovalPage() {
           </Alert>
         )}
 
-        {isPending && isPlatformAccount ? (
+        {canDecide && isPlatformAccount ? (
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Approval</CardTitle>
@@ -328,7 +334,7 @@ function ApprovalPage() {
               </div>
             </CardContent>
           </Card>
-        ) : isPending ? (
+        ) : canDecide ? (
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Approval</CardTitle>
@@ -424,6 +430,17 @@ function ApprovalPage() {
                   Approve
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+        ) : detail.status === 'PENDING' ? (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Waiting for review</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Someone whose role can approve limit requests will decide this one.
+              </p>
             </CardContent>
           </Card>
         ) : isSentToPlatform ? (

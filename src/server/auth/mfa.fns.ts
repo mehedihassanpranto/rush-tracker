@@ -213,6 +213,11 @@ export const resetUserMfaFn = createServerFn({ method: 'POST' })
       if (!hasPermission(user, needed)) {
         throw new AuthError('FORBIDDEN', `Missing permission: ${needed}`)
       }
+      // Same rule as role and status changes: a Super Admin's sign-in is
+      // only another Super Admin's to touch.
+      if (t.role?.key === 'SUPER_ADMIN' && user.role !== 'SUPER_ADMIN') {
+        throw new UserError('Only a Super Admin can reset a Super Admin’s two-factor sign-in')
+      }
     }
 
     const { data: list, error } = await admin.auth.admin.mfa.listFactors({ userId: t.user_id })

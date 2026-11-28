@@ -23,6 +23,7 @@ function user(over: Partial<SessionUser> = {}): SessionUser {
     role: 'CLIENT',
     status: 'ACTIVE',
     permissions: [],
+    agencyRoleName: null,
     memberships: [],
     activeClientId: null,
     organizationId: 'org1',
@@ -159,6 +160,16 @@ describe('displayRoleFor', () => {
     )
     expect(displayRoleFor({ role: 'ADMIN', isPlatformAdmin: false })).toBe('ADMIN')
     expect(displayRoleFor({ role: 'CLIENT', isPlatformAdmin: false })).toBe('CLIENT')
+  })
+
+  it('calls an admin by their agency role’s name', () => {
+    expect(
+      displayRoleFor({ role: 'ADMIN', isPlatformAdmin: false, agencyRoleName: 'Accountant' }),
+    ).toBe('Accountant')
+    // Only an ADMIN's: a Super Admin never carries one.
+    expect(
+      displayRoleFor({ role: 'SUPER_ADMIN', isPlatformAdmin: false, agencyRoleName: 'Accountant' }),
+    ).toBe('SUPER ADMIN')
   })
 })
 

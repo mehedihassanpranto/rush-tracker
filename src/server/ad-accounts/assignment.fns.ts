@@ -5,7 +5,11 @@ import {
   adAccountScope,
   applyAdAccountScope,
 } from '@/server/ad-accounts/scope.server'
-import { requireAdmin, requireClientMembership } from '@/server/auth/guards.server'
+import {
+  requireAdmin,
+  requireAdminWithAny,
+  requireClientMembership,
+} from '@/server/auth/guards.server'
 import { notifyClientMembers } from '@/server/notifications/notification.service'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { assignSchema, releaseSchema, transferSchema } from '@/schemas/ad-account'
@@ -17,10 +21,17 @@ import type {
   Client,
 } from '@/types/domain'
 
-/** Active clients available as assignment/transfer targets. */
+/** Active clients (code + name) — the client picker of assign/transfer,
+ * adjustments, payment requests and reports, so any of those roles may read it. */
 export const listActiveClientsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Array<Pick<Client, 'id' | 'client_code' | 'name'>>> => {
-    const actor = await requireAdmin(PERMISSIONS.AD_ACCOUNTS_VIEW)
+    const actor = await requireAdminWithAny(
+      PERMISSIONS.CLIENTS_VIEW,
+      PERMISSIONS.AD_ACCOUNTS_VIEW,
+      PERMISSIONS.REPORTS_VIEW,
+      PERMISSIONS.ADJUSTMENTS_CREATE,
+      PERMISSIONS.PAYMENT_REQUESTS_CREATE,
+    )
     const admin = getSupabaseAdminClient()
     const { data, error } = await admin
       .from('clients')
