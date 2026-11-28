@@ -6,6 +6,48 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ---
 
+## 2026-11-28
+
+**Agency roles (migration 000068).** Owner: "start roles and permissions
+now in agency and client portal" — agency part first; the client portal
+follows. Until now an agency had Super Admin (everything) and Admin (a fixed
+17-permission default that could only be added to, never trimmed), and every
+admin saw every menu item.
+- Each agency now builds its own roles on **Users → Roles** (Super Admin
+  only): a name, a description and permissions grouped by area. Ticking an
+  action ticks the view it needs; unticking a view drops the actions that
+  need it (`normalizeRolePermissions()`, `src/lib/permissions/agency-roles.ts`).
+  `exchange_rate.manage` and `finance.*` aren't offered: nothing on the agency
+  side checks them, and agency Finance stays Super Admin only. A unit test
+  scans `src/server` so every permission a server fn checks stays grantable.
+- Every staff login has one role, picked when it's created and changeable
+  from the Staff tab. Only a Super Admin makes or changes a Super Admin (role,
+  status or 2FA reset); anyone else with `users.manage` can only give out
+  roles within their own permissions (`canAssignRole()`). The per-user
+  "extra permissions" dialog is gone.
+- Schema: `agency_roles`, `agency_role_permissions` and
+  `user_profiles.agency_role_id`. Composite FKs stop a login, or a
+  permission row, from pointing at another agency's role. RLS is on with zero
+  policies; the session reads them with the service role. Roles cascade with
+  their agency. A trigger gives every new agency an "Admin" role (the old
+  ADMIN defaults). The backfill gave every agency that role and moved every
+  ADMIN onto it, so nobody's access changed. A login with no role (or one with
+  per-user grants, none in production) keeps the old defaults path.
+- The menu shows only the pages a role opens. Any other page shows "You don't
+  have access" (`agencyPagePermission()`), and a role without the dashboard
+  lands on its first page. Buttons a role can't use are hidden on the client,
+  ad account, limit request, payment and clients pages, and so are tabs whose
+  data it can't read. The server still refuses on its own.
+  `listActiveClientsFn` (the client picker) now opens to any of the roles
+  that need it (`requireAdminWithAny()`).
+- The header calls an admin by their role's name.
+Tests: `agency-roles.test.ts` (unit + live: trigger, name uniqueness,
+cross-agency FKs, closed to browsers, cascade), e2e `agency-roles.spec.ts` (a
+Super Admin builds a role and a login; the login sees only its pages, the
+server refuses `payments.view`, and a role change applies on the next load).
+
+---
+
 ## 2026-11-23
 
 **Client rate → their ad accounts.** Owner: "till yesterday 130 taka per

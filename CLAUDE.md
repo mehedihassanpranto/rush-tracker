@@ -109,6 +109,11 @@ short; detail belongs in the changelog.
   (`organization.fns.ts`, + `offboarding.test.ts`) and, if it's business data,
   `WIPE_ORDER` (`maintenance.fns.ts`). Accounts that ever acted can't be
   deleted — deactivate them instead.
+- **Agency roles** (000068): an ADMIN's permissions come from their agency's
+  role (`user_profiles.agency_role_id`). A permission a server fn checks must
+  be in `ROLE_PERMISSION_GROUPS` (a test enforces it), and the page it gates
+  goes in `agencyPagePermission()`. Only a Super Admin edits roles or touches
+  a Super Admin.
 - **Subscriptions**: a suspended org's users are gated in `loadUserOrThrow()`
   and the route guards (platform admins bypass). Any new path that adds an
   active client, ad account or staff login must call `assertPlanAllows()`

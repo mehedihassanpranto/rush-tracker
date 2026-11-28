@@ -27,6 +27,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import type { RoleOption } from './role-options'
 import {
   Select,
   SelectContent,
@@ -39,7 +40,7 @@ const formSchema = z.object({
   full_name: z.string().trim().min(1, 'Name is required'),
   email: z.email('Enter a valid email'),
   password: z.string().min(8, 'At least 8 characters'),
-  role: z.enum(['ADMIN', 'SUPER_ADMIN']),
+  role: z.string().min(1, 'Pick a role'),
 })
 
 type FormValues = z.infer<typeof formSchema>
@@ -48,16 +49,18 @@ const DEFAULTS: FormValues = {
   full_name: '',
   email: '',
   password: '',
-  role: 'ADMIN',
+  role: '',
 }
 
-/** Provision a new admin/super-admin staff login (spec §7). */
+/** Provision a new staff login with a role (spec §7). */
 export function CreateStaffDialog({
   open,
   onOpenChange,
+  roleOptions,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  roleOptions: Array<RoleOption>
 }) {
   const queryClient = useQueryClient()
   const createStaff = useServerFn(createStaffUserFn)
@@ -74,7 +77,7 @@ export function CreateStaffDialog({
   const mutation = useMutation({
     mutationFn: (values: FormValues) => createStaff({ data: values }),
     onSuccess: () => {
-      toast.success('Admin user created')
+      toast.success('Staff login created')
       void queryClient.invalidateQueries({ queryKey: ['staff-users'] })
       onOpenChange(false)
     },
@@ -86,7 +89,7 @@ export function CreateStaffDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New admin user</DialogTitle>
+          <DialogTitle>New staff login</DialogTitle>
           <DialogDescription>
             Creates a staff login. Share the credentials securely; the user can
             reset their password later.
@@ -95,6 +98,7 @@ export function CreateStaffDialog({
         <Form {...form}>
           <form
             id="create-staff-form"
+            method="post"
             onSubmit={form.handleSubmit((v) => mutation.mutate(v))}
             className="space-y-4"
             noValidate
@@ -147,18 +151,29 @@ export function CreateStaffDialog({
                   <FormLabel>Role</FormLabel>
                   <Select value={field.value} onValueChange={field.onChange}>
                     <FormControl>
-                      <SelectTrigger>
-                        <SelectValue />
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Pick a role" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="ADMIN">Admin</SelectItem>
-                      <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
+                      {roleOptions.map((o) => (
+                        <SelectItem
+                          key={o.value}
+                          value={o.value}
+                          disabled={o.disabledReason !== null}
+                        >
+                          {o.label}
+                          {o.disabledReason && (
+                            <span className="text-xs text-muted-foreground">
+                              {' '}· {o.disabledReason}
+                            </span>
+                          )}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormDescription>
-                    Admins get permission-based access (grant sensitive
-                    permissions after creating). Super Admins have full access.
+                    What they can see and do. Set up roles on the Roles tab.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

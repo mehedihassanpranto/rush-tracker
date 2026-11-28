@@ -31,6 +31,10 @@ export interface SessionUser {
   role: RoleKey
   status: UserStatus
   permissions: Array<PermissionKey | (string & {})>
+  /** An ADMIN's agency role (agency_roles, 000068) — its name is what the UI
+   * calls them. null for SUPER_ADMIN, CLIENT, and an ADMIN still on the
+   * pre-roles defaults. */
+  agencyRoleName: string | null
   memberships: Array<SessionMembership>
   /** Which client's data the portal currently shows — one of `memberships`'
    * active entries, resolved from ACTIVE_CLIENT_COOKIE with a fallback to
@@ -124,9 +128,11 @@ export function homePathForUser(
  * and the column is left alone.
  */
 export function displayRoleFor(
-  user: Pick<SessionUser, 'role' | 'isPlatformAdmin'>,
+  user: Pick<SessionUser, 'role' | 'isPlatformAdmin'> &
+    Partial<Pick<SessionUser, 'agencyRoleName'>>,
 ): string {
   if (user.isPlatformAdmin) return 'Platform Owner'
+  if (user.role === 'ADMIN' && user.agencyRoleName) return user.agencyRoleName
   return user.role.replace('_', ' ')
 }
 

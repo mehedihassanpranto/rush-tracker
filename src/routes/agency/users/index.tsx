@@ -7,17 +7,20 @@ import { toast } from 'sonner'
 
 import {
   listStaffUsersFn,
-  setUserRoleFn,
   setUserStatusFn,
 } from '@/server/users/user.fns'
 import type { StaffUser } from '@/server/users/user.fns'
+import { listAgencyRolesFn } from '@/server/users/agency-role.fns'
 import { hasPermission } from '@/lib/auth/types'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { CreateStaffDialog } from '@/components/admin/user/create-staff-dialog'
-import { PermissionsDialog } from '@/components/admin/user/permissions-dialog'
+import { ChangeRoleDialog } from '@/components/admin/user/change-role-dialog'
+import { RolesTab } from '@/components/admin/user/roles-tab'
+import { roleOptions } from '@/components/admin/user/role-options'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -43,8 +46,8 @@ export const Route = createFileRoute('/agency/users/')({
   component: UsersPage,
 })
 
-function RoleBadge({ role }: { role: StaffUser['role'] }) {
-  const isSuper = role === 'SUPER_ADMIN'
+function RoleBadge({ user }: { user: StaffUser }) {
+  const isSuper = user.role === 'SUPER_ADMIN'
   return (
     <Badge
       variant="outline"
@@ -59,7 +62,7 @@ function RoleBadge({ role }: { role: StaffUser['role'] }) {
       ) : (
         <UserCog className="size-3" />
       )}
-      {isSuper ? 'Super Admin' : 'Admin'}
+      {isSuper ? 'Super Admin' : (user.agency_role_name ?? 'Admin (old defaults)')}
     </Badge>
   )
 }
@@ -68,33 +71,29 @@ function UsersPage() {
   const { user } = Route.useRouteContext()
   const canManage = hasPermission(user, PERMISSIONS.USERS_MANAGE)
   const queryClient = useQueryClient()
+  const isSuperAdmin = user.role === 'SUPER_ADMIN'
   const listStaff = useServerFn(listStaffUsersFn)
-  const setRole = useServerFn(setUserRoleFn)
+  const listRoles = useServerFn(listAgencyRolesFn)
   const setStatus = useServerFn(setUserStatusFn)
 
+  const [tab, setTab] = useState('staff')
   const [createOpen, setCreateOpen] = useState(false)
-  const [permsFor, setPermsFor] = useState<StaffUser | null>(null)
+  const [roleFor, setRoleFor] = useState<StaffUser | null>(null)
   const [mfaResetFor, setMfaResetFor] = useState<{ user_id: string; name: string } | null>(null)
 
-  const { data, isLoading } = useQuery({
+  const { data: staff, isLoading } = useQuery({
     queryKey: ['staff-users'],
     queryFn: () => listStaff(),
   })
+  const { data: roles, isLoading: rolesLoading } = useQuery({
+    queryKey: ['agency-roles'],
+    queryFn: () => listRoles(),
+  })
+  const options = roleOptions(user, roles ?? [])
 
   function invalidate() {
     void queryClient.invalidateQueries({ queryKey: ['staff-users'] })
   }
-
-  const roleMutation = useMutation({
-    mutationFn: (vars: { user_id: string; role: 'ADMIN' | 'SUPER_ADMIN' }) =>
-      setRole({ data: vars }),
-    onSuccess: () => {
-      toast.success('Role updated')
-      invalidate()
-    },
-    onError: (err) =>
-      toast.error(err instanceof Error ? err.message : 'Failed to update role'),
-  })
 
   const statusMutation = useMutation({
     mutationFn: (vars: { user_id: string; status: StaffUser['status'] }) =>
@@ -113,17 +112,24 @@ function UsersPage() {
     <div>
       <PageHeader
         title="Users"
-        description="Admin staff, roles and permissions (spec §7, §8)."
+        description="Your agency's staff logins and what each role can do."
       >
-        {canManage && (
+        {canManage && tab === 'staff' && (
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="size-4" />
-            New admin
+            New staff login
           </Button>
         )}
       </PageHeader>
 
-      <Card className="p-0">
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="mb-4">
+          <TabsTrigger value="staff">Staff ({staff?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="roles">Roles ({(roles?.length ?? 0) + 1})</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="staff">
+      <Card className="overflow-x-auto p-0">
         <Table>
           <TableHeader>
             <TableRow>
@@ -131,7 +137,6 @@ function UsersPage() {
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Extra permissions</TableHead>
               {canManage && <TableHead className="w-10" />}
             </TableRow>
           </TableHeader>
@@ -139,25 +144,27 @@ function UsersPage() {
             {isLoading &&
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={canManage ? 6 : 5}>
+                  <TableCell colSpan={canManage ? 5 : 4}>
                     <Skeleton className="h-6 w-full" />
                   </TableCell>
                 </TableRow>
               ))}
 
-            {!isLoading && (data?.users.length ?? 0) === 0 && (
+            {!isLoading && (staff?.length ?? 0) === 0 && (
               <TableRow>
-                <TableCell colSpan={canManage ? 6 : 5}>
+                <TableCell colSpan={canManage ? 5 : 4}>
                   <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
                     <UserCog className="size-8 opacity-40" />
-                    No admin users yet.
+                    No staff logins yet.
                   </div>
                 </TableCell>
               </TableRow>
             )}
 
-            {data?.users.map((u) => {
+            {staff?.map((u) => {
               const isSelf = u.user_id === user.id
+              // Only a Super Admin changes a Super Admin (the server agrees).
+              const locked = isSelf || (u.role === 'SUPER_ADMIN' && !isSuperAdmin)
               return (
                 <TableRow key={u.user_id}>
                   <TableCell className="font-medium">
@@ -172,62 +179,29 @@ function UsersPage() {
                     {u.email}
                   </TableCell>
                   <TableCell>
-                    <RoleBadge role={u.role} />
+                    <RoleBadge user={u} />
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={u.status} />
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {u.role === 'SUPER_ADMIN'
-                      ? 'All (full access)'
-                      : u.granted_permissions.length > 0
-                        ? `${u.granted_permissions.length} granted`
-                        : 'Role defaults only'}
                   </TableCell>
                   {canManage && (
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" disabled={isSelf}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled={locked}
+                            aria-label={`Actions for ${u.full_name || u.email}`}
+                          >
                             <MoreHorizontal className="size-4" />
                             <span className="sr-only">Actions</span>
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-52">
-                          <DropdownMenuLabel>Role</DropdownMenuLabel>
-                          <DropdownMenuItem
-                            disabled={u.role === 'ADMIN'}
-                            onSelect={() =>
-                              roleMutation.mutate({
-                                user_id: u.user_id,
-                                role: 'ADMIN',
-                              })
-                            }
-                          >
-                            Make Admin
+                          <DropdownMenuItem onSelect={() => setRoleFor(u)}>
+                            Change role…
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            disabled={u.role === 'SUPER_ADMIN'}
-                            onSelect={() =>
-                              roleMutation.mutate({
-                                user_id: u.user_id,
-                                role: 'SUPER_ADMIN',
-                              })
-                            }
-                          >
-                            Make Super Admin
-                          </DropdownMenuItem>
-
-                          {u.role === 'ADMIN' && (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onSelect={() => setPermsFor(u)}
-                              >
-                                Manage permissions…
-                              </DropdownMenuItem>
-                            </>
-                          )}
 
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
@@ -266,14 +240,23 @@ function UsersPage() {
           </TableBody>
         </Table>
       </Card>
+        </TabsContent>
 
-      <CreateStaffDialog open={createOpen} onOpenChange={setCreateOpen} />
-      <PermissionsDialog
-        user={permsFor}
-        adminDefaults={data?.adminDefaultPermissions ?? []}
-        open={permsFor !== null}
+        <TabsContent value="roles">
+          <RolesTab roles={roles} isLoading={rolesLoading} canEdit={isSuperAdmin} />
+        </TabsContent>
+      </Tabs>
+
+      <CreateStaffDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        roleOptions={options}
+      />
+      <ChangeRoleDialog
+        user={roleFor}
+        options={options}
         onOpenChange={(o) => {
-          if (!o) setPermsFor(null)
+          if (!o) setRoleFor(null)
         }}
       />
       <ResetMfaDialog target={mfaResetFor} onOpenChange={(o) => !o && setMfaResetFor(null)} />

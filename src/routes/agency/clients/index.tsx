@@ -72,6 +72,7 @@ function ClientsPage() {
   const { data: accounts } = useQuery({
     queryKey: ['ad-accounts'],
     queryFn: () => listAccounts(),
+    enabled: hasPermission(user, PERMISSIONS.AD_ACCOUNTS_VIEW),
   })
   const { data: metaAccounts } = useQuery({
     queryKey: ['meta-usable-ad-accounts'],
@@ -124,10 +125,12 @@ function ClientsPage() {
   return (
     <div>
       <PageHeader title="Clients" description="Client organizations you manage.">
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="size-4" />
-          New client
-        </Button>
+        {canManage && (
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="size-4" />
+            New client
+          </Button>
+        )}
       </PageHeader>
 
       <Card className="p-0">
