@@ -66,6 +66,9 @@ export function PeriodSection({ audience, clientId }: { audience: 'agency' | 'cl
           : getClient({ data: { period } }),
   })
   const r = q.data
+  // A client Member without billing.view gets no BDT figures (the server
+  // zeroes them); hide them rather than show ৳0.
+  const billing = r?.billing ?? true
   const refreshMut = useMutation({
     mutationFn: () =>
       oneClient
@@ -116,7 +119,7 @@ export function PeriodSection({ audience, clientId }: { audience: 'agency' | 'cl
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className={`grid gap-4 ${billing ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
         <StatCard
           label="USD spent"
           hint={r ? `On Meta, ${r.from === r.to ? fmtDay(r.from) : `${fmtDay(r.from)} – ${fmtDay(r.to)}`}` : 'On Meta'}
@@ -126,16 +129,18 @@ export function PeriodSection({ audience, clientId }: { audience: 'agency' | 'cl
         />
         <StatCard
           label="Limit approved"
-          hint={r ? `Billed ${formatBdt(r.totals.approved_billing_bdt)}` : 'USD'}
+          hint={r && billing ? `Billed ${formatBdt(r.totals.approved_billing_bdt)}` : 'USD'}
           value={r ? formatUsd(r.totals.approved_limit_usd) : undefined}
           loading={q.isLoading}
         />
-        <StatCard
-          label={paidLabel}
-          hint={audience === 'agency' ? 'Payments received' : 'Payments accepted'}
-          value={r ? formatBdt(r.totals.collection_bdt) : undefined}
-          loading={q.isLoading}
-        />
+        {billing && (
+          <StatCard
+            label={paidLabel}
+            hint={audience === 'agency' ? 'Payments received' : 'Payments accepted'}
+            value={r ? formatBdt(r.totals.collection_bdt) : undefined}
+            loading={q.isLoading}
+          />
+        )}
       </div>
       {r && r.spend.non_usd_accounts > 0 && (
         <p className="text-xs text-muted-foreground">
@@ -152,7 +157,7 @@ export function PeriodSection({ audience, clientId }: { audience: 'agency' | 'cl
                 <TableHead>Day</TableHead>
                 <TableHead className="text-right">USD spent</TableHead>
                 <TableHead className="text-right">Limit approved</TableHead>
-                <TableHead className="text-right">{paidLabel}</TableHead>
+                {billing && <TableHead className="text-right">{paidLabel}</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -161,7 +166,9 @@ export function PeriodSection({ audience, clientId }: { audience: 'agency' | 'cl
                   <TableCell className="whitespace-nowrap">{fmtDay(d.date)}</TableCell>
                   <TableCell className="num text-right">{d.spend_usd === '0.00' ? '—' : formatUsd(d.spend_usd)}</TableCell>
                   <TableCell className="num text-right">{d.approved_limit_usd === '0.00' ? '—' : formatUsd(d.approved_limit_usd)}</TableCell>
-                  <TableCell className="num text-right">{d.collection_bdt === '0.00' ? '—' : formatBdt(d.collection_bdt)}</TableCell>
+                  {billing && (
+                    <TableCell className="num text-right">{d.collection_bdt === '0.00' ? '—' : formatBdt(d.collection_bdt)}</TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>

@@ -12,6 +12,10 @@ interface ProvisionClientLoginInput {
    * agencies' customers under one identity, so cross-org reuse is refused
    * below rather than silently allowed. */
   organization_id: string
+  /** Owner, or a Member's permissions (000069) — set on a new membership and
+   * on one being reactivated. */
+  is_owner: boolean
+  permissions: Array<string>
 }
 
 interface ProvisionClientLoginResult {
@@ -86,7 +90,7 @@ export async function provisionClientLogin(
       // common real case here, not a mistake to reject.
       const { error: reactivateErr } = await admin
         .from('client_memberships')
-        .update({ status: 'ACTIVE' })
+        .update({ status: 'ACTIVE', is_owner: input.is_owner, permissions: input.permissions })
         .eq('id', existingMembership.id)
       if (reactivateErr) throw new Error(reactivateErr.message)
     } else {
@@ -95,6 +99,8 @@ export async function provisionClientLogin(
         client_id: input.client_id,
         status: 'ACTIVE',
         organization_id: input.organization_id,
+        is_owner: input.is_owner,
+        permissions: input.permissions,
       })
       if (memErr) throw new Error(memErr.message)
     }
@@ -125,6 +131,8 @@ export async function provisionClientLogin(
     client_id: input.client_id,
     status: 'ACTIVE',
     organization_id: input.organization_id,
+    is_owner: input.is_owner,
+    permissions: input.permissions,
   })
   if (memErr) throw new Error(memErr.message)
 

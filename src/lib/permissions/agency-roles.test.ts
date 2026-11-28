@@ -21,7 +21,7 @@ describe('agency roles', () => {
   it('can grant every permission the server checks', () => {
     const used = new Set<string>()
     for (const file of serverSources('src/server')) {
-      for (const m of readFileSync(file, 'utf8').matchAll(/PERMISSIONS\.([A-Z_]+)/g)) {
+      for (const m of readFileSync(file, 'utf8').matchAll(/(?<![A-Z_])PERMISSIONS\.([A-Z_]+)/g)) {
         used.add(PERMISSIONS[m[1] as keyof typeof PERMISSIONS])
       }
     }

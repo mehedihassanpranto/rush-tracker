@@ -3,7 +3,8 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { toast } from 'sonner'
 
-import { activeMemberships } from '@/lib/auth/types'
+import { activeMemberships, currentMembership } from '@/lib/auth/types'
+import { CLIENT_PERMISSIONS, clientCan } from '@/lib/permissions/client-permissions'
 import {
   clientDashboardSectionsFn,
   clientDashboardStatsFn,
@@ -45,6 +46,9 @@ const SUMMARY_CARDS: Array<{
 function ClientDashboard() {
   const { user } = Route.useRouteContext()
   const memberships = activeMemberships(user)
+  // A Member without billing.view gets no money on this page (the server
+  // already leaves it out — see clientDashboardStatsFn).
+  const seesBilling = clientCan(currentMembership(user), CLIENT_PERMISSIONS.BILLING_VIEW)
   const getStats = useServerFn(clientDashboardStatsFn)
   const getSections = useServerFn(clientDashboardSectionsFn)
   const getNetPayable = useServerFn(myNetPayableFn)
@@ -78,6 +82,7 @@ function ClientDashboard() {
     queryKey: ['my-net-payable'],
     queryFn: () => getNetPayable(),
     retry: false,
+    enabled: seesBilling,
   })
 
   return (
@@ -125,15 +130,17 @@ function ClientDashboard() {
         )}
       </div>
 
-      <NetDueCards audience="client" figures={netPayable} loading={netLoading} />
+      {seesBilling && (
+        <NetDueCards audience="client" figures={netPayable} loading={netLoading} />
+      )}
 
       {/* Spent / approved / paid for a chosen period. */}
       <PeriodSection audience="client" />
 
       {/* 3 columns: 6 ledger tiles fill two full rows. */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {SUMMARY_CARDS.map((card) => {
-          const raw = stats?.[card.stat]
+        {SUMMARY_CARDS.filter((card) => seesBilling || card.money !== 'bdt').map((card) => {
+          const raw = stats?.[card.stat] ?? undefined
           const display =
             raw === undefined
               ? '—'
@@ -208,6 +215,7 @@ function ClientDashboard() {
           )}
         </SectionCard>
 
+        {seesBilling && (
         <SectionCard
           title="Payment Requests"
           viewAll={{ to: '/client/payment-requests' }}
@@ -229,6 +237,9 @@ function ClientDashboard() {
           )}
         </SectionCard>
 
+        )}
+
+        {seesBilling && (
         <SectionCard title="Recent Payments" viewAll={{ to: '/client/due' }}>
           {(sections?.recentPayments.length ?? 0) === 0 ? (
             <EmptyState text="No payments yet." />
@@ -245,6 +256,9 @@ function ClientDashboard() {
           )}
         </SectionCard>
 
+        )}
+
+        {seesBilling && (
         <SectionCard title="Recent Transactions" viewAll={{ to: '/client/statement' }}>
           {(sections?.recentTransactions.length ?? 0) === 0 ? (
             <EmptyState text="No transactions yet." />
@@ -266,6 +280,7 @@ function ClientDashboard() {
             </ul>
           )}
         </SectionCard>
+        )}
       </div>
     </div>
   )

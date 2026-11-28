@@ -3,8 +3,9 @@ import { z } from 'zod'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import {
   requireAdmin,
-  requireClientMembership,
+  requireClientPermission,
 } from '@/server/auth/guards.server'
+import { CLIENT_PERMISSIONS } from '@/lib/permissions/client-permissions'
 import { writeAudit } from '@/server/audit/audit.service'
 import { notifyClientMembers } from '@/server/notifications/notification.service'
 import { formatBdt } from '@/lib/money/money'
@@ -128,7 +129,7 @@ export const cancelPaymentRequestFn = createServerFn({ method: 'POST' })
 /** Open payment requests for the signed-in client (spec §48). */
 export const listMyPaymentRequestsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Array<PaymentRequest>> => {
-    const { membership } = await requireClientMembership()
+    const { membership } = await requireClientPermission(CLIENT_PERMISSIONS.BILLING_VIEW)
     const admin = getSupabaseAdminClient()
     const { data, error } = await admin
       .from('payment_requests')

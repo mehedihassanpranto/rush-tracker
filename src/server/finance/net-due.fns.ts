@@ -1,7 +1,11 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
-import { requireAdmin, requireClientMembership } from '@/server/auth/guards.server'
+import {
+  requireAdmin,
+  requireClientPermission,
+} from '@/server/auth/guards.server'
+import { CLIENT_PERMISSIONS } from '@/lib/permissions/client-permissions'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import { sumNetDueFigures } from '@/lib/money/net-due'
 import type { NetDueFigures } from '@/lib/money/net-due'
@@ -34,7 +38,7 @@ async function oneClient(clientId: string): Promise<NetDueFigures> {
 /** The signed-in client's own Amount Payable. */
 export const myNetPayableFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<NetDueFigures> => {
-    const { membership } = await requireClientMembership()
+    const { membership } = await requireClientPermission(CLIENT_PERMISSIONS.BILLING_VIEW)
     return oneClient(membership.clientId)
   },
 )

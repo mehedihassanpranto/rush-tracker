@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { portalAccessSchema } from '@/schemas/team'
 
 const optionalText = z
   .string()
@@ -42,7 +43,7 @@ export const clientStatusSchema = z.object({
   status: clientStatusEnum,
 })
 
-export const clientUserCreateSchema = z.object({
+export const clientUserCreateSchema = portalAccessSchema.extend({
   client_id: z.uuid(),
   full_name: z.string().trim().min(1, 'Name is required').max(200),
   email: z.email('Enter a valid email'),
@@ -54,6 +55,11 @@ export const clientUserUpdateSchema = z.object({
   client_id: z.uuid(),
   full_name: z.string().trim().min(1, 'Name is required').max(200),
   email: z.email('Enter a valid email'),
+})
+
+export const clientLoginAccessSchema = portalAccessSchema.extend({
+  user_id: z.uuid(),
+  client_id: z.uuid(),
 })
 
 export const clientMembershipStatusSchema = z.object({

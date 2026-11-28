@@ -13,6 +13,11 @@ export interface SessionMembership {
   clientName: string
   clientStatus: ClientStatus
   status: MembershipStatus
+  /** Owner of this client's portal (000069): may do everything. */
+  isOwner: boolean
+  /** A Member's portal permissions (client-permissions.ts); ignored for an
+   * Owner. */
+  permissions: Array<string>
 }
 
 /** Cookie holding which of a CLIENT user's active memberships the portal
@@ -146,6 +151,13 @@ export function hasPermission(
 ): boolean {
   if (user.role === 'SUPER_ADMIN') return true
   return user.permissions.includes(permission)
+}
+
+/** The membership the portal is showing (activeClientId), if active. */
+export function currentMembership(
+  user: Pick<SessionUser, 'memberships' | 'activeClientId'>,
+): SessionMembership | null {
+  return activeMemberships(user).find((m) => m.clientId === user.activeClientId) ?? null
 }
 
 export function activeMemberships(

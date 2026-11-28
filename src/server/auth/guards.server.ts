@@ -5,8 +5,10 @@ import {
   isAdminRole,
   securityGatePath,
 } from '@/lib/auth/types'
+import { clientCan } from '@/lib/permissions/client-permissions'
 import { getCurrentUserFn } from './auth.fns'
 import type { PermissionKey } from '@/lib/permissions/permissions'
+import type { ClientPermission } from '@/lib/permissions/client-permissions'
 import type { SessionMembership, SessionUser } from '@/lib/auth/types'
 
 /**
@@ -167,6 +169,20 @@ export async function requireClientMembership(clientId?: string): Promise<{
   const membership =
     active.find((m) => m.clientId === user.activeClientId) ?? active[0]
   return { user, memberships: active, membership }
+}
+
+/**
+ * requireClientMembership() plus one portal permission (000069): an Owner
+ * always passes, a Member only with the permission ticked.
+ */
+export async function requireClientPermission(
+  permission: ClientPermission,
+): Promise<Awaited<ReturnType<typeof requireClientMembership>>> {
+  const result = await requireClientMembership()
+  if (!clientCan(result.membership, permission)) {
+    throw new AuthError('FORBIDDEN', `Missing permission: ${permission}`)
+  }
+  return result
 }
 
 export { getSupabaseServerClient }

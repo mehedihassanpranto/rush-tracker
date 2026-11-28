@@ -4,7 +4,9 @@ import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import {
   requireAdmin,
   requireClientMembership,
+  requireClientPermission,
 } from '@/server/auth/guards.server'
+import { CLIENT_PERMISSIONS } from '@/lib/permissions/client-permissions'
 import { writeAudit } from '@/server/audit/audit.service'
 import {
   notifyAdmins,
@@ -125,7 +127,7 @@ export const listMyRequestableAccountsFn = createServerFn({
 export const createLimitRequestFn = createServerFn({ method: 'POST' })
   .validator(limitRequestCreateSchema)
   .handler(async ({ data }): Promise<LimitRequest> => {
-    const { user, membership } = await requireClientMembership()
+    const { user, membership } = await requireClientPermission(CLIENT_PERMISSIONS.REQUESTS_CREATE)
     const admin = getSupabaseAdminClient()
 
     // Verify the account is actively assigned to THIS client.
@@ -395,7 +397,7 @@ export const getMyAdAccountFn = createServerFn({ method: 'GET' })
 export const cancelMyLimitRequestFn = createServerFn({ method: 'POST' })
   .validator(limitRequestIdSchema)
   .handler(async ({ data }): Promise<{ ok: true }> => {
-    const { user, membership } = await requireClientMembership()
+    const { user, membership } = await requireClientPermission(CLIENT_PERMISSIONS.REQUESTS_CREATE)
     const admin = getSupabaseAdminClient()
 
     const { data: updated, error } = await admin

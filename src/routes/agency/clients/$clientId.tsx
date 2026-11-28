@@ -16,9 +16,12 @@ import { toast } from 'sonner'
 import {
   getClientFn,
   listClientUsersFn,
+  setClientLoginAccessFn,
   setClientMembershipStatusFn,
 } from '@/server/clients/client.fns'
 import type { ClientUserRow } from '@/server/clients/client.fns'
+import { AccessSummary, EditAccessDialog } from '@/components/shared/portal-access'
+import type { PortalAccess } from '@/components/shared/portal-access'
 import { listClientAccountsFn } from '@/server/ad-accounts/assignment.fns'
 import {
   clientFinancialsFn,
@@ -208,6 +211,18 @@ function ClientDetailPage() {
   const { data: users } = useQuery({
     queryKey: ['client-users', clientId],
     queryFn: () => listUsers({ data: { client_id: clientId } }),
+  })
+  const setLoginAccess = useServerFn(setClientLoginAccessFn)
+  const [accessFor, setAccessFor] = useState<ClientUserRow | null>(null)
+  const accessMutation = useMutation({
+    mutationFn: (input: { user_id: string } & PortalAccess) =>
+      setLoginAccess({ data: { ...input, client_id: clientId } }),
+    onSuccess: () => {
+      toast.success('Portal access updated')
+      void queryClient.invalidateQueries({ queryKey: ['client-users', clientId] })
+      setAccessFor(null)
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed'),
   })
   const membershipStatusMutation = useMutation({
     mutationFn: (input: { user_id: string; status: 'ACTIVE' | 'INACTIVE' }) =>
@@ -564,6 +579,7 @@ function ClientDetailPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>Access</TableHead>
                   <TableHead>Membership</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -571,7 +587,7 @@ function ClientDetailPage() {
               <TableBody>
                 {(users?.length ?? 0) === 0 && (
                   <TableRow>
-                    <TableCell colSpan={4}>
+                    <TableCell colSpan={5}>
                       <div className="py-8 text-center text-sm text-muted-foreground">
                         No logins yet. Add one so this client can access the
                         portal.
@@ -584,6 +600,9 @@ function ClientDetailPage() {
                     <TableCell className="font-medium">{u.full_name}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {u.email}
+                    </TableCell>
+                    <TableCell>
+                      <AccessSummary access={u} />
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={u.membership_status} />
@@ -599,6 +618,9 @@ function ClientDetailPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onSelect={() => setEditLoginTarget(u)}>
                             Edit profile
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setAccessFor(u)}>
+                            Edit portal access…
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onSelect={() =>
@@ -658,6 +680,19 @@ function ClientDetailPage() {
         open={loginOpen}
         onOpenChange={setLoginOpen}
         clientId={clientId}
+        firstLogin={!users?.some((u) => u.is_owner && u.membership_status === 'ACTIVE')}
+      />
+      <EditAccessDialog
+        target={
+          accessFor && {
+            id: accessFor.user_id,
+            name: accessFor.full_name || accessFor.email,
+            access: accessFor,
+          }
+        }
+        onOpenChange={(o) => !o && setAccessFor(null)}
+        onSave={(access) => accessFor && accessMutation.mutate({ user_id: accessFor.user_id, ...access })}
+        saving={accessMutation.isPending}
       />
       <ResetMfaDialog target={mfaResetFor} onOpenChange={(o) => !o && setMfaResetFor(null)} />
       <EditLoginDialog

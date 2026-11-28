@@ -20,6 +20,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useClientCan } from '@/components/client/use-client-can'
+import { CLIENT_PERMISSIONS } from '@/lib/permissions/client-permissions'
 
 export const Route = createFileRoute('/client/ad-accounts/$accountId')({
   component: MyAdAccountPage,
@@ -50,6 +52,7 @@ function fmtDate(value: string): string {
 
 function MyAdAccountPage() {
   const { accountId } = Route.useParams()
+  const canRequest = useClientCan(CLIENT_PERMISSIONS.REQUESTS_CREATE)
   const getAccount = useServerFn(getMyAdAccountFn)
   const listRequests = useServerFn(listMyLimitRequestsFn)
   const listRemaining = useServerFn(listMyAccountsMetaRemainingFn)
@@ -106,13 +109,15 @@ function MyAdAccountPage() {
       {back}
 
       <PageHeader title={account.name}>
-        <Button
-          disabled={account.status !== 'ACTIVE' || account.has_pending}
-          onClick={() => setRequestOpen(true)}
-        >
-          <Plus className="size-4" />
-          {account.has_pending ? 'Request pending' : 'Request limit'}
-        </Button>
+        {canRequest && (
+          <Button
+            disabled={account.status !== 'ACTIVE' || account.has_pending}
+            onClick={() => setRequestOpen(true)}
+          >
+            <Plus className="size-4" />
+            {account.has_pending ? 'Request pending' : 'Request limit'}
+          </Button>
+        )}
       </PageHeader>
 
       <div className="mb-4 flex items-center gap-2">

@@ -7,7 +7,12 @@ import { readDailySpend, refreshDailySpend } from '@/server/meta/meta-daily-spen
 import { UserError } from '@/lib/errors/user-error'
 import { dec } from '@/lib/money/money'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
-import { clientPeriodTotals, refreshClientSpend } from '@/server/dashboard/client-period.service'
+import {
+  clientPeriodTotals,
+  refreshClientSpend,
+  withoutBilling,
+} from '@/server/dashboard/client-period.service'
+import { CLIENT_PERMISSIONS, clientCan } from '@/lib/permissions/client-permissions'
 import {
   DASHBOARD_PERIODS,
   daysBetween,
@@ -105,7 +110,8 @@ export const agencyPeriodTotalsFn = createServerFn({ method: 'GET' })
         collection_bdt: total('collection_bdt'),
       },
       days: days.reverse(),
-      spend: { as_of: asOf, accounts: accounts.length, non_usd_accounts: nonUsd.size },
+      billing: true,
+    spend: { as_of: asOf, accounts: accounts.length, non_usd_accounts: nonUsd.size },
     }
   })
 
@@ -139,7 +145,8 @@ export const clientPeriodTotalsFn = createServerFn({ method: 'GET' })
   .validator(periodSchema)
   .handler(async ({ data }): Promise<PeriodTotals> => {
     const { user, membership } = await requireClientMembership()
-    return clientPeriodTotals(membership.clientId, user.organizationId, data.period)
+    const totals = await clientPeriodTotals(membership.clientId, user.organizationId, data.period)
+    return clientCan(membership, CLIENT_PERMISSIONS.BILLING_VIEW) ? totals : withoutBilling(totals)
   })
 
 export const refreshClientSpendFn = createServerFn({ method: 'POST' }).handler(

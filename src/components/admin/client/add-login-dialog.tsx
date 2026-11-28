@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { useForm } from 'react-hook-form'
@@ -27,6 +27,11 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import {
+  NEW_MEMBER_ACCESS,
+  PortalAccessFields,
+} from '@/components/shared/portal-access'
+import type { PortalAccess } from '@/components/shared/portal-access'
 
 const formSchema = z.object({
   full_name: z.string().trim().min(1, 'Name is required'),
@@ -41,13 +46,17 @@ export function AddLoginDialog({
   open,
   onOpenChange,
   clientId,
+  firstLogin,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   clientId: string
+  /** No active Owner yet → this login starts as the Owner. */
+  firstLogin: boolean
 }) {
   const queryClient = useQueryClient()
   const createClientUser = useServerFn(createClientUserFn)
+  const [access, setAccess] = useState<PortalAccess>(NEW_MEMBER_ACCESS)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -55,12 +64,14 @@ export function AddLoginDialog({
   })
 
   useEffect(() => {
-    if (open) form.reset({ full_name: '', email: '', password: '' })
-  }, [open, form])
+    if (!open) return
+    form.reset({ full_name: '', email: '', password: '' })
+    setAccess(firstLogin ? { is_owner: true, permissions: [] } : NEW_MEMBER_ACCESS)
+  }, [open, form, firstLogin])
 
   const mutation = useMutation({
     mutationFn: (values: FormValues) =>
-      createClientUser({ data: { client_id: clientId, ...values } }),
+      createClientUser({ data: { client_id: clientId, ...values, ...access } }),
     onSuccess: (result) => {
       toast.success(
         result.reused_existing_user
@@ -76,7 +87,7 @@ export function AddLoginDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add client login</DialogTitle>
           <DialogDescription>
@@ -87,6 +98,7 @@ export function AddLoginDialog({
         <Form {...form}>
           <form
             id="add-login-form"
+            method="post"
             onSubmit={form.handleSubmit((v) => mutation.mutate(v))}
             className="space-y-4"
             noValidate
@@ -135,6 +147,7 @@ export function AddLoginDialog({
                 </FormItem>
               )}
             />
+            <PortalAccessFields value={access} onChange={setAccess} idPrefix="add-login" />
           </form>
         </Form>
         <DialogFooter>

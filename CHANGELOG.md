@@ -8,6 +8,41 @@ changes — see the "Changelog convention" note in `CLAUDE.md`.
 
 ## 2026-11-28
 
+**Client team permissions (migration 000069).** The client-portal half of
+"roles and permissions". Until now every login of a client could do
+everything, including adding logins and turning off other teammates, the
+client's owner among them.
+- A login is an **Owner** (everything, and the only one who touches Owners)
+  or a **Member** with four switches (`client-permissions.ts`):
+  - Request limits (`requests.create`): raise and cancel limit requests.
+  - Make payments (`payments.create`): submit and cancel payments. Implies
+    See billing.
+  - See billing (`billing.view`): Due & Payments, Payment Requests,
+    Statement, and the money on the dashboard.
+  - Manage team (`team.manage`): add Members, set their access, turn their
+    logins on and off.
+  Every login sees the ad accounts, limit requests, team and its own profile.
+- Every existing login became an Owner, so nobody lost access. The column
+  defaults to Owner too, so old code still running creates logins with
+  today's full access.
+- Server: `requireClientPermission()` gates each request, payment and billing
+  fn. For a Member without billing, the dashboard fns return the money as null
+  and the period totals zero it (`withoutBilling()`), so it never leaves the
+  server.
+- Team rules (`teamAddRefusal`/`teamAccessRefusal`/`teamStatusRefusal`,
+  unit-tested): only an Owner adds or changes Owners; a Member with Manage
+  team gives only permissions it holds; nobody edits themself; a team keeps at
+  least one active Owner. The agency isn't bound by these rules. It edits any
+  login's access from the client's Logins tab ("Edit portal access…"), and a
+  client's first login starts as Owner.
+- UI: the client menu hides the billing pages for a Member without billing,
+  and those pages show "You don't have access". Request, Cancel, Pay and team
+  buttons follow the switches. The Team page shows each login's access.
+Tests: `client-permissions.test.ts`, e2e `client-team-permissions.spec.ts`
+(Owner adds a Member; the Member sees no billing in the menu, dashboard or
+server, and has no team controls; given billing and team it still can't
+touch the Owner; the agency sees and edits the same access).
+
 **Agency roles (migration 000068).** Owner: "start roles and permissions
 now in agency and client portal" — agency part first; the client portal
 follows. Until now an agency had Super Admin (everything) and Admin (a fixed

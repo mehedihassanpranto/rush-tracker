@@ -7,9 +7,12 @@ import { writeAudit } from '@/server/audit/audit.service'
 import { assertPlanAllows } from '@/server/subscription/plan-limits.service'
 import { bdtToUsd } from '@/server/exchange-rates/rate.service'
 import { applyRateToClientAccounts } from '@/server/clients/client-rate.service'
+import { loadTeam, saveAccess } from '@/server/team/team-access.service'
+import { normalizeClientPermissions } from '@/lib/permissions/client-permissions'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
 import {
   clientCreateSchema,
+  clientLoginAccessSchema,
   clientMembershipStatusSchema,
   clientStatusSchema,
   clientUpdateSchema,
@@ -319,6 +322,9 @@ export interface ClientUserRow {
   full_name: string
   email: string
   membership_status: 'ACTIVE' | 'INACTIVE'
+  /** 000069: Owner of the client's portal, else a Member with `permissions`. */
+  is_owner: boolean
+  permissions: Array<string>
 }
 
 export const listClientUsersFn = createServerFn({ method: 'GET' })
@@ -329,7 +335,7 @@ export const listClientUsersFn = createServerFn({ method: 'GET' })
 
     const { data: memberships, error } = await admin
       .from('client_memberships')
-      .select('user_id, status, profile:user_profiles(full_name)')
+      .select('user_id, status, is_owner, permissions, profile:user_profiles(full_name)')
       .eq('client_id', data.client_id)
       .eq('organization_id', actor.organizationId)
     if (error) throw new Error(error.message)
@@ -337,6 +343,8 @@ export const listClientUsersFn = createServerFn({ method: 'GET' })
     const rows = (memberships ?? []) as unknown as Array<{
       user_id: string
       status: 'ACTIVE' | 'INACTIVE'
+      is_owner: boolean
+      permissions: Array<string>
       profile: { full_name: string } | null
     }>
 
@@ -349,6 +357,8 @@ export const listClientUsersFn = createServerFn({ method: 'GET' })
         full_name: m.profile?.full_name ?? '',
         email: userRes.user?.email ?? '',
         membership_status: m.status,
+        is_owner: m.is_owner,
+        permissions: m.permissions,
       })
     }
     return result
@@ -378,12 +388,15 @@ export const createClientUserFn = createServerFn({ method: 'POST' })
       .maybeSingle()
     if (!client) throw new Error('Client not found')
 
+    const permissions = data.is_owner ? [] : normalizeClientPermissions(data.permissions)
     const { user_id: userId, reused_existing_user } = await provisionClientLogin({
       email: data.email,
       full_name: data.full_name,
       password: data.password,
       client_id: data.client_id,
       organization_id: actor.organizationId,
+      is_owner: data.is_owner,
+      permissions,
     })
 
     await writeAudit({
@@ -392,7 +405,13 @@ export const createClientUserFn = createServerFn({ method: 'POST' })
       action: 'CLIENT_USER_CREATED',
       entityType: 'CLIENT',
       entityId: data.client_id,
-      newValues: { user_id: userId, email: data.email, reused_existing_user },
+      newValues: {
+        user_id: userId,
+        email: data.email,
+        reused_existing_user,
+        is_owner: data.is_owner,
+        permissions,
+      },
     })
     return { user_id: userId, reused_existing_user }
   })
@@ -445,6 +464,35 @@ export const updateClientUserProfileFn = createServerFn({ method: 'POST' })
 /** Activate/deactivate a client login's membership (admin, from the Logins
  * tab) — the fix for spec's "no active client access" lockout screen,
  * previously only fixable by editing the database directly. */
+/** Set a client login's portal access (Owner or a Member's permissions).
+ * The agency isn't bound by the client's own team rules — it can, for
+ * instance, remove the last Owner, and put one back. */
+export const setClientLoginAccessFn = createServerFn({ method: 'POST' })
+  .validator(clientLoginAccessSchema)
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const actor = await requireAdmin(PERMISSIONS.CLIENTS_MANAGE)
+    const admin = getSupabaseAdminClient()
+    const team = await loadTeam(admin, data.client_id, actor.organizationId)
+    const before = team.find((m) => m.user_id === data.user_id)
+    if (!before) throw new Error('That login is not a member of this client')
+    const permissions = data.is_owner ? [] : normalizeClientPermissions(data.permissions)
+
+    await saveAccess(admin, data.client_id, actor.organizationId, data.user_id, {
+      is_owner: data.is_owner,
+      permissions,
+    })
+    await writeAudit({
+      actorUserId: actor.id,
+      organizationId: actor.organizationId,
+      action: 'CLIENT_LOGIN_ACCESS_CHANGED',
+      entityType: 'CLIENT',
+      entityId: data.client_id,
+      oldValues: { user_id: data.user_id, is_owner: before.is_owner, permissions: before.permissions },
+      newValues: { user_id: data.user_id, is_owner: data.is_owner, permissions },
+    })
+    return { ok: true }
+  })
+
 export const setClientMembershipStatusFn = createServerFn({ method: 'POST' })
   .validator(clientMembershipStatusSchema)
   .handler(async ({ data }): Promise<{ ok: true }> => {

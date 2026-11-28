@@ -11,6 +11,8 @@ function membership(over: Partial<SessionMembership> = {}): SessionMembership {
     clientName: 'Acme',
     clientStatus: 'ACTIVE',
     status: 'ACTIVE',
+    isOwner: true,
+    permissions: [],
     ...over,
   }
 }
