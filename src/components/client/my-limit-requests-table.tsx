@@ -22,6 +22,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type { LimitRequestWithRefs } from '@/types/domain'
+import { useClientCan } from '@/components/client/use-client-can'
+import { CLIENT_PERMISSIONS } from '@/lib/permissions/client-permissions'
 
 function fmtDate(value: string): string {
   return new Date(value).toLocaleDateString(undefined, {
@@ -44,6 +46,7 @@ export function MyLimitRequestsTable({
   showAccount?: boolean
 }) {
   const queryClient = useQueryClient()
+  const canCancel = useClientCan(CLIENT_PERMISSIONS.REQUESTS_CREATE)
   const getProofUrl = useServerFn(getMyProofUrlFn)
   const cancelRequest = useServerFn(cancelMyLimitRequestFn)
   const [proofId, setProofId] = useState<string | null>(null)
@@ -155,7 +158,7 @@ export function MyLimitRequestsTable({
                       Proof
                     </Button>
                   )}
-                  {r.status === 'PENDING' && (
+                  {r.status === 'PENDING' && canCancel && (
                     <Button
                       size="sm"
                       variant="ghost"

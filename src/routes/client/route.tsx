@@ -1,8 +1,15 @@
-﻿import { Outlet, createFileRoute, redirect, useRouter } from '@tanstack/react-router'
+﻿import { Link, Outlet, createFileRoute, redirect, useLocation, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { ShieldAlert } from 'lucide-react'
+import { ShieldAlert, ShieldOff } from 'lucide-react'
 
-import { securityGatePath, activeMemberships, isAdminRole } from '@/lib/auth/types'
+import {
+  securityGatePath,
+  activeMemberships,
+  currentMembership,
+  isAdminRole,
+} from '@/lib/auth/types'
+import type { SessionMembership } from '@/lib/auth/types'
+import { clientCan, clientPagePermission } from '@/lib/permissions/client-permissions'
 import { logoutFn } from '@/server/auth/auth.fns'
 import { CLIENT_NAV } from '@/components/layout/nav'
 import { AppShell } from '@/components/layout/app-shell'
@@ -55,9 +62,18 @@ export const Route = createFileRoute('/client')({
   component: PortalLayout,
 })
 
+/** Whether this login's access opens the page (UX only — the page's
+ * server fns check the same permission). */
+function canOpen(membership: SessionMembership | null, pathname: string): boolean {
+  const permission = clientPagePermission(pathname)
+  return permission === null || clientCan(membership, permission)
+}
+
 function PortalLayout() {
   const { user } = Route.useRouteContext()
+  const { pathname } = useLocation()
   const active = activeMemberships(user)
+  const membership = currentMembership(user)
 
   if (active.length === 0) {
     return <NoMembership />
@@ -76,9 +92,28 @@ function PortalLayout() {
   const areaLabel = user.organizationName ? `${base} · ${user.organizationName}` : base
 
   return (
-    <AppShell user={user} navItems={CLIENT_NAV} areaLabel={areaLabel}>
-      <Outlet />
+    <AppShell
+      user={user}
+      navItems={CLIENT_NAV.filter((i) => !i.to || canOpen(membership, i.to))}
+      areaLabel={areaLabel}
+    >
+      {canOpen(membership, pathname) ? <Outlet /> : <NoAccess />}
     </AppShell>
+  )
+}
+
+function NoAccess() {
+  return (
+    <Card className="mx-auto mt-10 max-w-md p-8 text-center">
+      <ShieldOff className="mx-auto size-8 text-muted-foreground" />
+      <h1 className="mt-3 text-lg font-semibold">You don’t have access to this page</h1>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Ask an owner of your team if you need it.
+      </p>
+      <Button asChild variant="outline" className="mt-5">
+        <Link to="/client">Go to the dashboard</Link>
+      </Button>
+    </Card>
   )
 }
 

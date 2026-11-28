@@ -22,6 +22,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type { PaymentRequest } from '@/types/domain'
+import { useClientCan } from '@/components/client/use-client-can'
+import { CLIENT_PERMISSIONS } from '@/lib/permissions/client-permissions'
 
 export const Route = createFileRoute('/client/payment-requests/')({
   component: MyPaymentRequestsPage,
@@ -39,6 +41,7 @@ function fmtDate(value: string | null): string {
 const OPEN_STATUSES = ['REQUESTED', 'PAYMENT_SUBMITTED', 'PARTIALLY_PAID']
 
 function MyPaymentRequestsPage() {
+  const canPay = useClientCan(CLIENT_PERMISSIONS.PAYMENTS_CREATE)
   const listRequests = useServerFn(listMyPaymentRequestsFn)
   const getDue = useServerFn(getMyDueFn)
   const [payFor, setPayFor] = useState<PaymentRequest | null>(null)
@@ -110,7 +113,7 @@ function MyPaymentRequestsPage() {
                   <StatusBadge status={r.status} />
                 </TableCell>
                 <TableCell className="text-right">
-                  {OPEN_STATUSES.includes(r.status) && (
+                  {OPEN_STATUSES.includes(r.status) && canPay && (
                     <Button size="sm" onClick={() => setPayFor(r)}>
                       Pay now
                     </Button>

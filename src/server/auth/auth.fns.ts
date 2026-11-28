@@ -133,12 +133,14 @@ async function loadSessionUser(
     const { data } = await supabase
       .from('client_memberships')
       .select(
-        'id, status, client:clients(id, client_code, name, status)',
+        'id, status, is_owner, permissions, client:clients(id, client_code, name, status)',
       )
       .eq('user_id', user.id)
     const rows = (data ?? []) as unknown as Array<{
       id: string
       status: SessionMembership['status']
+      is_owner: boolean | null
+      permissions: Array<string> | null
       client: {
         id: string
         client_code: string
@@ -156,6 +158,8 @@ async function loadSessionUser(
               clientName: row.client.name,
               clientStatus: row.client.status,
               status: row.status,
+              isOwner: row.is_owner ?? true,
+              permissions: row.permissions ?? [],
             },
           ]
         : [],

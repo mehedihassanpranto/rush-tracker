@@ -10,12 +10,15 @@ import { MyLimitRequestsTable } from '@/components/client/my-limit-requests-tabl
 import { RequestLimitDialog } from '@/components/client/request-limit-dialog'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { useClientCan } from '@/components/client/use-client-can'
+import { CLIENT_PERMISSIONS } from '@/lib/permissions/client-permissions'
 
 export const Route = createFileRoute('/client/limit-requests/')({
   component: MyLimitRequestsPage,
 })
 
 function MyLimitRequestsPage() {
+  const canRequest = useClientCan(CLIENT_PERMISSIONS.REQUESTS_CREATE)
   const listRequests = useServerFn(listMyLimitRequestsFn)
   const [requestOpen, setRequestOpen] = useState(false)
 
@@ -30,10 +33,12 @@ function MyLimitRequestsPage() {
         title="Limit Requests"
         description="Your limit increase requests and their status."
       >
-        <Button onClick={() => setRequestOpen(true)}>
-          <Plus className="size-4" />
-          New request
-        </Button>
+        {canRequest && (
+          <Button onClick={() => setRequestOpen(true)}>
+            <Plus className="size-4" />
+            New request
+          </Button>
+        )}
       </PageHeader>
 
       <Card className="p-0">

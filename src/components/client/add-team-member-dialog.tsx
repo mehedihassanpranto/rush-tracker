@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { useForm } from 'react-hook-form'
@@ -8,6 +8,11 @@ import { toast } from 'sonner'
 
 import { addTeamMemberFn } from '@/server/team/team.fns'
 import { addTeamMemberSchema } from '@/schemas/team'
+import {
+  NEW_MEMBER_ACCESS,
+  PortalAccessFields,
+} from '@/components/shared/portal-access'
+import type { PortalAccess } from '@/components/shared/portal-access'
 import type { AddTeamMemberInput } from '@/schemas/team'
 import { Button } from '@/components/ui/button'
 import {
@@ -33,24 +38,38 @@ import { Input } from '@/components/ui/input'
 export function AddTeamMemberDialog({
   open,
   onOpenChange,
+  canMakeOwner,
+  grantable,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Only an Owner adds Owners (teamAddRefusal()). */
+  canMakeOwner: boolean
+  /** A Member gives only what it has; undefined for an Owner. */
+  grantable?: ReadonlyArray<string>
 }) {
   const queryClient = useQueryClient()
   const addTeamMember = useServerFn(addTeamMemberFn)
 
-  const form = useForm<AddTeamMemberInput>({
-    resolver: zodResolver(addTeamMemberSchema),
+  const [access, setAccess] = useState<PortalAccess>(NEW_MEMBER_ACCESS)
+  const form = useForm<Omit<AddTeamMemberInput, 'is_owner' | 'permissions'>>({
+    resolver: zodResolver(addTeamMemberSchema.omit({ is_owner: true, permissions: true })),
     defaultValues: { full_name: '', email: '', password: '' },
   })
 
   useEffect(() => {
-    if (open) form.reset({ full_name: '', email: '', password: '' })
-  }, [open, form])
+    if (!open) return
+    form.reset({ full_name: '', email: '', password: '' })
+    // A Member who manages the team starts others with what it can give.
+    setAccess({
+      is_owner: false,
+      permissions: NEW_MEMBER_ACCESS.permissions.filter((p) => !grantable || grantable.includes(p)),
+    })
+  }, [open, form, grantable])
 
   const mutation = useMutation({
-    mutationFn: (values: AddTeamMemberInput) => addTeamMember({ data: values }),
+    mutationFn: (values: Omit<AddTeamMemberInput, 'is_owner' | 'permissions'>) =>
+      addTeamMember({ data: { ...values, ...access } }),
     onSuccess: (result) => {
       toast.success(
         result.reused_existing_user
@@ -66,7 +85,7 @@ export function AddTeamMemberDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add team member</DialogTitle>
           <DialogDescription>
@@ -77,6 +96,7 @@ export function AddTeamMemberDialog({
         <Form {...form}>
           <form
             id="add-team-member-form"
+            method="post"
             onSubmit={form.handleSubmit((v) => mutation.mutate(v))}
             className="space-y-4"
             noValidate
@@ -124,6 +144,13 @@ export function AddTeamMemberDialog({
                   <FormMessage />
                 </FormItem>
               )}
+            />
+            <PortalAccessFields
+              value={access}
+              onChange={setAccess}
+              canMakeOwner={canMakeOwner}
+              grantable={grantable}
+              idPrefix="add-member"
             />
           </form>
         </Form>

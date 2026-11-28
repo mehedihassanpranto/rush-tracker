@@ -114,6 +114,10 @@ short; detail belongs in the changelog.
   be in `ROLE_PERMISSION_GROUPS` (a test enforces it), and the page it gates
   goes in `agencyPagePermission()`. Only a Super Admin edits roles or touches
   a Super Admin.
+- **Client portal permissions** (000069): a login is an Owner or a Member
+  with `requests.create`/`payments.create`/`billing.view`/`team.manage`.
+  A client fn that changes or shows money uses `requireClientPermission()`,
+  never bare `requireClientMembership()`.
 - **Subscriptions**: a suspended org's users are gated in `loadUserOrThrow()`
   and the route guards (platform admins bypass). Any new path that adds an
   active client, ad account or staff login must call `assertPlanAllows()`

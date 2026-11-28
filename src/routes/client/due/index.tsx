@@ -31,6 +31,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { useClientCan } from '@/components/client/use-client-can'
+import { CLIENT_PERMISSIONS } from '@/lib/permissions/client-permissions'
 
 export const Route = createFileRoute('/client/due/')({
   component: DuePage,
@@ -52,6 +54,7 @@ function fmtDateTime(value: string): string {
 }
 
 function DuePage() {
+  const canPay = useClientCan(CLIENT_PERMISSIONS.PAYMENTS_CREATE)
   const queryClient = useQueryClient()
   const getDue = useServerFn(getMyDueFn)
   const listPayments = useServerFn(listMyPaymentsFn)
@@ -83,7 +86,7 @@ function DuePage() {
     setProofId(id)
   }
 
-  const canPay = due && Number(due.outstanding) > 0
+  const hasOutstanding = due && Number(due.outstanding) > 0
 
   return (
     <div>
@@ -91,10 +94,12 @@ function DuePage() {
         title="Due & Payments"
         description="Pay your outstanding due and track your payments."
       >
-        <Button disabled={!canPay} onClick={() => setPayOpen(true)}>
-          <Wallet className="size-4" />
-          Pay due
-        </Button>
+        {canPay && (
+          <Button disabled={!hasOutstanding} onClick={() => setPayOpen(true)}>
+            <Wallet className="size-4" />
+            Pay due
+          </Button>
+        )}
       </PageHeader>
 
       {isLoading || !due ? (
@@ -195,7 +200,7 @@ function DuePage() {
                       <FileText className="size-4" />
                       Proof
                     </Button>
-                    {p.status === 'PENDING' && (
+                    {p.status === 'PENDING' && canPay && (
                       <Button
                         size="sm"
                         variant="ghost"

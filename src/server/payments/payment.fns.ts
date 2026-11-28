@@ -2,8 +2,9 @@ import { createServerFn } from '@tanstack/react-start'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import {
   requireAdmin,
-  requireClientMembership,
+  requireClientPermission,
 } from '@/server/auth/guards.server'
+import { CLIENT_PERMISSIONS } from '@/lib/permissions/client-permissions'
 import { writeAudit } from '@/server/audit/audit.service'
 import {
   notifyAdmins,
@@ -74,7 +75,7 @@ async function proofPathForPayment(paymentId: string): Promise<string | null> {
 
 export const getMyDueFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<DueSummary> => {
-    const { membership } = await requireClientMembership()
+    const { membership } = await requireClientPermission(CLIENT_PERMISSIONS.BILLING_VIEW)
     const due = await currentDue(membership.clientId)
     const pending = await pendingPaymentsTotal(membership.clientId)
     const outstanding = dec(due).minus(pending)
@@ -88,7 +89,7 @@ export const getMyDueFn = createServerFn({ method: 'GET' }).handler(
 
 export const listMyPaymentsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Array<Payment>> => {
-    const { membership } = await requireClientMembership()
+    const { membership } = await requireClientPermission(CLIENT_PERMISSIONS.BILLING_VIEW)
     const admin = getSupabaseAdminClient()
     const { data, error } = await admin
       .from('payments')
@@ -115,7 +116,7 @@ export const listMyPaymentsFn = createServerFn({ method: 'GET' }).handler(
 export const submitPaymentFn = createServerFn({ method: 'POST' })
   .validator(paymentSubmitSchema)
   .handler(async ({ data }): Promise<Payment> => {
-    const { user, membership } = await requireClientMembership()
+    const { user, membership } = await requireClientPermission(CLIENT_PERMISSIONS.PAYMENTS_CREATE)
     const admin = getSupabaseAdminClient()
 
     const { data: paymentId, error: rpcError } = await admin.rpc(
@@ -204,7 +205,7 @@ export const submitPaymentFn = createServerFn({ method: 'POST' })
 export const cancelMyPaymentFn = createServerFn({ method: 'POST' })
   .validator(paymentIdSchema)
   .handler(async ({ data }): Promise<{ ok: true }> => {
-    const { user, membership } = await requireClientMembership()
+    const { user, membership } = await requireClientPermission(CLIENT_PERMISSIONS.PAYMENTS_CREATE)
     const admin = getSupabaseAdminClient()
     const { data: updated, error } = await admin
       .from('payments')
@@ -230,7 +231,7 @@ export const cancelMyPaymentFn = createServerFn({ method: 'POST' })
 export const getMyPaymentProofUrlFn = createServerFn({ method: 'POST' })
   .validator(paymentIdSchema)
   .handler(async ({ data }): Promise<{ url: string | null }> => {
-    const { membership } = await requireClientMembership()
+    const { membership } = await requireClientPermission(CLIENT_PERMISSIONS.BILLING_VIEW)
     const admin = getSupabaseAdminClient()
     const { data: pay } = await admin
       .from('payments')

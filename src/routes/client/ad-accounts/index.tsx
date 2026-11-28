@@ -22,12 +22,15 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { useClientCan } from '@/components/client/use-client-can'
+import { CLIENT_PERMISSIONS } from '@/lib/permissions/client-permissions'
 
 export const Route = createFileRoute('/client/ad-accounts/')({
   component: MyAdAccountsPage,
 })
 
 function MyAdAccountsPage() {
+  const canRequest = useClientCan(CLIENT_PERMISSIONS.REQUESTS_CREATE)
   const listAccounts = useServerFn(listMyRequestableAccountsFn)
   const listRemaining = useServerFn(listMyAccountsMetaRemainingFn)
   const [requestOpen, setRequestOpen] = useState(false)
@@ -144,14 +147,18 @@ function MyAdAccountsPage() {
                   <StatusBadge status={account.status} />
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={account.status !== 'ACTIVE' || account.has_pending}
-                    onClick={() => openRequest(account.id)}
-                  >
-                    {account.has_pending ? 'Pending' : 'Request limit'}
-                  </Button>
+                  {canRequest ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={account.status !== 'ACTIVE' || account.has_pending}
+                      onClick={() => openRequest(account.id)}
+                    >
+                      {account.has_pending ? 'Pending' : 'Request limit'}
+                    </Button>
+                  ) : (
+                    account.has_pending && <span className="text-xs text-muted-foreground">Pending</span>
+                  )}
                 </TableCell>
               </TableRow>
               )

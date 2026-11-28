@@ -40,6 +40,9 @@ export interface PeriodTotals {
   to: string
   totals: Omit<PeriodDay, 'date'>
   days: Array<PeriodDay>
+  /** false: a client Member without billing.view (000069) — the BDT
+   * figures (billed, paid) are zeroed and the page hides them. */
+  billing: boolean
   spend: {
     /** Latest Meta fetch for these accounts; null when nothing was ever fetched. */
     as_of: string | null
@@ -164,8 +167,20 @@ export async function clientPeriodTotals(
       collection_bdt: total('collection_bdt'),
     },
     days: days.reverse(),
+    billing: true,
     spend: { as_of: asOf, accounts: activeAccounts.size, non_usd_accounts: nonUsd.size },
   }
+}
+
+/** The same figures without the money (billed, paid) — for a client Member
+ * without billing.view. */
+export function withoutBilling(t: PeriodTotals): PeriodTotals {
+  const strip = <T extends Omit<PeriodDay, 'date'>>(d: T): T => ({
+    ...d,
+    approved_billing_bdt: '0.00',
+    collection_bdt: '0.00',
+  })
+  return { ...t, billing: false, totals: strip(t.totals), days: t.days.map(strip) }
 }
 
 /** Fetch the client's current accounts' spend from Meta now — at most once a

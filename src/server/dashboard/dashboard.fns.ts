@@ -8,6 +8,7 @@ import { requireAdmin, requireClientMembership } from '@/server/auth/guards.serv
 import { bdtToUsd, clientUsdRate } from '@/server/exchange-rates/rate.service'
 import { dec } from '@/lib/money/money'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
+import { CLIENT_PERMISSIONS, clientCan } from '@/lib/permissions/client-permissions'
 import type {
   AdAccount,
   LedgerEntry,
@@ -113,16 +114,18 @@ export const adminDashboardStatsFn = createServerFn({ method: 'GET' }).handler(
 export interface ClientDashboardStats {
   activeAccounts: number
   pendingLimitRequests: number
-  totalBilledBdt: string
-  totalPaidBdt: string
-  currentDueBdt: string
-  currentDueUsd: string
   totalApprovedUsd: string
+  /** The money figures — null for a Member without billing.view (000069). */
+  totalBilledBdt: string | null
+  totalPaidBdt: string | null
+  currentDueBdt: string | null
+  currentDueUsd: string | null
 }
 
 export const clientDashboardStatsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<ClientDashboardStats> => {
     const { membership } = await requireClientMembership()
+    const seesBilling = clientCan(membership, CLIENT_PERMISSIONS.BILLING_VIEW)
     const admin = getSupabaseAdminClient()
 
     const [accounts, pending, financials] = await Promise.all([
@@ -156,11 +159,11 @@ export const clientDashboardStatsFn = createServerFn({ method: 'GET' }).handler(
     return {
       activeAccounts: accounts.count ?? 0,
       pendingLimitRequests: pending.count ?? 0,
-      totalBilledBdt: fin?.total_debit ?? '0',
-      totalPaidBdt: fin?.total_credit ?? '0',
-      currentDueBdt,
-      currentDueUsd: bdtToUsd(currentDueBdt, rate),
       totalApprovedUsd: fin?.total_approved_usd ?? '0',
+      totalBilledBdt: seesBilling ? (fin?.total_debit ?? '0') : null,
+      totalPaidBdt: seesBilling ? (fin?.total_credit ?? '0') : null,
+      currentDueBdt: seesBilling ? currentDueBdt : null,
+      currentDueUsd: seesBilling ? bdtToUsd(currentDueBdt, rate) : null,
     }
   },
 )
@@ -321,6 +324,7 @@ export const clientDashboardSectionsFn = createServerFn({
   method: 'GET',
 }).handler(async (): Promise<ClientDashboardSections> => {
   const { membership } = await requireClientMembership()
+  const seesBilling = clientCan(membership, CLIENT_PERMISSIONS.BILLING_VIEW)
   const admin = getSupabaseAdminClient()
   const cid = membership.clientId
 
@@ -376,8 +380,9 @@ export const clientDashboardSectionsFn = createServerFn({
     accounts,
     pendingLimitRequests: (pendingLR.data ??
       []) as unknown as Array<LimitRequestWithRefs>,
-    paymentRequests: (paymentRequests.data ?? []) as Array<PaymentRequest>,
-    recentPayments: (recentPayments.data ?? []) as Array<Payment>,
-    recentTransactions: (recentTx.data ?? []) as Array<LedgerEntry>,
+    // A Member without billing.view gets the account sections only.
+    paymentRequests: seesBilling ? ((paymentRequests.data ?? []) as Array<PaymentRequest>) : [],
+    recentPayments: seesBilling ? ((recentPayments.data ?? []) as Array<Payment>) : [],
+    recentTransactions: seesBilling ? ((recentTx.data ?? []) as Array<LedgerEntry>) : [],
   }
 })

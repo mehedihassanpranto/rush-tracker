@@ -3,8 +3,9 @@ import { z } from 'zod'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin.server'
 import {
   requireAdmin,
-  requireClientMembership,
+  requireClientPermission,
 } from '@/server/auth/guards.server'
+import { CLIENT_PERMISSIONS } from '@/lib/permissions/client-permissions'
 import { bdtToUsd, clientUsdRate } from '@/server/exchange-rates/rate.service'
 import { withRunningBalance } from '@/lib/ledger/running-balance'
 import { PERMISSIONS } from '@/lib/permissions/permissions'
@@ -107,7 +108,7 @@ export interface MyStatement {
 
 export const getMyStatementFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<MyStatement> => {
-    const { membership } = await requireClientMembership()
+    const { membership } = await requireClientPermission(CLIENT_PERMISSIONS.BILLING_VIEW)
     const admin = getSupabaseAdminClient()
 
     const { data: rows, error } = await admin
